@@ -12,7 +12,7 @@ export class PhysicsController {
         this.maxAngularSpeed = 2;
         this.thrust = 20;
         this.lift = 15;
-        this.torque = 10;
+        this.torque = 5;
 
         // State
         this.velocity = Vector3.Zero();
@@ -64,27 +64,44 @@ export class PhysicsController {
     }
 
     updateVehicle(deltaTime) {
-        if (!this.vehicle.mesh) return;
+        if (!this.vehicle?.mesh) {
+            console.warn('Cannot update vehicle: mesh is null');
+            return;
+        }
 
-        // Update position
-        this.vehicle.mesh.position.addInPlace(this.velocity.scale(deltaTime));
+        try {
+            // Update position
+            this.vehicle.mesh.position.addInPlace(this.velocity.scale(deltaTime));
 
-        // Update rotation
-        const deltaRotation = Quaternion.RotationYawPitchRoll(
-            this.angularVelocity.y * deltaTime,
-            this.angularVelocity.x * deltaTime,
-            this.angularVelocity.z * deltaTime
-        );
-        
-        const currentRotation = this.vehicle.mesh.rotationQuaternion || 
-            Quaternion.RotationYawPitchRoll(
-                this.vehicle.mesh.rotation.y,
-                this.vehicle.mesh.rotation.x,
-                this.vehicle.mesh.rotation.z
+            // Update rotation using quaternions for smooth rotation
+            if (!this.vehicle.mesh.rotationQuaternion) {
+                this.vehicle.mesh.rotationQuaternion = Quaternion.RotationYawPitchRoll(
+                    this.vehicle.mesh.rotation.y,
+                    this.vehicle.mesh.rotation.x,
+                    this.vehicle.mesh.rotation.z
+                );
+            }
+
+            // Create delta rotation quaternion
+            const deltaRotation = Quaternion.RotationYawPitchRoll(
+                this.angularVelocity.y * deltaTime,
+                this.angularVelocity.x * deltaTime,
+                this.angularVelocity.z * deltaTime
             );
+            
+            // Multiply quaternions to combine rotations
+            this.vehicle.mesh.rotationQuaternion = this.vehicle.mesh.rotationQuaternion.multiply(deltaRotation);
 
-        currentRotation.multiplyInPlace(deltaRotation);
-        this.vehicle.mesh.rotationQuaternion = currentRotation;
+            // Convert quaternion back to Euler angles for the mesh
+            const euler = this.vehicle.mesh.rotationQuaternion.toEulerAngles();
+            this.vehicle.mesh.rotation = euler;
+
+            // Ensure mesh is visible and properly updated
+            this.vehicle.mesh.isVisible = true;
+            this.vehicle.mesh.computeWorldMatrix(true);
+        } catch (error) {
+            console.error('Error updating vehicle position/rotation:', error);
+        }
     }
 
     addForce(force) {
@@ -108,7 +125,7 @@ export class PhysicsController {
 
     applyThrust(amount) {
         if (!this.vehicle?.mesh) {
-            console.warn('Cannot apply thrust: vehicle mesh is not initialized');
+            console.warn('Cannot apply thrust: vehicle mesh is null');
             return;
         }
 
@@ -122,7 +139,7 @@ export class PhysicsController {
 
     applyLift(amount) {
         if (!this.vehicle?.mesh) {
-            console.warn('Cannot apply lift: vehicle mesh is not initialized');
+            console.warn('Cannot apply lift: vehicle mesh is null');
             return;
         }
 
@@ -136,7 +153,7 @@ export class PhysicsController {
 
     applyYaw(amount) {
         if (!this.vehicle?.mesh) {
-            console.warn('Cannot apply yaw: vehicle mesh is not initialized');
+            console.warn('Cannot apply yaw: vehicle mesh is null');
             return;
         }
 
@@ -150,7 +167,7 @@ export class PhysicsController {
 
     applyPitch(amount) {
         if (!this.vehicle?.mesh) {
-            console.warn('Cannot apply pitch: vehicle mesh is not initialized');
+            console.warn('Cannot apply pitch: vehicle mesh is null');
             return;
         }
 
@@ -164,7 +181,7 @@ export class PhysicsController {
 
     applyRoll(amount) {
         if (!this.vehicle?.mesh) {
-            console.warn('Cannot apply roll: vehicle mesh is not initialized');
+            console.warn('Cannot apply roll: vehicle mesh is null');
             return;
         }
 

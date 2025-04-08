@@ -46,6 +46,9 @@ export class GameScene {
         this.camera.maxZ = 1000;
         this.camera.lowerRadiusLimit = 5;
         this.camera.upperRadiusLimit = 20;
+        this.camera.alpha = Math.PI; // Start behind the vehicle
+        this.camera.beta = Math.PI / 4; // Slightly above
+        this.camera.radius = 10; // Distance from vehicle
     }
 
     setupEnvironment() {
@@ -83,51 +86,74 @@ export class GameScene {
 
     createVehicle(type, team, isLocalPlayer = false) {
         try {
-            // Create a simple box mesh for the vehicle
-            const mesh = MeshBuilder.CreateBox(`vehicle_${type}_${team}`, { size: 2 }, this.scene);
+            // Create vehicle mesh
+            const mesh = this.createVehicleMesh(type, team);
             if (!mesh) {
-                throw new Error('Failed to create vehicle mesh');
+                console.error('Failed to create vehicle mesh');
+                return null;
             }
 
-            const material = new StandardMaterial(`vehicleMaterial_${type}_${team}`, this.scene);
-            material.diffuseColor = team === 0 ? new Color3(1, 0, 0) : new Color3(0, 0, 1);
-            mesh.material = material;
-
-            // Set initial position and ensure mesh is fully initialized
-            mesh.position = new Vector3(0, 2, 0);
-            mesh.computeWorldMatrix(true);
-
-            // Create and initialize the vehicle
+            // Create vehicle instance
             const vehicle = new Vehicle(this.scene, mesh, type, team);
-            
-            // Add to vehicles map first
+            if (!vehicle) {
+                console.error('Failed to create vehicle instance');
+                return null;
+            }
+
+            // Set up local player controls if needed
+            if (isLocalPlayer) {
+                vehicle.isLocalPlayer = true;
+                vehicle.inputManager = this.inputManager; // Use the scene's input manager
+                this.localPlayer = vehicle;
+                console.log('Local player vehicle created:', type, team);
+            }
+
+            // Add to vehicles map
             this.vehicles.set(mesh.uniqueId, vehicle);
 
-            // Set as local player if needed
-            if (isLocalPlayer) {
-                vehicle.setAsLocalPlayer(this.inputManager);
-                this.localPlayer = vehicle;
-                this.setupCameraFollow();
+            // Add to collision manager
+            if (vehicle.mesh && vehicle.mesh.position) {
+                this.collisionManager.addVehicle(vehicle);
+                console.log('Vehicle added to collision manager:', type, team);
+            } else {
+                console.warn('Vehicle mesh not ready for collision manager:', type, team);
             }
 
-            // Add to collision manager after vehicle is fully initialized
-            if (vehicle.isInitialized) {
-                this.collisionManager.addVehicle(vehicle);
-            } else {
-                console.warn('Vehicle not fully initialized, will be added to collision manager in next update');
-                // Add a one-time update listener to add to collision manager when ready
-                const checkInitialization = () => {
-                    if (vehicle.isInitialized) {
-                        this.collisionManager.addVehicle(vehicle);
-                        this.scene.onBeforeRenderObservable.remove(checkInitialization);
-                    }
-                };
-                this.scene.onBeforeRenderObservable.add(checkInitialization);
-            }
-            
+            // Add to scene
+            this.scene.addMesh(mesh);
+            console.log('Vehicle added to scene:', type, team);
+
             return vehicle;
         } catch (error) {
             console.error('Error creating vehicle:', error);
+            return null;
+        }
+    }
+
+    createVehicleMesh(type, team) {
+        try {
+            const mesh = MeshBuilder.CreateBox(type, { size: 1 }, this.scene);
+            if (!mesh) {
+                console.error('Failed to create mesh for vehicle:', type);
+                return null;
+            }
+
+            // Set initial position
+            mesh.position = new Vector3(0, 2, 0);
+            
+            // Create and assign material
+            const material = new StandardMaterial(`${type}Material`, this.scene);
+            material.diffuseColor = team === 'red' ? new Color3(1, 0, 0) : new Color3(0, 0, 1);
+            material.specularColor = new Color3(0.5, 0.5, 0.5);
+            mesh.material = material;
+
+            // Ensure mesh is properly initialized
+            mesh.computeWorldMatrix(true);
+            mesh.isVisible = true;
+
+            return mesh;
+        } catch (error) {
+            console.error('Error creating vehicle mesh:', error);
             return null;
         }
     }
@@ -203,27 +229,26 @@ export class GameScene {
 
         // Update all vehicles
         for (const [id, vehicle] of this.vehicles) {
-            if (vehicle && vehicle.mesh && vehicle.isInitialized) {
-                try {
-                    vehicle.update(deltaTime);
-                } catch (error) {
-                    console.error('Error updating vehicle:', error);
-                }
-            }
-        }
-
-        // Update collision manager
-        if (this.collisionManager) {
-            try {
-                this.collisionManager.update();
-            } catch (error) {
-                console.error('Error updating collision manager:', error);
+            if (vehicle && vehicle.update) {
+                vehicle.update(deltaTime);
             }
         }
 
         // Update camera to follow local player
-        if (this.localPlayer && this.localPlayer.mesh && this.localPlayer.isInitialized) {
+        if (this.localPlayer && this.localPlayer.mesh) {
+            // Get vehicle's forward direction
+            const forward = this.localPlayer.mesh.getDirection(Vector3.Forward());
+            
+            // Calculate camera position behind the vehicle
+            const cameraOffset = forward.scale(-10); // 10 units behind
+            const cameraPosition = this.localPlayer.mesh.position.add(cameraOffset);
+            
+            // Update camera target and position
             this.camera.target = this.localPlayer.mesh.position;
+            this.camera.position = cameraPosition;
+            
+            // Make camera look at vehicle
+            this.camera.setTarget(this.localPlayer.mesh.position);
         }
     }
 

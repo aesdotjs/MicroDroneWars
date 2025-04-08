@@ -1,79 +1,94 @@
 export class InputManager {
     constructor() {
         this.keys = {
-            forward: false,
-            backward: false,
-            left: false,
-            right: false,
-            up: false,
-            down: false,
-            rollLeft: false,
-            rollRight: false,
-            fire: false
+            forward: false,    // Z key
+            backward: false,   // S key
+            left: false,      // Q key
+            right: false,      // D key
+            up: false,        // Space key
+            down: false,      // Ctrl key
+            fire: false       // Left mouse button
         };
 
-        this.mouseX = 0;
-        this.mouseY = 0;
         this.mouseDeltaX = 0;
         this.mouseDeltaY = 0;
+        this.mousePosition = { x: 0, y: 0 };
 
+        // Add event listeners
         this.setupEventListeners();
     }
 
     setupEventListeners() {
         // Keyboard events
-        window.addEventListener('keydown', (e) => this.handleKeyDown(e));
-        window.addEventListener('keyup', (e) => this.handleKeyUp(e));
-
+        window.addEventListener('keydown', this.handleKeyDown.bind(this));
+        window.addEventListener('keyup', this.handleKeyUp.bind(this));
+        
         // Mouse events
-        window.addEventListener('mousemove', (e) => this.handleMouseMove(e));
-        window.addEventListener('mousedown', (e) => this.handleMouseDown(e));
-        window.addEventListener('mouseup', (e) => this.handleMouseUp(e));
+        window.addEventListener('mousemove', this.handleMouseMove.bind(this));
+        window.addEventListener('mousedown', this.handleMouseDown.bind(this));
+        window.addEventListener('mouseup', this.handleMouseUp.bind(this));
     }
 
-    handleKeyDown(e) {
-        switch(e.key.toLowerCase()) {
-            case 'w': this.keys.forward = true; break;
-            case 's': this.keys.backward = true; break;
-            case 'a': this.keys.left = true; break;
-            case 'd': this.keys.right = true; break;
-            case 'q': this.keys.rollLeft = true; break;
-            case 'e': this.keys.rollRight = true; break;
-            case ' ': this.keys.fire = true; break;
-            case 'shift': this.keys.up = true; break;
-            case 'control': this.keys.down = true; break;
+    handleKeyDown(event) {
+        switch (event.key.toLowerCase()) {
+            case 'z':
+                this.keys.forward = true;
+                break;
+            case 's':
+                this.keys.backward = true;
+                break;
+            case 'q':
+                this.keys.left = true;
+                break;
+            case 'd':
+                this.keys.right = true;
+                break;
+            case ' ':
+                this.keys.up = true;
+                break;
+            case 'control':
+                this.keys.down = true;
+                break;
         }
     }
 
-    handleKeyUp(e) {
-        switch(e.key.toLowerCase()) {
-            case 'w': this.keys.forward = false; break;
-            case 's': this.keys.backward = false; break;
-            case 'a': this.keys.left = false; break;
-            case 'd': this.keys.right = false; break;
-            case 'q': this.keys.rollLeft = false; break;
-            case 'e': this.keys.rollRight = false; break;
-            case ' ': this.keys.fire = false; break;
-            case 'shift': this.keys.up = false; break;
-            case 'control': this.keys.down = false; break;
+    handleKeyUp(event) {
+        switch (event.key.toLowerCase()) {
+            case 'z':
+                this.keys.forward = false;
+                break;
+            case 's':
+                this.keys.backward = false;
+                break;
+            case 'q':
+                this.keys.left = false;
+                break;
+            case 'd':
+                this.keys.right = false;
+                break;
+            case ' ':
+                this.keys.up = false;
+                break;
+            case 'control':
+                this.keys.down = false;
+                break;
         }
     }
 
-    handleMouseMove(e) {
-        this.mouseDeltaX = e.movementX;
-        this.mouseDeltaY = e.movementY;
-        this.mouseX = e.clientX;
-        this.mouseY = e.clientY;
+    handleMouseMove(event) {
+        this.mouseDeltaX = event.movementX || event.mozMovementX || event.webkitMovementX || 0;
+        this.mouseDeltaY = event.movementY || event.mozMovementY || event.webkitMovementY || 0;
+        this.mousePosition = { x: event.clientX, y: event.clientY };
     }
 
-    handleMouseDown(e) {
-        if (e.button === 0) { // Left click
+    handleMouseDown(event) {
+        if (event.button === 0) { // Left mouse button
             this.keys.fire = true;
         }
     }
 
-    handleMouseUp(e) {
-        if (e.button === 0) { // Left click
+    handleMouseUp(event) {
+        if (event.button === 0) { // Left mouse button
             this.keys.fire = false;
         }
     }

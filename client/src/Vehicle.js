@@ -13,8 +13,13 @@ export class Vehicle {
         this.inputManager = null;
         this.isInitialized = false;
 
-        // Initialize physics and particles only if mesh is valid
+        // Ensure mesh is properly initialized
         if (this.mesh) {
+            // Set initial position and ensure mesh is fully initialized
+            this.mesh.position = new Vector3(0, 2, 0);
+            this.mesh.computeWorldMatrix(true);
+            
+            // Initialize physics and particles
             this.initialize();
         } else {
             console.warn('Vehicle created with null mesh, initialization deferred');
@@ -30,6 +35,10 @@ export class Vehicle {
         }
 
         try {
+            // Ensure mesh is visible and properly updated
+            this.mesh.isVisible = true;
+            this.mesh.computeWorldMatrix(true);
+
             // Initialize physics
             this.physics = new PhysicsController(this);
 
@@ -37,6 +46,7 @@ export class Vehicle {
             this.setupThrusterParticles();
 
             this.isInitialized = true;
+            console.log('Vehicle initialized successfully:', this.type, this.team);
         } catch (error) {
             console.error('Error initializing vehicle:', error);
         }
@@ -79,6 +89,7 @@ export class Vehicle {
     setAsLocalPlayer(inputManager) {
         this.isLocalPlayer = true;
         this.inputManager = inputManager;
+        console.log('Vehicle set as local player:', this.type, this.team);
     }
 
     update(deltaTime) {
@@ -87,47 +98,72 @@ export class Vehicle {
             return;
         }
 
-        if (this.isLocalPlayer && this.inputManager) {
-            this.handleInput(deltaTime);
+        if (!this.mesh) {
+            console.warn('Vehicle update called with null mesh');
+            return;
         }
 
-        // Update physics
-        if (this.physics) {
-            this.physics.update(deltaTime);
-        }
+        try {
+            // Handle input for local player
+            if (this.isLocalPlayer && this.inputManager) {
+                this.handleInput(deltaTime);
+            }
 
-        // Update particle effects
-        this.updateParticles();
+            // Update physics
+            if (this.physics) {
+                this.physics.update(deltaTime);
+            }
+
+            // Update particle effects
+            this.updateParticles();
+
+            // Ensure mesh is visible and properly updated
+            this.mesh.isVisible = true;
+            this.mesh.computeWorldMatrix(true);
+        } catch (error) {
+            console.error('Error updating vehicle:', error);
+        }
     }
 
     handleInput(deltaTime) {
+        if (!this.inputManager || !this.physics) {
+            console.warn('Cannot handle input: inputManager or physics not available');
+            return;
+        }
+
         const { keys } = this.inputManager;
 
-        // Forward/backward thrust
+        // Forward/backward thrust (Z/S)
         if (keys.forward) {
             this.physics.applyThrust(1.0);
         } else if (keys.backward) {
             this.physics.applyThrust(-0.5);
         }
 
-        // Vertical movement
+        // Left/right strafe (Q/D)
+        if (keys.left) {
+            const left = this.mesh.getDirection(Vector3.Left());
+            this.physics.addForce(left.scale(this.physics.thrust * 0.5));
+        } else if (keys.right) {
+            const right = this.mesh.getDirection(Vector3.Right());
+            this.physics.addForce(right.scale(this.physics.thrust * 0.5));
+        }
+
+        // Vertical movement (Space/Ctrl)
         if (keys.up) {
             this.physics.applyLift(1.0);
         } else if (keys.down) {
             this.physics.applyLift(-1.0);
         }
 
-        // Roll
-        if (keys.rollLeft) {
-            this.physics.applyRoll(-1.0);
-        } else if (keys.rollRight) {
-            this.physics.applyRoll(1.0);
-        }
-
-        // Mouse look
+        // Mouse look for yaw (horizontal) and pitch (vertical)
         if (this.inputManager.mouseDeltaX !== 0 || this.inputManager.mouseDeltaY !== 0) {
+            // Apply yaw (horizontal mouse movement)
             this.physics.applyYaw(this.inputManager.mouseDeltaX * 0.001);
+            
+            // Apply pitch (vertical mouse movement)
             this.physics.applyPitch(-this.inputManager.mouseDeltaY * 0.001);
+            
             this.inputManager.resetMouseDelta();
         }
     }
