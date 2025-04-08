@@ -1,0 +1,106 @@
+import { Room, Client, Server } from "colyseus";
+import express from "express";
+import http from "http";
+import path from "path";
+import { State, Drone, Plane, Flag } from "./schemas";
+
+export class MicroDroneRoom extends Room<State> {
+  onCreate(options: Record<string, any>) {
+    this.setState(new State());
+    console.log("MicroDrone room created");
+
+    // Initialize flags
+    const teamAFlag = new Flag();
+    teamAFlag.team = 0;
+    teamAFlag.x = -20;
+    teamAFlag.z = 0;
+    this.state.flags.set("teamA", teamAFlag);
+
+    const teamBFlag = new Flag();
+    teamBFlag.team = 1;
+    teamBFlag.x = 20;
+    teamBFlag.z = 0;
+    this.state.flags.set("teamB", teamBFlag);
+
+    // Set update interval
+    this.setSimulationInterval(() => this.update(), 1000 / 20);
+  }
+
+  onJoin(client: Client, options: { vehicleType: string, team: number }) {
+    // Create vehicle based on type
+    let vehicle;
+    if (options.vehicleType === "drone") {
+      vehicle = new Drone();
+    } else {
+      vehicle = new Plane();
+    }
+    
+    // Set initial position based on team
+    vehicle.team = options.team;
+    vehicle.x = options.team === 0 ? -15 : 15;
+    vehicle.z = 0;
+    
+    this.state.vehicles.set(client.sessionId, vehicle);
+    console.log(`Vehicle joined: ${client.sessionId} (${options.vehicleType}, team ${options.team})`);
+  }
+
+  onLeave(client: Client) {
+    // If vehicle was carrying a flag, return it to base
+    const vehicle = this.state.vehicles.get(client.sessionId);
+    if (vehicle && vehicle.hasFlag) {
+      const flag = Array.from(this.state.flags.values()).find(f => f.carriedBy === client.sessionId);
+      if (flag) {
+        flag.carriedBy = null;
+        flag.atBase = true;
+        flag.x = flag.team === 0 ? -20 : 20;
+        flag.z = 0;
+      }
+    }
+    
+    this.state.vehicles.delete(client.sessionId);
+    console.log(`Vehicle left: ${client.sessionId}`);
+  }
+
+  update() {
+    // Update vehicle positions based on velocity
+    this.state.vehicles.forEach((vehicle, sessionId) => {
+      vehicle.x += vehicle.velocityX;
+      vehicle.y += vehicle.velocityY;
+      vehicle.z += vehicle.velocityZ;
+    });
+
+    // Update flag positions if carried
+    this.state.flags.forEach(flag => {
+      if (flag.carriedBy) {
+        const carrier = this.state.vehicles.get(flag.carriedBy);
+        if (carrier) {
+          flag.x = carrier.x;
+          flag.y = carrier.y;
+          flag.z = carrier.z;
+        }
+      }
+    });
+  }
+}
+
+// Setup server
+const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 2567;
+const app = express();
+
+// Serve static files (client-side)
+app.use(express.static(path.join(__dirname, "../../client/dist")));
+
+// Serve index.html for all routes
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, "../../client/dist/index.html"));
+});
+
+const server = http.createServer(app);
+const gameServer = new Server({ server });
+
+gameServer.define('microdrone_room', MicroDroneRoom);
+
+gameServer.listen(port);
+console.log(`Server running on port ${port}`);
+
+
