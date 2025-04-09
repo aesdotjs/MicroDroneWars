@@ -6,13 +6,15 @@ export class PhysicsController {
         
         // Physics properties
         this.mass = 1.0;
-        this.drag = 0.1;
-        this.angularDrag = 0.05;
-        this.maxSpeed = 20;
-        this.maxAngularSpeed = 2;
-        this.thrust = 20;
-        this.lift = 15;
-        this.torque = 5;
+        this.drag = 0.5;
+        this.angularDrag = 0.2;
+        this.maxSpeed = 10;
+        this.maxAngularSpeed = 1;
+        this.thrust = 15;
+        this.lift = 10;
+        this.torque = 3;
+        this.gravity = 9.81;
+        this.groundLevel = 1;
 
         // State
         this.velocity = Vector3.Zero();
@@ -32,6 +34,9 @@ export class PhysicsController {
     }
 
     applyPhysics(deltaTime) {
+        // Apply gravity
+        this.addForce(new Vector3(0, -this.gravity * this.mass, 0));
+
         // Apply forces to acceleration
         this.acceleration = this.forces.scale(1 / this.mass);
 
@@ -71,7 +76,15 @@ export class PhysicsController {
 
         try {
             // Update position
-            this.vehicle.mesh.position.addInPlace(this.velocity.scale(deltaTime));
+            const newPosition = this.vehicle.mesh.position.add(this.velocity.scale(deltaTime));
+            
+            // Ground collision
+            if (newPosition.y < this.groundLevel) {
+                newPosition.y = this.groundLevel;
+                this.velocity.y = 0;
+            }
+            
+            this.vehicle.mesh.position = newPosition;
 
             // Update rotation using quaternions for smooth rotation
             if (!this.vehicle.mesh.rotationQuaternion) {

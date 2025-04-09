@@ -1,171 +1,155 @@
 import { Vector3, Quaternion, ParticleSystem, Color4, Texture } from '@babylonjs/core';
 import { PhysicsController } from './controllers/PhysicsController';
+import { InputManager } from './InputManager';
 
 export class Vehicle {
-    constructor(scene, mesh, type, team) {
-        this.scene = scene;
-        this.mesh = mesh;
+    constructor(type, team, canvas) {
         this.type = type;
         this.team = team;
+        this.mesh = null;
+        this.velocity = new Vector3(0, 0, 0);
+        this.angularVelocity = new Vector3(0, 0, 0);
         this.health = 100;
-        this.maxHealth = 100;
-        this.isLocalPlayer = false;
-        this.inputManager = null;
-        this.isInitialized = false;
-
-        // Ensure mesh is properly initialized
-        if (this.mesh) {
-            // Set initial position and ensure mesh is fully initialized
-            this.mesh.position = new Vector3(0, 2, 0);
-            this.mesh.computeWorldMatrix(true);
-            
-            // Initialize physics and particles
-            this.initialize();
-        } else {
-            console.warn('Vehicle created with null mesh, initialization deferred');
-        }
+        this.isAlive = true;
+        this.inputManager = null; // Will be set by setAsLocalPlayer
+        this.lastPosition = new Vector3(0, 0, 0);
+        this.lastRotation = new Vector3(0, 0, 0);
+        this.positionLerpFactor = 0.2;
+        this.rotationLerpFactor = 0.2;
     }
 
-    initialize() {
-        if (this.isInitialized) return;
-        
+    initialize(scene) {
         if (!this.mesh) {
-            console.error('Cannot initialize vehicle: mesh is null');
+            console.warn('Cannot initialize vehicle: mesh is null');
             return;
         }
 
-        try {
-            // Ensure mesh is visible and properly updated
-            this.mesh.isVisible = true;
-            this.mesh.computeWorldMatrix(true);
+        // Set initial position based on team
+        const spawnPoint = this.getTeamSpawnPoint(this.team);
+        this.mesh.position = new Vector3(spawnPoint.x, spawnPoint.y, spawnPoint.z);
+        this.lastPosition.copyFrom(this.mesh.position);
+        this.lastRotation.copyFrom(this.mesh.rotation);
 
-            // Initialize physics
-            this.physics = new PhysicsController(this);
+        // Initialize physics
+        this.physics = new PhysicsController(this);
 
-            // Create thruster particles
-            this.setupThrusterParticles();
-
-            this.isInitialized = true;
-            console.log('Vehicle initialized successfully:', this.type, this.team);
-        } catch (error) {
-            console.error('Error initializing vehicle:', error);
-        }
+        // Create thruster particles
+        this.setupThrusterParticles(scene);
     }
 
-    setupThrusterParticles() {
-        if (!this.mesh) {
-            console.warn('Cannot setup thruster particles: mesh is null');
-            return;
-        }
+    getTeamSpawnPoint(team) {
+        return team === 0 
+            ? { x: -20, y: 5, z: 0 }  // Team A spawn
+            : { x: 20, y: 5, z: 0 };  // Team B spawn
+    }
 
-        try {
-            // Main thruster
-            this.mainThruster = new ParticleSystem("thruster", 2000, this.scene);
-            this.mainThruster.particleTexture = new Texture("assets/textures/flare.png", this.scene);
-            this.mainThruster.emitter = this.mesh;
-            this.mainThruster.minEmitBox = new Vector3(-0.2, -0.2, -0.2);
-            this.mainThruster.maxEmitBox = new Vector3(0.2, 0.2, 0.2);
-            this.mainThruster.color1 = new Color4(1, 0.5, 0, 1.0);
-            this.mainThruster.color2 = new Color4(1, 0.5, 0, 1.0);
-            this.mainThruster.colorDead = new Color4(0, 0, 0, 0.0);
-            this.mainThruster.minSize = 0.1;
-            this.mainThruster.maxSize = 0.5;
-            this.mainThruster.minLifeTime = 0.1;
-            this.mainThruster.maxLifeTime = 0.2;
-            this.mainThruster.emitRate = 500;
-            this.mainThruster.blendMode = ParticleSystem.BLENDMODE_ONEONE;
-            this.mainThruster.gravity = new Vector3(0, 0, 0);
-            this.mainThruster.direction1 = new Vector3(0, 0, 1);
-            this.mainThruster.direction2 = new Vector3(0, 0, 1);
-            this.mainThruster.minEmitPower = 1;
-            this.mainThruster.maxEmitPower = 2;
-            this.mainThruster.updateSpeed = 0.01;
-            this.mainThruster.start();
-        } catch (error) {
-            console.error('Error setting up thruster particles:', error);
-        }
+    setupThrusterParticles(scene) {
+        if (!this.mesh) return;
+
+        // Main thruster
+        this.mainThruster = new ParticleSystem("thruster", 2000, scene);
+        this.mainThruster.particleTexture = new Texture("assets/textures/flare.png", scene);
+        this.mainThruster.emitter = this.mesh;
+        this.mainThruster.minEmitBox = new Vector3(-0.2, -0.2, -0.2);
+        this.mainThruster.maxEmitBox = new Vector3(0.2, 0.2, 0.2);
+        this.mainThruster.color1 = new Color4(1, 0.5, 0, 1.0);
+        this.mainThruster.color2 = new Color4(1, 0.5, 0, 1.0);
+        this.mainThruster.colorDead = new Color4(0, 0, 0, 0.0);
+        this.mainThruster.minSize = 0.1;
+        this.mainThruster.maxSize = 0.5;
+        this.mainThruster.minLifeTime = 0.1;
+        this.mainThruster.maxLifeTime = 0.2;
+        this.mainThruster.emitRate = 500;
+        this.mainThruster.blendMode = ParticleSystem.BLENDMODE_ONEONE;
+        this.mainThruster.gravity = new Vector3(0, 0, 0);
+        this.mainThruster.direction1 = new Vector3(0, 0, 1);
+        this.mainThruster.direction2 = new Vector3(0, 0, 1);
+        this.mainThruster.minEmitPower = 1;
+        this.mainThruster.maxEmitPower = 2;
+        this.mainThruster.updateSpeed = 0.01;
+        this.mainThruster.start();
     }
 
     setAsLocalPlayer(inputManager) {
         this.isLocalPlayer = true;
         this.inputManager = inputManager;
-        console.log('Vehicle set as local player:', this.type, this.team);
+        console.log('Vehicle set as local player:', { type: this.type, team: this.team, isLocalPlayer: this.isLocalPlayer });
+    }
+
+    updatePosition(position, rotation) {
+        if (!this.isLocalPlayer) {
+            // Smoothly interpolate position for remote players
+            this.mesh.position = Vector3.Lerp(
+                this.mesh.position,
+                new Vector3(position.x, position.y, position.z),
+                this.positionLerpFactor
+            );
+            
+            // Smoothly interpolate rotation for remote players
+            this.mesh.rotation = Vector3.Lerp(
+                this.mesh.rotation,
+                new Vector3(rotation.x, rotation.y, rotation.z),
+                this.rotationLerpFactor
+            );
+        }
     }
 
     update(deltaTime) {
-        if (!this.isInitialized) {
-            this.initialize();
+        if (!this.mesh || !this.isAlive || !this.inputManager || !this.physics) {
             return;
         }
 
-        if (!this.mesh) {
-            console.warn('Vehicle update called with null mesh');
-            return;
+        // Apply input forces
+        const input = this.inputManager.keys;
+        const mouseDelta = this.inputManager.mouseDelta;
+        
+        // Movement - transform local forces to world space
+        if (input.forward) {
+            this.physics.applyThrust(1);
+        }
+        if (input.backward) {
+            this.physics.applyThrust(-1);
+        }
+        if (input.left) {
+            this.physics.applyYaw(-1);
+        }
+        if (input.right) {
+            this.physics.applyYaw(1);
+        }
+        if (input.up) {
+            this.physics.applyLift(1);
+        }
+        if (input.down) {
+            this.physics.applyLift(-1);
         }
 
-        try {
-            // Handle input for local player
-            if (this.isLocalPlayer && this.inputManager) {
-                this.handleInput(deltaTime);
-            }
-
-            // Update physics
-            if (this.physics) {
-                this.physics.update(deltaTime);
-            }
-
-            // Update particle effects
-            this.updateParticles();
-
-            // Ensure mesh is visible and properly updated
-            this.mesh.isVisible = true;
-            this.mesh.computeWorldMatrix(true);
-        } catch (error) {
-            console.error('Error updating vehicle:', error);
+        // Mouse-based rotation
+        if (mouseDelta.x !== 0) {
+            this.physics.applyYaw(mouseDelta.x * 0.1);
         }
+        if (mouseDelta.y !== 0) {
+            this.physics.applyPitch(mouseDelta.y * 0.1);
+        }
+
+        // Update physics
+        this.physics.update(deltaTime);
+
+        // Reset mouse delta
+        this.inputManager.resetMouseDelta();
+
+        // Fire if needed
+        if (this.inputManager.keys.fire) {
+            this.fire();
+        }
+
+        // Update last known position
+        this.lastPosition.copyFrom(this.mesh.position);
+        this.lastRotation.copyFrom(this.mesh.rotation);
     }
 
-    handleInput(deltaTime) {
-        if (!this.inputManager || !this.physics) {
-            console.warn('Cannot handle input: inputManager or physics not available');
-            return;
-        }
-
-        const { keys } = this.inputManager;
-
-        // Forward/backward thrust (Z/S)
-        if (keys.forward) {
-            this.physics.applyThrust(1.0);
-        } else if (keys.backward) {
-            this.physics.applyThrust(-0.5);
-        }
-
-        // Left/right strafe (Q/D)
-        if (keys.left) {
-            const left = this.mesh.getDirection(Vector3.Left());
-            this.physics.addForce(left.scale(this.physics.thrust * 0.5));
-        } else if (keys.right) {
-            const right = this.mesh.getDirection(Vector3.Right());
-            this.physics.addForce(right.scale(this.physics.thrust * 0.5));
-        }
-
-        // Vertical movement (Space/Ctrl)
-        if (keys.up) {
-            this.physics.applyLift(1.0);
-        } else if (keys.down) {
-            this.physics.applyLift(-1.0);
-        }
-
-        // Mouse look for yaw (horizontal) and pitch (vertical)
-        if (this.inputManager.mouseDeltaX !== 0 || this.inputManager.mouseDeltaY !== 0) {
-            // Apply yaw (horizontal mouse movement)
-            this.physics.applyYaw(this.inputManager.mouseDeltaX * 0.001);
-            
-            // Apply pitch (vertical mouse movement)
-            this.physics.applyPitch(-this.inputManager.mouseDeltaY * 0.001);
-            
-            this.inputManager.resetMouseDelta();
-        }
+    fire() {
+        // Implement firing logic here
+        console.log(`${this.type} from team ${this.team} fired!`);
     }
 
     updateParticles() {
@@ -195,19 +179,29 @@ export class Vehicle {
     }
 
     takeDamage(amount) {
-        this.health = Math.max(0, this.health - amount);
+        this.health -= amount;
         if (this.health <= 0) {
-            this.destroy();
+            this.die();
         }
     }
 
-    destroy() {
+    die() {
+        this.isAlive = false;
         if (this.mainThruster) {
             this.mainThruster.dispose();
         }
         if (this.mesh) {
             this.mesh.dispose();
             this.mesh = null;
+        }
+    }
+
+    cleanup() {
+        if (this.inputManager) {
+            this.inputManager.cleanup();
+        }
+        if (this.mesh) {
+            this.mesh.dispose();
         }
     }
 } 

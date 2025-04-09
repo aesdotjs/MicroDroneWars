@@ -3,7 +3,7 @@ import { Drone } from './Drone.js';
 import { Plane } from './Plane.js';
 import { Flag } from './Flag.js';
 import * as Colyseus from 'colyseus.js';
-import { Engine } from '@babylonjs/core';
+import { Engine, Vector3, Color3 } from '@babylonjs/core';
 import { GameScene } from './GameScene';
 
 class Game {
@@ -14,6 +14,11 @@ class Game {
             console.error('Canvas element not found!');
             return;
         }
+
+        // Get team from URL parameter
+        const urlParams = new URLSearchParams(window.location.search);
+        const teamParam = urlParams.get('team');
+        this.team = teamParam === '1' ? 1 : 0; // Default to team 0 if not specified
 
         // Initialize the engine
         this.engine = new Engine(this.canvas, true);
@@ -43,9 +48,9 @@ class Game {
         try {
             this.room = await this.client.joinOrCreate("microdrone_room", { 
                 vehicleType: "drone", 
-                team: 0 
+                team: this.team 
             });
-            console.log("Joined room:", this.room);
+            console.log("Joined room:", this.room, "Team:", this.team);
             this.setupRoomHandlers();
         } catch (err) {
             console.error("Error joining room:", err);
@@ -59,16 +64,29 @@ class Game {
             
             // Create vehicle in the game scene
             const isLocalPlayer = sessionId === this.room.sessionId;
-            this.gameScene.createVehicle(
+            const gameVehicle = this.gameScene.createVehicle(
                 vehicle.vehicleType,
                 vehicle.team,
                 isLocalPlayer
             );
 
-            // Listen for vehicle updates
-            vehicle.onChange(() => {
-                this.gameScene.updateVehicle(sessionId, vehicle);
-            });
+            if (gameVehicle) {
+                // Set initial position from server state
+                gameVehicle.updatePosition(
+                    { x: vehicle.x, y: vehicle.y, z: vehicle.z },
+                    { x: vehicle.rotationX, y: vehicle.rotationY, z: vehicle.rotationZ }
+                );
+
+                // Listen for vehicle updates
+                vehicle.onChange(() => {
+                    if (gameVehicle && gameVehicle.mesh) {
+                        gameVehicle.updatePosition(
+                            { x: vehicle.x, y: vehicle.y, z: vehicle.z },
+                            { x: vehicle.rotationX, y: vehicle.rotationY, z: vehicle.rotationZ }
+                        );
+                    }
+                });
+            }
         });
 
         // Handle vehicle removal
@@ -80,11 +98,18 @@ class Game {
         // Handle flag updates
         this.room.state.flags.onAdd((flag, flagId) => {
             console.log('Flag added:', flagId);
-            this.gameScene.createFlag(flagId, flag);
+            const gameFlag = this.gameScene.createFlag(flagId, flag);
             
-            flag.onChange(() => {
-                this.gameScene.updateFlag(flagId, flag);
-            });
+            if (gameFlag) {
+                flag.onChange(() => {
+                    if (gameFlag) {
+                        gameFlag.position = new Vector3(flag.x, flag.y, flag.z);
+                        if (flag.captured) {
+                            gameFlag.material.diffuseColor = new Color3(0, 1, 0);
+                        }
+                    }
+                });
+            }
         });
 
         // Handle flag removal
@@ -92,19 +117,45 @@ class Game {
             console.log('Flag removed:', flagId);
             this.gameScene.removeFlag(flagId);
         });
+
+        // Handle initial state
+        this.room.state.vehicles.forEach((vehicle, sessionId) => {
+            console.log('Initial vehicle state:', sessionId);
+            const isLocalPlayer = sessionId === this.room.sessionId;
+            const gameVehicle = this.gameScene.createVehicle(
+                vehicle.vehicleType,
+                vehicle.team,
+                isLocalPlayer
+            );
+
+            if (gameVehicle) {
+                gameVehicle.updatePosition(
+                    { x: vehicle.x, y: vehicle.y, z: vehicle.z },
+                    { x: vehicle.rotationX, y: vehicle.rotationY, z: vehicle.rotationZ }
+                );
+            }
+        });
+
+        this.room.state.flags.forEach((flag, flagId) => {
+            console.log('Initial flag state:', flagId);
+            this.gameScene.createFlag(flagId, flag);
+        });
     }
 
     sendMovementUpdate(vehicle) {
-        if (!this.room) return;
+        if (!this.room || !vehicle || !vehicle.mesh) return;
 
-        this.room.send('movement', {
-            x: vehicle.mesh.position.x,
-            y: vehicle.mesh.position.y,
-            z: vehicle.mesh.position.z,
-            rotationX: vehicle.mesh.rotation.x,
-            rotationY: vehicle.mesh.rotation.y,
-            rotationZ: vehicle.mesh.rotation.z
-        });
+        // Only send updates for local player
+        if (vehicle.isLocalPlayer) {
+            this.room.send('movement', {
+                x: vehicle.mesh.position.x,
+                y: vehicle.mesh.position.y,
+                z: vehicle.mesh.position.z,
+                rotationX: vehicle.mesh.rotation.x,
+                rotationY: vehicle.mesh.rotation.y,
+                rotationZ: vehicle.mesh.rotation.z
+            });
+        }
     }
 }
 
