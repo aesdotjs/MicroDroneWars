@@ -35,7 +35,7 @@ export class PhysicsController {
         this.yawSensitivity = 0.5;
         this.pitchSensitivity = 0.2;
         this.rollSensitivity = 0.2;
-        this.hoverForce = 2.0;
+        this.hoverForce = 0;
         this.turbulence = 0.05;
         this.climbPower = 1.0;
         this.deltaPower = 1.0;
@@ -76,16 +76,34 @@ export class PhysicsController {
         this.yawStability = 0.02;
 
         // Mouse control properties
-        this.mouseSensitivity = 0.0001;
-        this.mouseDeadzone = 0.3;
+        this.mouseSensitivity = 0.0005;
+        this.mouseDeadzone = 0.1;
         this.targetRotation = new CANNON.Vec3(0, 0, 0);
-        this.rotationSmoothing = 0.02;
+        this.rotationSmoothing = 0.1;
 
         // Add yaw control properties
         this.targetYawAngle = 0;
         this.currentYawAngle = 0;
         this.yawRotationSpeed = 0.1;
         this.yawDamping = 0.95;
+
+        // Add pitch control properties
+        this.targetPitchAngle = 0;
+        this.pitchRotationSpeed = 0.1;
+        this.pitchDamping = 0.95;
+
+        // Add roll control properties
+        this.targetRollAngle = 0;
+        this.rollRotationSpeed = 0.1;
+        this.rollDamping = 0.95;
+
+        // Add helicopter-like control properties
+        this.collective = 0.5; // Initial collective setting (0-1)
+        this.cyclicSensitivity = 0.0005; // Mouse sensitivity for cyclic control
+        this.collectiveSensitivity = 0.1; // Mouse wheel sensitivity for collective
+        this.tailRotorSensitivity = 0.1; // Mouse button sensitivity for yaw
+        this.maxCollective = 1.0;
+        this.minCollective = 0.0;
 
         // Get initial position from vehicle mesh
         const initialPosition = vehicle.mesh ? 
@@ -154,9 +172,6 @@ export class PhysicsController {
 
     update(deltaTime) {
         try {
-            // Update hover forces
-            this.updateHover();
-
             // Update Cannon.js world
             world.step(Math.min(deltaTime, 1/60));
 
@@ -194,116 +209,75 @@ export class PhysicsController {
     applyDronePhysics(deltaTime) {
         try {
             const input = this.vehicle.inputManager?.keys || {};
+            const mouse = this.vehicle.inputManager?.mouse || {};
             
-            // Debug logging with throttling
-            const currentTime = performance.now() / 1000;
-            if (currentTime - this.lastLogTime >= this.logInterval) {
-                if (this.body.quaternion) {
-                    const rotation = new CANNON.Vec3();
-                    this.body.quaternion.toEuler(rotation);
-                    const angles = {
-                        pitch: (rotation.x * 180 / Math.PI).toFixed(2),
-                        yaw: (rotation.y * 180 / Math.PI).toFixed(2),
-                        roll: (rotation.z * 180 / Math.PI).toFixed(2)
-                    };
-                    console.log('Vehicle Rotation:', angles);
-                    console.log('Motor Speed:', this.motorSpeed);
-                    console.log('Angular Velocity:', {
-                        x: this.body.angularVelocity.x.toFixed(2),
-                        y: this.body.angularVelocity.y.toFixed(2),
-                        z: this.body.angularVelocity.z.toFixed(2)
-                    });
+            // Update collective based on mouse wheel
+            if (mouse.wheelDelta) {
+                this.collective += mouse.wheelDelta * this.collectiveSensitivity;
+                this.collective = Math.max(this.minCollective, Math.min(this.maxCollective, this.collective));
+            }
+
+            // Apply main rotor thrust based on collective
+            const mainRotorThrust = this.collective * this.thrust;
+            const up = new CANNON.Vec3(0, 1, 0);
+            this.body.vectorToWorldFrame(up, up);
+            up.scale(mainRotorThrust, up);
+            this.body.applyForce(up, this.body.position);
+
+            // Apply mouse-based yaw and pitch
+            if (mouse.deltaX || mouse.deltaY) {
+                // Apply yaw from mouse horizontal movement
+                const yawInput = -mouse.deltaX * this.mouseSensitivity;
+                if (Math.abs(yawInput) > this.mouseDeadzone) {
+                    this.applyYaw(yawInput);
                 }
-                this.lastLogTime = currentTime;
+
+                // Apply pitch from mouse vertical movement
+                const pitchInput = -mouse.deltaY * this.mouseSensitivity;
+                if (Math.abs(pitchInput) > this.mouseDeadzone) {
+                    this.applyPitch(pitchInput);
+                }
             }
 
-            // Reset motor speeds to hover force if no input
-            if (!input.up && !input.down && !input.pitchUp && !input.pitchDown && !input.rollLeft && !input.rollRight) {
-                Object.keys(this.motorSpeed).forEach(motor => {
-                    this.motorSpeed[motor] = this.hoverForce;
-                });
-            }
-
-            // Update motor speeds based on input with smoother transitions
+            // Apply keyboard controls
             if (input.up) {
-                // Increase all motor speeds gradually
-                Object.keys(this.motorSpeed).forEach(motor => {
-                    this.motorSpeed[motor] = Math.min(
-                        this.motorMaxThrust,
-                        this.motorSpeed[motor] + deltaTime * this.climbPower * 0.5
-                    );
-                });
+                this.collective = Math.min(this.maxCollective, this.collective + deltaTime * 0.5);
             } else if (input.down) {
-                // Decrease all motor speeds gradually
-                Object.keys(this.motorSpeed).forEach(motor => {
-                    this.motorSpeed[motor] = Math.max(
-                        this.motorMinThrust,
-                        this.motorSpeed[motor] - deltaTime * this.climbPower * 0.5
-                    );
-                });
+                this.collective = Math.max(this.minCollective, this.collective - deltaTime * 0.5);
             }
 
-            // Apply yaw (Q/D) using differential thrust
+            // Apply pitch from keyboard (I/K)
+            if (input.pitchUp) {
+                this.applyPitch(1.0);
+            } else if (input.pitchDown) {
+                this.applyPitch(-1.0);
+            }
+
+            // Apply roll from keyboard (J/L)
+            if (input.rollLeft) {
+                this.applyRoll(-1.0);
+            } else if (input.rollRight) {
+                this.applyRoll(1.0);
+            }
+
+            // Apply yaw from keyboard (Q/D)
             if (input.left) {
-                this.motorSpeed.frontLeft -= deltaTime * this.deltaPower;
-                this.motorSpeed.backRight -= deltaTime * this.deltaPower;
-                this.motorSpeed.frontRight += deltaTime * this.deltaPower;
-                this.motorSpeed.backLeft += deltaTime * this.deltaPower;
+                this.applyYaw(-1.0);
             } else if (input.right) {
-                this.motorSpeed.frontLeft += deltaTime * this.deltaPower;
-                this.motorSpeed.backRight += deltaTime * this.deltaPower;
-                this.motorSpeed.frontRight -= deltaTime * this.deltaPower;
-                this.motorSpeed.backLeft -= deltaTime * this.deltaPower;
+                this.applyYaw(1.0);
             }
 
-            // Clamp motor speeds and apply turbulence
-            Object.keys(this.motorSpeed).forEach(motor => {
-                // Add reduced turbulence
-                this.motorSpeed[motor] += (Math.random() - 0.5) * this.turbulence * 0.1;
-                // Clamp to min/max values
-                this.motorSpeed[motor] = Math.max(this.motorMinThrust, 
-                    Math.min(this.motorMaxThrust, this.motorSpeed[motor]));
-            });
-
-            // Calculate and apply forces from each motor with stability
-            Object.entries(this.motorSpeed).forEach(([motor, speed]) => {
-                // Get motor position in world space
-                const motorPosition = new CANNON.Vec3();
-                this.body.pointToWorldFrame(this.motorPositions[motor], motorPosition);
-
-                // Calculate force with reduced turbulence
-                const force = speed * 2;
-
-                // Apply force in world space
-                const forceVector = new CANNON.Vec3(0, force, 0);
-                this.body.vectorToWorldFrame(forceVector, forceVector);
-                this.body.applyForce(forceVector, motorPosition);
-            });
-
-            // Handle mouse input for camera control
-            if (this.vehicle.inputManager?.mouseDelta) {
-                const { x, y } = this.vehicle.inputManager.mouseDelta;
-                
-                // Only apply mouse movement if it's beyond the deadzone
-                if (Math.abs(x) > this.mouseDeadzone || Math.abs(y) > this.mouseDeadzone) {
-                    // Smoothly update target rotation
-                    this.targetRotation.y += x * this.mouseSensitivity;
-                    this.targetRotation.x += y * this.mouseSensitivity;
-                }
-            }
-
-            // Smoothly apply rotation changes
-            if (this.body.quaternion) {
-                const currentRotation = new CANNON.Vec3();
-                this.body.quaternion.toEuler(currentRotation);
-                
-                // Smoothly interpolate to target rotation
-                currentRotation.x += (this.targetRotation.x - currentRotation.x) * this.rotationSmoothing;
-                currentRotation.y += (this.targetRotation.y - currentRotation.y) * this.rotationSmoothing;
-                currentRotation.z += (this.targetRotation.z - currentRotation.z) * this.rotationSmoothing;
-                
-                // Apply the new rotation
-                this.body.quaternion.setFromEuler(currentRotation.x, currentRotation.y, currentRotation.z);
+            // Apply forward/backward movement (Z/S)
+            if (input.forward) {
+                const forward = new CANNON.Vec3(0, 0, 1);
+                this.body.vectorToWorldFrame(forward, forward);
+                forward.scale(this.thrust * 0.5, forward);
+                this.body.applyForce(forward, this.body.position);
+            } else if (input.backward) {
+                const backward = new CANNON.Vec3(0, 0, -1);
+                this.body.vectorToWorldFrame(backward, backward);
+                backward.scale(this.thrust * 0.5, backward);
+                this.body.applyForce(backward, this.body.position);
             }
 
             // Apply stability forces
@@ -456,72 +430,92 @@ export class PhysicsController {
         this.body.angularVelocity.y *= this.yawDamping;
     }
 
-    updateHover() {
-        // Calculate the current vertical velocity
-        const currentVelocity = this.body.velocity.y;
-        
-        // Calculate the current height above ground
-        const currentHeight = this.body.position.y;
-        const targetHeight = 5.0; // Target hover height
-        
-        // Calculate height error
-        const heightError = targetHeight - currentHeight;
-        
-        // Calculate velocity error
-        const velocityError = -currentVelocity; // We want zero vertical velocity
-        
-        // More conservative PID-like control for height
-        const heightGain = 0.1; // Reduced from 0.5
-        const velocityGain = 0.05; // Reduced from 0.2
-        
-        // Calculate the required force to maintain hover
-        const hoverForce = (heightError * heightGain + velocityError * velocityGain) * this.mass;
-        
-        // Add gravity compensation
-        const gravityForce = this.mass * this.gravity;
-        
-        // Total force needed
-        let totalForce = hoverForce + gravityForce;
-        
-        // Limit the maximum force to prevent excessive acceleration
-        const maxForce = this.mass * this.gravity * 1.2; // 20% above gravity
-        totalForce = Math.min(maxForce, Math.max(-maxForce, totalForce));
-        
-        // Get the up direction in world space
-        const up = new CANNON.Vec3(0, 1, 0);
-        this.body.vectorToWorldFrame(up, up);
-        
-        // Create and apply the force vector
-        const forceVector = new CANNON.Vec3();
-        forceVector.copy(up);
-        forceVector.scale(totalForce, forceVector);
-        
-        // Apply the force at the center of mass
-        this.body.applyForce(forceVector, this.body.position);
-        
-        // Debug logging
-        if (performance.now() - this.lastLogTime >= this.logInterval) {
-            console.log('Hover Control:', {
-                height: currentHeight.toFixed(2),
-                velocity: currentVelocity.toFixed(2),
-                heightError: heightError.toFixed(2),
-                velocityError: velocityError.toFixed(2),
-                hoverForce: hoverForce.toFixed(2),
-                totalForce: totalForce.toFixed(2),
-                maxForce: maxForce.toFixed(2)
-            });
-            this.lastLogTime = performance.now();
-        }
-    }
-
     applyPitch(amount) {
-        const torque = new CANNON.Vec3(amount * this.maxAngularSpeed, 0, 0);
-        this.body.applyImpulse(torque, this.body.position);
+        // Update target pitch angle based on input
+        this.targetPitchAngle += amount * this.pitchRotationSpeed;
+        
+        // Get current rotation
+        const currentRotation = new CANNON.Vec3();
+        this.body.quaternion.toEuler(currentRotation);
+        
+        // Calculate pitch difference
+        const pitchDiff = this.targetPitchAngle - currentRotation.x;
+        
+        // Calculate pitch force based on difference
+        const pitchForce = pitchDiff * this.maxAngularSpeed * this.mass;
+        
+        // Get the right direction in world space
+        const right = new CANNON.Vec3(1, 0, 0);
+        this.body.vectorToWorldFrame(right, right);
+        
+        // Create a force vector in the right direction
+        const force = new CANNON.Vec3();
+        force.copy(right);
+        force.scale(pitchForce, force);
+        
+        // Apply the force at a point offset from the center of mass to create torque
+        const offset = new CANNON.Vec3(0, 0, 1); // Offset in front of center of mass
+        this.body.vectorToWorldFrame(offset, offset);
+        
+        // Apply the force at the offset point
+        this.body.applyForce(force, offset);
+        
+        // Apply an equal and opposite force at the opposite point to maintain stability
+        const oppositeOffset = new CANNON.Vec3(0, 0, -1);
+        this.body.vectorToWorldFrame(oppositeOffset, oppositeOffset);
+        const oppositeForce = new CANNON.Vec3();
+        oppositeForce.copy(force);
+        oppositeForce.scale(-1, oppositeForce);
+        this.body.applyForce(oppositeForce, oppositeOffset);
+        
+        // Apply damping to prevent overshooting
+        this.body.angularVelocity.x *= this.pitchDamping;
     }
 
     applyRoll(amount) {
-        const torque = new CANNON.Vec3(0, 0, amount * this.maxAngularSpeed);
-        this.body.applyImpulse(torque, this.body.position);
+        try {
+            // Update target roll angle based on input
+            this.targetRollAngle += amount * this.rollRotationSpeed;
+            
+            // Get current rotation
+            const currentRotation = new CANNON.Vec3();
+            this.body.quaternion.toEuler(currentRotation);
+            
+            // Calculate roll difference
+            const rollDiff = this.targetRollAngle - currentRotation.z;
+            
+            // Calculate roll force based on difference
+            const rollForce = rollDiff * this.maxAngularSpeed * this.mass;
+            
+            // Get the forward direction in world space
+            const forward = new CANNON.Vec3(0, 0, 1);
+            this.body.vectorToWorldFrame(forward, forward);
+            
+            // Create a force vector in the forward direction
+            const force = new CANNON.Vec3();
+            force.copy(forward);
+            force.scale(rollForce, force);
+            
+            // Apply the force at a point offset from the center of mass to create torque
+            const offset = new CANNON.Vec3(1, 0, 0); // Offset to the right of center of mass
+            this.body.vectorToWorldFrame(offset, offset);
+            
+            // Apply the force at the offset point
+            this.body.applyForce(force, offset);
+            
+            // Apply an equal and opposite force at the opposite point to maintain stability
+            const oppositeOffset = new CANNON.Vec3(-1, 0, 0);
+            this.body.vectorToWorldFrame(oppositeOffset, oppositeOffset);
+            const oppositeForce = new CANNON.Vec3();
+            oppositeForce.copy(force);
+            oppositeForce.scale(-1, oppositeForce);
+            this.body.applyForce(oppositeForce, oppositeOffset);
+            
+            // Apply damping to prevent overshooting
+            this.body.angularVelocity.z *= this.rollDamping;
+        } catch (error) {
+            console.error('Apply roll error:', error);
+        }
     }
 
     applyPlanePhysics(deltaTime) {

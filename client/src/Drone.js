@@ -92,6 +92,20 @@ export class Drone extends Vehicle {
                 this.physics.applyLift(-1);
             }
             
+            // Apply IJKL controls for pitch and roll
+            if (input.pitchUp) {
+                this.physics.applyPitch(1);
+            }
+            if (input.pitchDown) {
+                this.physics.applyPitch(-1);
+            }
+            if (input.rollLeft) {
+                this.physics.applyRoll(-1);
+            }
+            if (input.rollRight) {
+                this.physics.applyRoll(1);
+            }
+            
             // Apply mouse-based rotation
             if (mouseDelta.x !== 0) {
                 this.physics.applyYaw(mouseDelta.x * 0.1);
