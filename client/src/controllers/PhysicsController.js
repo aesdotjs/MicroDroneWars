@@ -86,21 +86,21 @@ export class PhysicsController {
         this.currentYawAngle = 0;
         this.yawRotationSpeed = 0.2;
         this.yawDamping = 0.5;
-        this.maxYawSpeed = 0.6;
+        this.maxYawSpeed = 1.2;
         this.yawAcceleration = 0.1;
 
         // Add pitch control properties
         this.targetPitchAngle = 0;
         this.pitchRotationSpeed = 0.2;
         this.pitchDamping = 0.5;
-        this.maxPitchSpeed = 0.6;
+        this.maxPitchSpeed = 1.2;
         this.pitchAcceleration = 0.1;
 
         // Add roll control properties
         this.targetRollAngle = 0;
         this.rollRotationSpeed = 0.2;
         this.rollDamping = 0.5;
-        this.maxRollSpeed = 0.6;
+        this.maxRollSpeed = 1.2;
         this.rollAcceleration = 0.1;
 
         // Add helicopter-like control properties

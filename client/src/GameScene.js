@@ -1,4 +1,4 @@
-import { Scene, Vector3, HemisphericLight, ArcRotateCamera, MeshBuilder, StandardMaterial, Color3, TransformNode, UniversalCamera, Quaternion } from '@babylonjs/core';
+import { Scene, Vector3, HemisphericLight, ArcRotateCamera, MeshBuilder, StandardMaterial, Color3, TransformNode, UniversalCamera, Quaternion, Matrix } from '@babylonjs/core';
 import { Vehicle } from './Vehicle';
 import { InputManager } from './InputManager';
 import { CollisionManager } from './CollisionManager';
@@ -106,64 +106,100 @@ export class GameScene {
     }
 
     setAsLocalPlayer(vehicle) {
-        if (!vehicle || !vehicle.mesh) return;
+        this.localPlayer = vehicle;
+        this.localPlayer.inputManager = new InputManager(this.engine.getRenderingCanvas());
         
-        // Set vehicle as local player
-        vehicle.isLocalPlayer = true;
-        vehicle.inputManager = new InputManager(this.engine.getRenderingCanvas());
-        
-        // Ensure vehicle has valid position
-        if (!vehicle.mesh.position) {
-            vehicle.mesh.position = new Vector3(0, 0, 0);
+        // Dispose of old camera if it exists
+        if (this.camera) {
+            this.camera.dispose();
         }
         
+        // Create camera
+        this.camera = new UniversalCamera("camera", new Vector3(0, 5, 10), this.scene);
+        
+        // Configure camera settings
+        this.camera.minZ = 0.1;
+        this.camera.speed = 0.5;
+        this.camera.angularSensibility = 5000;
+        this.camera.inertia = 0.9;
+        this.camera.fov = 1.2;
+        
+        // Remove default inputs
+        this.camera.inputs.clear();
+        
         // Set initial camera position and target
-        this.camera.position = new Vector3(0, 5, -10);
-        this.camera.target = vehicle.mesh.position;
-        this.camera.radius = 10; // Set fixed distance from target
-        this.camera.alpha = -Math.PI / 2; // Fixed horizontal angle
-        this.camera.beta = Math.PI / 3; // Fixed vertical angle
+        const vehiclePos = vehicle.mesh.position;
+        this.camera.position = new Vector3(vehiclePos.x, vehiclePos.y + 5, vehiclePos.z + 10);
+        this.camera.setTarget(vehiclePos);
         
-        // Add smooth camera follow with yaw rotation
-        this.scene.registerBeforeRender(() => {
-            if (vehicle.mesh) {
-                // Get vehicle's yaw rotation with NaN check
-                let yaw = 0;
-                if (vehicle.mesh.rotationQuaternion) {
-                    const euler = vehicle.mesh.rotationQuaternion.toEulerAngles();
-                    yaw = isNaN(euler.y) ? 0 : euler.y;
-                } else {
-                    yaw = isNaN(vehicle.mesh.rotation.y) ? 0 : vehicle.mesh.rotation.y;
-                }
-
-                // Ensure vehicle position is valid
-                const vehiclePos = vehicle.mesh.position;
-                if (isNaN(vehiclePos.x) || isNaN(vehiclePos.y) || isNaN(vehiclePos.z)) {
-                    console.warn('Invalid vehicle position detected, using last valid position');
-                    return; // Skip this frame if position is invalid
-                }
-
-                // Calculate camera position based on vehicle's yaw
-                const cameraOffset = new Vector3(
-                    Math.sin(yaw) * 10,  // X offset based on yaw
-                    5,                  // Fixed height
-                    Math.cos(yaw) * 10   // Z offset based on yaw
-                );
-                
-                // Update camera position and target
-                const newCameraPos = vehiclePos.add(cameraOffset);
-                if (!isNaN(newCameraPos.x) && !isNaN(newCameraPos.y) && !isNaN(newCameraPos.z)) {
-                    this.camera.position = newCameraPos;
-                    this.camera.target = vehiclePos;
-                }
-            }
-        });
+        // Attach camera to canvas
+        this.camera.attachControl(this.engine.getRenderingCanvas(), true);
         
+        // Debug logging
         console.log('Vehicle set as local player:', {
-            id: vehicle.id,
-            type: vehicle.type,
-            team: vehicle.team
+            id: this.localPlayer.id,
+            type: this.localPlayer.vehicleType,
+            team: this.localPlayer.team,
+            position: this.localPlayer.mesh.position,
+            hasInputManager: !!this.localPlayer.inputManager,
+            hasCamera: !!this.camera
         });
+    }
+
+    updateCamera() {
+        if (!this.localPlayer || !this.camera) return;
+        
+        const vehicle = this.localPlayer.mesh;
+        const vehiclePos = vehicle.position;
+        
+        // Get vehicle's rotation quaternion
+        const vehicleRotation = vehicle.rotationQuaternion;
+        if (!vehicleRotation) return;
+        
+        // Extract yaw and pitch from the rotation quaternion
+        const eulerAngles = vehicleRotation.toEulerAngles();
+        const yaw = eulerAngles.y;
+        const pitch = eulerAngles.x;
+        
+        // Create a new quaternion with only yaw and pitch
+        const cameraRotation = Quaternion.RotationYawPitchRoll(yaw, pitch, 0);
+        
+        // Calculate forward and up vectors from the simplified rotation
+        const forward = new Vector3(0, 0, -1);
+        const up = new Vector3(0, 1, 0);
+        forward.rotateByQuaternionToRef(cameraRotation, forward);
+        up.rotateByQuaternionToRef(cameraRotation, up);
+        
+        // Calculate camera position - closer to the vehicle
+        const cameraOffset = new Vector3(0, 3, 5);
+        cameraOffset.rotateByQuaternionToRef(cameraRotation, cameraOffset);
+        
+        // Smoothly interpolate camera position
+        const targetPosition = vehiclePos.add(cameraOffset);
+        this.camera.position = Vector3.Lerp(this.camera.position, targetPosition, 0.1);
+        
+        // Calculate camera target - slightly in front of the vehicle
+        const targetOffset = forward.scale(3);
+        const targetPoint = vehiclePos.add(targetOffset);
+        this.camera.setTarget(targetPoint);
+        
+        // Set camera up vector to world up
+        this.camera.upVector = new Vector3(0, 1, 0);
+        
+        // Debug logging
+        if (Date.now() - this.lastLogTime > this.logInterval * 1000) {
+            console.log('Camera Update:', {
+                vehiclePosition: vehiclePos,
+                vehicleRotation: vehicle.rotation,
+                cameraPosition: this.camera.position,
+                cameraTarget: this.camera.target,
+                forward: forward,
+                up: up,
+                yaw: yaw * (180/Math.PI),
+                pitch: pitch * (180/Math.PI)
+            });
+            this.lastLogTime = Date.now();
+        }
     }
 
     createVehicle(type, team, isLocalPlayer = false) {
@@ -270,7 +306,7 @@ export class GameScene {
 
             // Update camera to follow local player
             if (this.localPlayer && this.localPlayer.mesh) {
-                this.camera.setTarget(this.localPlayer.mesh);
+                this.updateCamera();
             }
         } catch (error) {
             console.error('Game update error:', error);

@@ -83,7 +83,6 @@ export class InputManager {
             return;
         }
 
-        console.log('Key pressed:', event.code, 'Canvas focused:', this.hasFocus);
 
         switch(event.key.toLowerCase()) {
             // Left Stick (ZQSD)
@@ -120,13 +119,10 @@ export class InputManager {
                 break;
         }
 
-        console.log('Keys state:', this.keys);
     }
 
     handleKeyUp(event) {
         if (!this.hasFocus) return;
-
-        console.log('Key released:', event.code);
 
         switch(event.key.toLowerCase()) {
             // Left Stick (ZQSD)
@@ -163,7 +159,6 @@ export class InputManager {
                 break;
         }
 
-        console.log('Keys state:', this.keys);
     }
 
     handleMouseMove(event) {
