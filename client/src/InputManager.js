@@ -4,14 +4,21 @@ export class InputManager {
     constructor(canvas) {
         this.canvas = canvas;
         this.keys = {
-            forward: false,
-            backward: false,
-            left: false,
-            right: false,
-            up: false,
-            down: false,
-            fire: false,
-            zoom: false
+            // Left Stick (ZQSD)
+            up: false,      // Z - Throttle up
+            down: false,    // S - Throttle down
+            left: false,    // Q - Yaw left
+            right: false,   // D - Yaw right
+            
+            // Right Stick (IJKL)
+            pitchUp: false,    // I - Pitch forward
+            pitchDown: false,  // K - Pitch backward
+            rollLeft: false,   // J - Roll left
+            rollRight: false,  // L - Roll right
+            
+            // Other controls
+            fire: false,    // Space - Fire
+            zoom: false     // Right click - Zoom
         };
         this.mouseDelta = { x: 0, y: 0 };
         this.hasFocus = false;
@@ -29,6 +36,8 @@ export class InputManager {
         this.handleFocus = this.handleFocus.bind(this);
         this.handleBlur = this.handleBlur.bind(this);
         this.handleClick = this.handleClick.bind(this);
+        this.handleMouseDown = this.handleMouseDown.bind(this);
+        this.handleMouseUp = this.handleMouseUp.bind(this);
 
         // Add event listeners
         document.addEventListener('keydown', this.handleKeyDown);
@@ -37,7 +46,8 @@ export class InputManager {
         this.canvas.addEventListener('focus', this.handleFocus);
         this.canvas.addEventListener('blur', this.handleBlur);
         this.canvas.addEventListener('click', this.handleClick);
-        this.canvas.addEventListener('mousedown', this.handleClick); // Add mousedown handler
+        this.canvas.addEventListener('mousedown', this.handleMouseDown);
+        this.canvas.addEventListener('mouseup', this.handleMouseUp);
 
         // Prevent default browser shortcuts when canvas is focused
         this.canvas.addEventListener('keydown', (e) => {
@@ -75,28 +85,37 @@ export class InputManager {
 
         console.log('Key pressed:', event.code, 'Canvas focused:', this.hasFocus);
 
-        // AZERTY key mappings
-        switch (event.code) {
-            case 'KeyW': // Z key on AZERTY
-                this.keys.forward = true;
-                break;
-            case 'KeyS': // S key on AZERTY
-                this.keys.backward = true;
-                break;
-            case 'KeyA': // Q key on AZERTY
-                this.keys.left = true;
-                break;
-            case 'KeyD': // D key on AZERTY
-                this.keys.right = true;
-                break;
-            case 'Space': // Space for up
+        switch(event.key.toLowerCase()) {
+            // Left Stick (ZQSD)
+            case 'z':
                 this.keys.up = true;
                 break;
-            case 'ControlLeft': // Left Ctrl for down
-            case 'ControlRight': // Right Ctrl for down
+            case 's':
                 this.keys.down = true;
                 break;
-            case 'KeyQ': // A key on AZERTY
+            case 'q':
+                this.keys.left = true;
+                break;
+            case 'd':
+                this.keys.right = true;
+                break;
+            
+            // Right Stick (IJKL)
+            case 'i':
+                this.keys.pitchUp = true;
+                break;
+            case 'k':
+                this.keys.pitchDown = true;
+                break;
+            case 'j':
+                this.keys.rollLeft = true;
+                break;
+            case 'l':
+                this.keys.rollRight = true;
+                break;
+            
+            // Other controls
+            case ' ':
                 this.keys.fire = true;
                 break;
         }
@@ -109,28 +128,37 @@ export class InputManager {
 
         console.log('Key released:', event.code);
 
-        // AZERTY key mappings
-        switch (event.code) {
-            case 'KeyW': // Z key on AZERTY
-                this.keys.forward = false;
-                break;
-            case 'KeyS': // S key on AZERTY
-                this.keys.backward = false;
-                break;
-            case 'KeyA': // Q key on AZERTY
-                this.keys.left = false;
-                break;
-            case 'KeyD': // D key on AZERTY
-                this.keys.right = false;
-                break;
-            case 'Space':
+        switch(event.key.toLowerCase()) {
+            // Left Stick (ZQSD)
+            case 'z':
                 this.keys.up = false;
                 break;
-            case 'ControlLeft':
-            case 'ControlRight':
+            case 's':
                 this.keys.down = false;
                 break;
-            case 'KeyQ': // A key on AZERTY
+            case 'q':
+                this.keys.left = false;
+                break;
+            case 'd':
+                this.keys.right = false;
+                break;
+            
+            // Right Stick (IJKL)
+            case 'i':
+                this.keys.pitchUp = false;
+                break;
+            case 'k':
+                this.keys.pitchDown = false;
+                break;
+            case 'j':
+                this.keys.rollLeft = false;
+                break;
+            case 'l':
+                this.keys.rollRight = false;
+                break;
+            
+            // Other controls
+            case ' ':
                 this.keys.fire = false;
                 break;
         }
@@ -170,6 +198,18 @@ export class InputManager {
         }
     }
 
+    handleMouseDown(event) {
+        if (event.button === 2) { // Right click
+            this.keys.zoom = true;
+        }
+    }
+
+    handleMouseUp(event) {
+        if (event.button === 2) { // Right click
+            this.keys.zoom = false;
+        }
+    }
+
     getInput() {
         return {
             ...this.keys,
@@ -189,6 +229,8 @@ export class InputManager {
         document.removeEventListener('focus', this.handleFocus);
         document.removeEventListener('blur', this.handleBlur);
         this.canvas.removeEventListener('click', this.handleClick);
+        this.canvas.removeEventListener('mousedown', this.handleMouseDown);
+        this.canvas.removeEventListener('mouseup', this.handleMouseUp);
         
         if (this.isPointerLocked) {
             document.exitPointerLock();

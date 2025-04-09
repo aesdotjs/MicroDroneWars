@@ -1,4 +1,4 @@
-import { Scene, Vector3, HemisphericLight, ArcRotateCamera, MeshBuilder, StandardMaterial, Color3 } from '@babylonjs/core';
+import { Scene, Vector3, HemisphericLight, ArcRotateCamera, MeshBuilder, StandardMaterial, Color3, TransformNode } from '@babylonjs/core';
 import { Vehicle } from './Vehicle';
 import { InputManager } from './InputManager';
 import { CollisionManager } from './CollisionManager';
@@ -41,18 +41,25 @@ export class GameScene {
     }
 
     setupCamera() {
-        // Create a camera that follows the player
-        this.camera = new ArcRotateCamera("camera", 0, 0, 10, Vector3.Zero(), this.scene);
-        this.camera.attachControl(this.engine.getRenderingCanvas(), true);
-        this.camera.minZ = 0.1;
-        this.camera.maxZ = 1000;
-        this.camera.lowerRadiusLimit = 5;
-        this.camera.upperRadiusLimit = 20;
-        this.camera.alpha = Math.PI; // Start behind the vehicle
-        this.camera.beta = Math.PI / 4; // Slightly above
-        this.camera.radius = 10; // Distance from vehicle
-        this.camera.wheelPrecision = 50; // Slower zoom
-        this.camera.panningSensibility = 50; // Slower panning
+        try {
+            // Create a third-person camera
+            this.camera = new ArcRotateCamera(
+                "camera",
+                -Math.PI / 2, // Alpha (horizontal rotation)
+                Math.PI / 3,  // Beta (vertical rotation)
+                10,           // Radius (distance from target)
+                Vector3.Zero(),
+                this.scene
+            );
+
+            // Remove mouse wheel input to prevent zooming
+            this.camera.inputs.remove(this.camera.inputs.attached.mousewheel);
+            
+            // Attach camera to canvas
+            this.camera.attachControl(this.engine.getRenderingCanvas(), true);
+        } catch (error) {
+            console.error('Camera setup error:', error);
+        }
     }
 
     setupEnvironment() {
@@ -90,23 +97,47 @@ export class GameScene {
         this.inputManager = new InputManager(this.engine.getRenderingCanvas());
     }
 
-    setLocalPlayer(vehicle) {
-        this.localPlayer = vehicle;
-        vehicle.setAsLocalPlayer(this.inputManager);
-        console.log('Set as local player:', {
-            id: vehicle.id,
-            type: vehicle.type,
-            team: vehicle.team,
-            position: vehicle.mesh.position,
-            hasInputManager: !!vehicle.inputManager
-        });
-        
-        // Set up camera to follow the local player
-        if (vehicle.mesh) {
+    setAsLocalPlayer(vehicle) {
+        try {
+            if (!vehicle || !vehicle.mesh) {
+                console.error('Invalid vehicle for local player');
+                return;
+            }
+
+            // Set vehicle as local player
+            vehicle.isLocalPlayer = true;
+            vehicle.inputManager = new InputManager(this.engine.getRenderingCanvas());
+            
+            // Set camera to follow vehicle
             this.camera.setTarget(vehicle.mesh);
-            this.camera.radius = 10;
-            this.camera.alpha = Math.PI; // Behind the vehicle
-            this.camera.beta = Math.PI / 4; // Slightly above
+            
+            // Add smooth camera follow
+            this.scene.registerBeforeRender(() => {
+                if (vehicle.mesh) {
+                    // Update camera position to follow vehicle
+                    const targetPosition = vehicle.mesh.position.add(
+                        new Vector3(0, 2, -5)
+                    );
+                    
+                    // Smoothly interpolate camera position
+                    this.camera.position = Vector3.Lerp(
+                        this.camera.position,
+                        targetPosition,
+                        0.1 // Smoothing factor
+                    );
+                }
+            });
+
+            console.log('Vehicle set as local player:', {
+                id: vehicle.id,
+                type: vehicle.type,
+                team: vehicle.team,
+                position: vehicle.mesh.position,
+                hasInputManager: !!vehicle.inputManager,
+                hasCamera: !!this.camera
+            });
+        } catch (error) {
+            console.error('Set as local player error:', error);
         }
     }
 
@@ -126,7 +157,7 @@ export class GameScene {
         }
         
         if (isLocalPlayer) {
-            this.setLocalPlayer(vehicle);
+            this.setAsLocalPlayer(vehicle);
         }
         
         this.vehicles.set(vehicle.id, vehicle);
