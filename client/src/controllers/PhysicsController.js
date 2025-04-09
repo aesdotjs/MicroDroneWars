@@ -1,4 +1,12 @@
 import { Vector3, Quaternion } from '@babylonjs/core';
+import * as CANNON from 'cannon';
+
+// Shared physics world for all vehicles
+const world = new CANNON.World();
+world.gravity.set(0, -9.81, 0);
+world.broadphase = new CANNON.NaiveBroadphase();
+world.solver.iterations = 7;
+world.defaultContactMaterial.friction = 0.5;
 
 export class PhysicsController {
     constructor(vehicle) {
@@ -10,6 +18,28 @@ export class PhysicsController {
         this.angularDrag = 0.2;
         this.gravity = 9.81;
         this.groundLevel = 1;
+        this.maxAngularVelocity = 5; // Limit angular velocity
+
+        // Get initial position from vehicle mesh
+        const initialPosition = vehicle.mesh ? 
+            new CANNON.Vec3(
+                vehicle.mesh.position.x,
+                vehicle.mesh.position.y,
+                vehicle.mesh.position.z
+            ) : new CANNON.Vec3(0, 2, 0);
+
+        // Create vehicle body
+        this.body = new CANNON.Body({
+            mass: this.mass,
+            position: initialPosition,
+            shape: new CANNON.Box(new CANNON.Vec3(0.5, 0.15, 0.5)), // Drone dimensions
+            material: new CANNON.Material('vehicleMaterial'),
+            linearDamping: this.drag,
+            angularDamping: this.angularDrag
+        });
+
+        // Add body to world
+        world.addBody(this.body);
 
         // Vehicle-specific properties
         if (vehicle.vehicleType === 'drone') {
@@ -18,7 +48,7 @@ export class PhysicsController {
             this.thrust = 20;
             this.lift = 15;
             this.torque = 1;
-            this.hoverForce = 10;
+            this.hoverForce = this.gravity * this.mass;
             this.strafeForce = 8;
             this.isDescending = false;
         } else { // plane
@@ -27,262 +57,170 @@ export class PhysicsController {
             this.thrust = 30;
             this.lift = 12;
             this.torque = 2;
-            this.minSpeed = 3; // Minimum speed to maintain lift
-            this.bankAngle = 0.5; // Maximum bank angle for turns
+            this.minSpeed = 3;
+            this.bankAngle = 0.5;
         }
-
-        // State
-        this.velocity = Vector3.Zero();
-        this.angularVelocity = Vector3.Zero();
-        this.acceleration = Vector3.Zero();
-        this.angularAcceleration = Vector3.Zero();
-
-        // Forces
-        this.forces = Vector3.Zero();
-        this.torques = Vector3.Zero();
     }
 
     update(deltaTime) {
-        this.applyPhysics(deltaTime);
-        this.updateVehicle(deltaTime);
-        this.resetForces();
-    }
+        try {
+            // Limit angular velocity
+            const angularVelocityMagnitude = this.body.angularVelocity.length();
+            if (angularVelocityMagnitude > this.maxAngularVelocity) {
+                const scale = this.maxAngularVelocity / angularVelocityMagnitude;
+                this.body.angularVelocity.scale(scale, this.body.angularVelocity);
+            }
 
-    applyPhysics(deltaTime) {
-        // Apply gravity
-        this.addForce(new Vector3(0, -this.gravity * this.mass, 0));
+            // Update Cannon.js world (only once per frame)
+            world.step(Math.min(deltaTime, 1/60));
 
-        // Vehicle-specific physics
-        if (this.vehicle.vehicleType === 'drone') {
-            this.applyDronePhysics(deltaTime);
-        } else {
-            this.applyPlanePhysics(deltaTime);
-        }
+            // Sync Babylon.js mesh with Cannon.js body
+            if (this.vehicle.mesh) {
+                this.vehicle.mesh.position.set(
+                    this.body.position.x,
+                    this.body.position.y,
+                    this.body.position.z
+                );
+                
+                this.vehicle.mesh.rotationQuaternion = new Quaternion(
+                    this.body.quaternion.x,
+                    this.body.quaternion.y,
+                    this.body.quaternion.z,
+                    this.body.quaternion.w
+                );
+            }
 
-        // Apply forces to acceleration
-        this.acceleration = this.forces.scale(1 / this.mass);
-
-        // Update velocity
-        this.velocity.addInPlace(this.acceleration.scale(deltaTime));
-
-        // Apply drag
-        const dragForce = this.velocity.scale(-this.drag);
-        this.velocity.addInPlace(dragForce.scale(deltaTime));
-
-        // Clamp velocity
-        if (this.velocity.length() > this.maxSpeed) {
-            this.velocity.normalize().scaleInPlace(this.maxSpeed);
-        }
-
-        // Apply torques to angular acceleration
-        this.angularAcceleration = this.torques.scale(1 / this.mass);
-
-        // Update angular velocity
-        this.angularVelocity.addInPlace(this.angularAcceleration.scale(deltaTime));
-
-        // Apply angular drag
-        const angularDragForce = this.angularVelocity.scale(-this.angularDrag);
-        this.angularVelocity.addInPlace(angularDragForce.scale(deltaTime));
-
-        // Clamp angular velocity
-        if (this.angularVelocity.length() > this.maxAngularSpeed) {
-            this.angularVelocity.normalize().scaleInPlace(this.maxAngularSpeed);
+            // Apply vehicle-specific physics
+            if (this.vehicle.vehicleType === 'drone') {
+                this.applyDronePhysics(deltaTime);
+            } else {
+                this.applyPlanePhysics(deltaTime);
+            }
+        } catch (error) {
+            console.error('Physics update error:', error);
         }
     }
 
     applyDronePhysics(deltaTime) {
-        // Get input from vehicle's input manager
-        const input = this.vehicle.inputManager?.keys || {};
-        
-        // Always apply hover force to counteract gravity unless actively descending
-        if (!this.isDescending) {
-            this.addForce(new Vector3(0, this.hoverForce, 0));
-        }
-        
-        // Apply strafe force for lateral movement
-        if (input.right || input.left) {
-            const right = this.vehicle.mesh.getDirection(Vector3.Right());
-            const strafeDirection = input.right ? 1 : -1;
-            this.addForce(right.scale(this.strafeForce * strafeDirection));
-        }
+        try {
+            const input = this.vehicle.inputManager?.keys || {};
+            
+            // Apply hover force only when not moving up/down
+            if (!input.up && !input.down && !this.isDescending) {
+                this.body.applyForce(new CANNON.Vec3(0, this.hoverForce, 0), this.body.position);
+            }
+            
+            // Apply strafe force
+            if (input.right || input.left) {
+                const right = new CANNON.Vec3(1, 0, 0);
+                this.body.vectorToWorldFrame(right, right);
+                const strafeDirection = input.right ? 1 : -1;
+                this.body.applyForce(right.scale(this.strafeForce * strafeDirection), this.body.position);
+            }
 
-        // Reset descending state if down key is released
-        if (!input.down) {
-            this.isDescending = false;
+            // Reset descending state
+            if (!input.down) {
+                this.isDescending = false;
+            }
+        } catch (error) {
+            console.error('Drone physics error:', error);
         }
     }
 
     applyPlanePhysics(deltaTime) {
-        // Calculate forward speed
-        const forward = this.vehicle.mesh.getDirection(Vector3.Forward());
-        const forwardSpeed = Vector3.Dot(this.velocity, forward);
-
-        // Apply lift based on forward speed
-        const liftFactor = Math.max(0, forwardSpeed / this.maxSpeed);
-        const liftForce = new Vector3(0, this.lift * liftFactor, 0);
-        this.addForce(liftForce);
-
-        // Get input from vehicle's input manager
-        const input = this.vehicle.inputManager?.keys || {};
-
-        // Apply banking effect during turns
-        if (input.right || input.left) {
-            const right = this.vehicle.mesh.getDirection(Vector3.Right());
-            const bankDirection = input.right ? 1 : -1;
-            const bankTorque = right.scale(this.bankAngle * bankDirection);
-            this.addTorque(bankTorque);
-        }
-
-        // Prevent stalling
-        if (forwardSpeed < this.minSpeed) {
-            const forwardForce = forward.scale(this.thrust * 0.5);
-            this.addForce(forwardForce);
-        }
-    }
-
-    updateVehicle(deltaTime) {
-        if (!this.vehicle?.mesh) {
-            console.warn('Cannot update vehicle: mesh is null');
-            return;
-        }
-
         try {
-            // Update position
-            const newPosition = this.vehicle.mesh.position.add(this.velocity.scale(deltaTime));
+            const input = this.vehicle.inputManager?.keys || {};
             
-            // Ground collision
-            if (newPosition.y < this.groundLevel) {
-                newPosition.y = this.groundLevel;
-                this.velocity.y = 0;
+            // Calculate forward speed
+            const forward = new CANNON.Vec3(0, 0, 1);
+            this.body.vectorToWorldFrame(forward, forward);
+            const forwardSpeed = this.body.velocity.dot(forward);
+
+            // Apply lift based on forward speed
+            const liftFactor = Math.max(0, forwardSpeed / this.maxSpeed);
+            const liftForce = new CANNON.Vec3(0, this.lift * liftFactor, 0);
+            this.body.applyForce(liftForce, this.body.position);
+
+            // Apply banking effect during turns
+            if (input.right || input.left) {
+                const right = new CANNON.Vec3(1, 0, 0);
+                this.body.vectorToWorldFrame(right, right);
+                const bankDirection = input.right ? 1 : -1;
+                const bankTorque = right.scale(this.bankAngle * bankDirection);
+                this.body.applyTorque(bankTorque);
             }
-            
-            this.vehicle.mesh.position = newPosition;
 
-            // Update rotation using quaternions for smooth rotation
-            if (!this.vehicle.mesh.rotationQuaternion) {
-                this.vehicle.mesh.rotationQuaternion = Quaternion.RotationYawPitchRoll(
-                    this.vehicle.mesh.rotation.y,
-                    this.vehicle.mesh.rotation.x,
-                    this.vehicle.mesh.rotation.z
-                );
+            // Prevent stalling
+            if (forwardSpeed < this.minSpeed) {
+                this.body.applyForce(forward.scale(this.thrust * 0.5), this.body.position);
             }
-
-            // Create delta rotation quaternion
-            const deltaRotation = Quaternion.RotationYawPitchRoll(
-                this.angularVelocity.y * deltaTime,
-                this.angularVelocity.x * deltaTime,
-                this.angularVelocity.z * deltaTime
-            );
-            
-            // Multiply quaternions to combine rotations
-            this.vehicle.mesh.rotationQuaternion = this.vehicle.mesh.rotationQuaternion.multiply(deltaRotation);
-
-            // Convert quaternion back to Euler angles for the mesh
-            const euler = this.vehicle.mesh.rotationQuaternion.toEulerAngles();
-            this.vehicle.mesh.rotation = euler;
-
-            // Ensure mesh is visible and properly updated
-            this.vehicle.mesh.isVisible = true;
-            this.vehicle.mesh.computeWorldMatrix(true);
         } catch (error) {
-            console.error('Error updating vehicle position/rotation:', error);
+            console.error('Plane physics error:', error);
         }
-    }
-
-    addForce(force) {
-        this.forces.addInPlace(force);
-    }
-
-    addTorque(torque) {
-        this.torques.addInPlace(torque);
-    }
-
-    addForceAtPoint(force, point) {
-        this.addForce(force);
-        const torque = Vector3.Cross(point.subtract(this.vehicle.mesh.position), force);
-        this.addTorque(torque);
-    }
-
-    resetForces() {
-        this.forces = Vector3.Zero();
-        this.torques = Vector3.Zero();
     }
 
     applyThrust(amount) {
-        if (!this.vehicle?.mesh) {
-            console.warn('Cannot apply thrust: vehicle mesh is null');
-            return;
-        }
-
         try {
-            const forward = this.vehicle.mesh.getDirection(Vector3.Forward());
-            this.addForce(forward.scale(amount * this.thrust));
+            const forward = new CANNON.Vec3(0, 0, 1);
+            this.body.vectorToWorldFrame(forward, forward);
+            this.body.applyForce(forward.scale(amount * this.thrust), this.body.position);
         } catch (error) {
-            console.error('Error applying thrust:', error);
+            console.error('Apply thrust error:', error);
         }
     }
 
     applyLift(amount) {
-        if (!this.vehicle?.mesh) {
-            console.warn('Cannot apply lift: vehicle mesh is null');
-            return;
-        }
-
         try {
-            const up = this.vehicle.mesh.getDirection(Vector3.Up());
+            const up = new CANNON.Vec3(0, 1, 0);
+            this.body.vectorToWorldFrame(up, up);
             if (amount > 0) {
-                // Going up - apply lift force
-                this.addForce(up.scale(amount * this.lift));
+                this.body.applyForce(up.scale(amount * this.lift), this.body.position);
                 this.isDescending = false;
             } else if (amount < 0) {
-                // Going down - only apply force while key is pressed
-                this.addForce(up.scale(amount * this.lift * 0.5)); // Reduced downward force
+                this.body.applyForce(up.scale(amount * this.lift * 0.5), this.body.position);
                 this.isDescending = true;
             }
         } catch (error) {
-            console.error('Error applying lift:', error);
+            console.error('Apply lift error:', error);
         }
     }
 
     applyYaw(amount) {
-        if (!this.vehicle?.mesh) {
-            console.warn('Cannot apply yaw: vehicle mesh is null');
-            return;
-        }
-
         try {
-            const up = this.vehicle.mesh.getDirection(Vector3.Up());
-            this.addTorque(up.scale(amount * this.torque));
+            const up = new CANNON.Vec3(0, 1, 0);
+            this.body.vectorToWorldFrame(up, up);
+            const torque = up.scale(amount * this.torque);
+            this.body.angularVelocity.vadd(torque, this.body.angularVelocity);
         } catch (error) {
-            console.error('Error applying yaw:', error);
+            console.error('Apply yaw error:', error);
         }
     }
 
     applyPitch(amount) {
-        if (!this.vehicle?.mesh) {
-            console.warn('Cannot apply pitch: vehicle mesh is null');
-            return;
-        }
-
         try {
-            const right = this.vehicle.mesh.getDirection(Vector3.Right());
-            this.addTorque(right.scale(amount * this.torque));
+            const right = new CANNON.Vec3(1, 0, 0);
+            this.body.vectorToWorldFrame(right, right);
+            const torque = right.scale(amount * this.torque);
+            this.body.angularVelocity.vadd(torque, this.body.angularVelocity);
         } catch (error) {
-            console.error('Error applying pitch:', error);
+            console.error('Apply pitch error:', error);
         }
     }
 
     applyRoll(amount) {
-        if (!this.vehicle?.mesh) {
-            console.warn('Cannot apply roll: vehicle mesh is null');
-            return;
-        }
-
         try {
-            const forward = this.vehicle.mesh.getDirection(Vector3.Forward());
-            this.addTorque(forward.scale(amount * this.torque));
+            const forward = new CANNON.Vec3(0, 0, 1);
+            this.body.vectorToWorldFrame(forward, forward);
+            const torque = forward.scale(amount * this.torque);
+            this.body.angularVelocity.vadd(torque, this.body.angularVelocity);
         } catch (error) {
-            console.error('Error applying roll:', error);
+            console.error('Apply roll error:', error);
+        }
+    }
+
+    cleanup() {
+        if (this.body) {
+            world.removeBody(this.body);
         }
     }
 } 

@@ -17,9 +17,16 @@ export class Vehicle {
         this.positionLerpFactor = 0.2;
         this.rotationLerpFactor = 0.2;
         this.vehicleType = type;
+        this.scene = null; // Will be set by initialize
     }
 
     initialize(scene) {
+        if (!scene) {
+            console.error('Cannot initialize vehicle: scene is null');
+            return;
+        }
+        
+        this.scene = scene;
         if (!this.mesh) {
             console.warn('Cannot initialize vehicle: mesh is null');
             return;
@@ -31,17 +38,23 @@ export class Vehicle {
         this.lastPosition.copyFrom(this.mesh.position);
         this.lastRotation.copyFrom(this.mesh.rotation);
 
-        // Initialize physics
-        this.physics = new PhysicsController(this);
-
         // Create thruster particles
         this.setupThrusterParticles(scene);
+        
+        console.log('Vehicle initialized:', {
+            type: this.type,
+            team: this.team,
+            position: this.mesh.position.toString(),
+            hasPhysics: !!this.physics,
+            hasScene: !!this.scene,
+            isVisible: this.mesh.isVisible
+        });
     }
 
     getTeamSpawnPoint(team) {
         return team === 0 
-            ? { x: -20, y: 5, z: 0 }  // Team A spawn
-            : { x: 20, y: 5, z: 0 };  // Team B spawn
+            ? { x: -20, y: 10, z: 0 }  // Team A spawn, higher up
+            : { x: 20, y: 10, z: 0 };  // Team B spawn, higher up
     }
 
     setupThrusterParticles(scene) {
@@ -74,11 +87,26 @@ export class Vehicle {
     setAsLocalPlayer(inputManager) {
         this.isLocalPlayer = true;
         this.inputManager = inputManager;
-        console.log('Vehicle set as local player:', { type: this.type, team: this.team, isLocalPlayer: this.isLocalPlayer });
+        
+        // Ensure the camera is following this vehicle
+        if (this.scene && this.scene.activeCamera && this.mesh) {
+            this.scene.activeCamera.setTarget(this.mesh);
+            this.scene.activeCamera.radius = 10;
+            this.scene.activeCamera.alpha = Math.PI; // Behind the vehicle
+            this.scene.activeCamera.beta = Math.PI / 4; // Slightly above
+        }
+        
+        console.log('Vehicle set as local player:', { 
+            type: this.type, 
+            team: this.team, 
+            isLocalPlayer: this.isLocalPlayer,
+            hasInputManager: !!this.inputManager,
+            hasCamera: !!(this.scene && this.scene.activeCamera)
+        });
     }
 
     updatePosition(position, rotation) {
-        if (!this.isLocalPlayer) {
+        if (!this.isLocalPlayer && this.mesh) {
             // Smoothly interpolate position for remote players
             this.mesh.position = Vector3.Lerp(
                 this.mesh.position,
@@ -92,6 +120,10 @@ export class Vehicle {
                 new Vector3(rotation.x, rotation.y, rotation.z),
                 this.rotationLerpFactor
             );
+            
+            // Update last known position and rotation
+            this.lastPosition.copyFrom(this.mesh.position);
+            this.lastRotation.copyFrom(this.mesh.rotation);
         }
     }
 

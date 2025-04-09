@@ -46,7 +46,9 @@ class Game {
 
         // Start the render loop
         this.engine.runRenderLoop(() => {
-            this.gameScene.scene.render();
+            if (this.gameScene && this.gameScene.scene) {
+                this.gameScene.scene.render();
+            }
         });
     }
 
@@ -91,6 +93,18 @@ class Game {
                             { x: vehicle.rotationX, y: vehicle.rotationY, z: vehicle.rotationZ }
                         );
                     }
+                });
+
+                // Log vehicle creation details
+                console.log('Vehicle created:', {
+                    id: gameVehicle.id,
+                    type: gameVehicle.type,
+                    team: gameVehicle.team,
+                    position: gameVehicle.mesh?.position,
+                    isLocalPlayer,
+                    hasScene: !!gameVehicle.scene,
+                    hasMesh: !!gameVehicle.mesh,
+                    meshVisible: gameVehicle.mesh?.isVisible
                 });
             }
         });

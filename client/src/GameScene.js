@@ -12,7 +12,7 @@ export class GameScene {
         this.vehicles = new Map();
         this.flags = new Map();
         this.localPlayer = null;
-        this.lastTime = 0;
+        this.lastTime = performance.now();
 
         // Initialize managers first
         this.setupCollisionManager();
@@ -51,6 +51,8 @@ export class GameScene {
         this.camera.alpha = Math.PI; // Start behind the vehicle
         this.camera.beta = Math.PI / 4; // Slightly above
         this.camera.radius = 10; // Distance from vehicle
+        this.camera.wheelPrecision = 50; // Slower zoom
+        this.camera.panningSensibility = 50; // Slower panning
     }
 
     setupEnvironment() {
@@ -98,6 +100,14 @@ export class GameScene {
             position: vehicle.mesh.position,
             hasInputManager: !!vehicle.inputManager
         });
+        
+        // Set up camera to follow the local player
+        if (vehicle.mesh) {
+            this.camera.setTarget(vehicle.mesh);
+            this.camera.radius = 10;
+            this.camera.alpha = Math.PI; // Behind the vehicle
+            this.camera.beta = Math.PI / 4; // Slightly above
+        }
     }
 
     createVehicle(type, team, isLocalPlayer = false) {
@@ -110,6 +120,11 @@ export class GameScene {
             vehicle = new Plane(this.scene, type, team, this.engine.getRenderingCanvas());
         }
         
+        // Ensure the vehicle is properly initialized
+        if (vehicle && !vehicle.scene) {
+            vehicle.initialize(this.scene);
+        }
+        
         if (isLocalPlayer) {
             this.setLocalPlayer(vehicle);
         }
@@ -119,9 +134,11 @@ export class GameScene {
             id: vehicle.id,
             type: vehicle.type,
             team: vehicle.team,
-            position: vehicle.mesh.position,
+            position: vehicle.mesh?.position,
             hasInputManager: !!vehicle.inputManager,
-            hasPhysics: !!vehicle.physics
+            hasPhysics: !!vehicle.physics,
+            hasScene: !!vehicle.scene,
+            isVisible: vehicle.mesh?.isVisible
         });
         
         return vehicle;
@@ -182,39 +199,25 @@ export class GameScene {
         }
     }
 
-    setupCameraFollow() {
-        if (this.localPlayer && this.localPlayer.mesh) {
-            this.camera.setTarget(this.localPlayer.mesh);
-            this.camera.radius = 10;
-            this.camera.alpha = Math.PI / 4;
-            this.camera.beta = Math.PI / 3;
-        }
-    }
-
     update() {
-        // Update all vehicles
-        this.vehicles.forEach(vehicle => {
-            if (vehicle && vehicle.mesh) {
-                vehicle.update();
-            }
-        });
+        try {
+            const currentTime = performance.now();
+            const deltaTime = Math.min((currentTime - this.lastTime) / 1000, 1/30); // Cap at 30 FPS
+            this.lastTime = currentTime;
 
-        // Update camera to follow local player
-        if (this.localPlayer && this.localPlayer.mesh) {
-            this.camera.target = this.localPlayer.mesh.position;
-            
-            // Get the drone's forward vector
-            const forward = this.localPlayer.mesh.forward;
-            
-            // Position camera behind the drone
-            const cameraOffset = forward.scale(-10); // Negative scale to position behind
-            const heightOffset = new Vector3(0, 5, 0); // Add some height
-            
-            // Set camera position
-            this.camera.position = this.localPlayer.mesh.position.add(cameraOffset).add(heightOffset);
-            
-            // Make camera look at the drone
-            this.camera.setTarget(this.localPlayer.mesh.position);
+            // Update all vehicles
+            this.vehicles.forEach(vehicle => {
+                if (vehicle.update) {
+                    vehicle.update(deltaTime);
+                }
+            });
+
+            // Update camera to follow local player
+            if (this.localPlayer && this.localPlayer.mesh) {
+                this.camera.setTarget(this.localPlayer.mesh);
+            }
+        } catch (error) {
+            console.error('Game update error:', error);
         }
     }
 

@@ -6,21 +6,36 @@ import { PhysicsController } from './controllers/PhysicsController.js';
 export class Drone extends Vehicle {
     constructor(scene, type, team, canvas) {
         super(type, team, canvas);
+        this.scene = scene; // Store the scene reference
         this.id = `drone_${Math.random().toString(36).substr(2, 9)}`;
-        this.createMesh();
-        this.initialize(scene);
         this.maxHealth = 150; // More health than planes
         this.vehicleType = "drone";
+        
+        // Create mesh first
+        this.createMesh();
+        
+        // Initialize physics after mesh is created
         this.physics = new PhysicsController(this);
-        console.log('Drone created with physics:', {
+        
+        // Initialize vehicle last
+        this.initialize(scene);
+        
+        console.log('Drone created:', {
             id: this.id,
-            position: this.mesh.position,
-            rotation: this.mesh.rotation,
-            hasPhysics: true
+            position: this.mesh?.position.toString(),
+            rotation: this.mesh?.rotation.toString(),
+            hasPhysics: !!this.physics,
+            hasScene: !!this.scene,
+            isVisible: this.mesh?.isVisible
         });
     }
 
     createMesh() {
+        if (!this.scene) {
+            console.error('Cannot create drone mesh: scene is null');
+            return;
+        }
+
         // Create a more drone-like mesh
         this.mesh = MeshBuilder.CreateBox('drone', { 
             width: 1, 
@@ -31,27 +46,31 @@ export class Drone extends Vehicle {
         // Create and apply material
         const material = new StandardMaterial('droneMaterial', this.scene);
         material.diffuseColor = this.team === 0 ? new Color3(1, 0, 0) : new Color3(0, 0, 1);
+        material.specularColor = new Color3(0.5, 0.5, 0.5);
+        material.emissiveColor = new Color3(0.2, 0.2, 0.2);
         this.mesh.material = material;
         
         // Set initial position and make sure it's visible
-        this.mesh.position = new Vector3(0, 2, 0);
+        this.mesh.position = new Vector3(0, 5, 0); // Start higher up
         this.mesh.isVisible = true;
-        this.mesh.computeWorldMatrix(true);
+        this.mesh.checkCollisions = true;
         
         console.log('Drone mesh created:', {
             id: this.id,
-            position: this.mesh.position,
-            rotation: this.mesh.rotation,
-            isVisible: this.mesh.isVisible
+            position: this.mesh.position.toString(),
+            rotation: this.mesh.rotation.toString(),
+            isVisible: this.mesh.isVisible,
+            hasMaterial: !!this.mesh.material
         });
     }
 
-    update() {
-        if (!this.mesh || !this.physics) return;
+    update(deltaTime = 1/60) {
+        if (!this.mesh || !this.physics || !this.isAlive) return;
         
         // Process input and apply forces
         if (this.inputManager) {
-            const input = this.inputManager.getInput();
+            const input = this.inputManager.keys;
+            const mouseDelta = this.inputManager.mouseDelta;
             
             // Apply forces based on input
             if (input.forward) {
@@ -72,10 +91,21 @@ export class Drone extends Vehicle {
             if (input.down) {
                 this.physics.applyLift(-1);
             }
+            
+            // Apply mouse-based rotation
+            if (mouseDelta.x !== 0) {
+                this.physics.applyYaw(mouseDelta.x * 0.1);
+            }
+            if (mouseDelta.y !== 0) {
+                this.physics.applyPitch(mouseDelta.y * 0.1);
+            }
+            
+            // Reset mouse delta
+            this.inputManager.resetMouseDelta();
         }
         
         // Update physics
-        this.physics.update(1/60); // Assuming 60 FPS
+        this.physics.update(deltaTime);
     }
 }
 
