@@ -9,6 +9,7 @@ export class GameScene {
     constructor(engine) {
         this.scene = new Scene(engine);
         this.engine = engine;
+        
         this.vehicles = new Map();
         this.flags = new Map();
         this.localPlayer = null;
@@ -155,14 +156,6 @@ export class GameScene {
                     this.camera.position = newCameraPos;
                     this.camera.target = vehiclePos;
                 }
-
-                // Debug logging
-                console.log("Camera debug:", {
-                    vehiclePos: vehiclePos,
-                    vehicleYaw: yaw,
-                    cameraPos: this.camera.position,
-                    cameraTarget: this.camera.target
-                });
             }
         });
         

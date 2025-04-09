@@ -17,7 +17,7 @@ export class PhysicsController {
         this.gravity = 9.81;
         this.drag = 0.8;
         this.angularDrag = 0.8;
-        this.maxSpeed = 10;
+        this.maxSpeed = 20;
         this.maxAngularSpeed = 0.2;
         this.maxAngularAcceleration = 0.05;
         this.angularDamping = 0.9;
@@ -35,7 +35,7 @@ export class PhysicsController {
         this.yawSensitivity = 0.5;
         this.pitchSensitivity = 0.2;
         this.rollSensitivity = 0.2;
-        this.hoverForce = 0;
+        this.hoverForce = 9.81; // Gravity compensation
         this.turbulence = 0.05;
         this.climbPower = 1.0;
         this.deltaPower = 1.0;
@@ -76,7 +76,7 @@ export class PhysicsController {
         this.yawStability = 0.02;
 
         // Mouse control properties
-        this.mouseSensitivity = 0.0005;
+        this.mouseSensitivity = 0.0001;
         this.mouseDeadzone = 0.1;
         this.targetRotation = new CANNON.Vec3(0, 0, 0);
         this.rotationSmoothing = 0.1;
@@ -84,24 +84,30 @@ export class PhysicsController {
         // Add yaw control properties
         this.targetYawAngle = 0;
         this.currentYawAngle = 0;
-        this.yawRotationSpeed = 0.1;
-        this.yawDamping = 0.95;
+        this.yawRotationSpeed = 0.2;
+        this.yawDamping = 0.5;
+        this.maxYawSpeed = 0.6;
+        this.yawAcceleration = 0.1;
 
         // Add pitch control properties
         this.targetPitchAngle = 0;
-        this.pitchRotationSpeed = 0.1;
-        this.pitchDamping = 0.95;
+        this.pitchRotationSpeed = 0.2;
+        this.pitchDamping = 0.5;
+        this.maxPitchSpeed = 0.6;
+        this.pitchAcceleration = 0.1;
 
         // Add roll control properties
         this.targetRollAngle = 0;
-        this.rollRotationSpeed = 0.1;
-        this.rollDamping = 0.95;
+        this.rollRotationSpeed = 0.2;
+        this.rollDamping = 0.5;
+        this.maxRollSpeed = 0.6;
+        this.rollAcceleration = 0.1;
 
         // Add helicopter-like control properties
         this.collective = 0.5; // Initial collective setting (0-1)
-        this.cyclicSensitivity = 0.0005; // Mouse sensitivity for cyclic control
-        this.collectiveSensitivity = 0.1; // Mouse wheel sensitivity for collective
-        this.tailRotorSensitivity = 0.1; // Mouse button sensitivity for yaw
+        this.collectiveSensitivity = 0.1;
+        this.cyclicSensitivity = 0.2;
+        this.tailRotorSensitivity = 0.2;
         this.maxCollective = 1.0;
         this.minCollective = 0.0;
 
@@ -168,6 +174,9 @@ export class PhysicsController {
             this.minSpeed = 3;
             this.bankAngle = 0.5;
         }
+
+        // Initialize angular velocities
+        this.angularVelocity = new CANNON.Vec3(0, 0, 0);
     }
 
     update(deltaTime) {
@@ -388,133 +397,170 @@ export class PhysicsController {
         }
     }
 
-    applyYaw(amount) {
-        // Update target yaw angle based on input
-        this.targetYawAngle += amount * this.yawRotationSpeed;
-        
-        // Get current rotation
-        const currentRotation = new CANNON.Vec3();
-        this.body.quaternion.toEuler(currentRotation);
-        
-        // Calculate yaw difference
-        const yawDiff = this.targetYawAngle - currentRotation.y;
-        
-        // Calculate yaw force based on difference
-        const yawForce = yawDiff * this.maxAngularSpeed * this.mass;
-        
-        // Get the right direction in world space
-        const right = new CANNON.Vec3(1, 0, 0);
-        this.body.vectorToWorldFrame(right, right);
-        
-        // Create a force vector in the right direction
-        const force = new CANNON.Vec3();
-        force.copy(right);
-        force.scale(yawForce, force);
-        
-        // Apply the force at a point offset from the center of mass to create torque
-        const offset = new CANNON.Vec3(0, 0, 1); // Offset in front of center of mass
-        this.body.vectorToWorldFrame(offset, offset);
-        
-        // Apply the force at the offset point
-        this.body.applyForce(force, offset);
-        
-        // Apply an equal and opposite force at the opposite point to maintain stability
-        const oppositeOffset = new CANNON.Vec3(0, 0, -1);
-        this.body.vectorToWorldFrame(oppositeOffset, oppositeOffset);
-        const oppositeForce = new CANNON.Vec3();
-        oppositeForce.copy(force);
-        oppositeForce.scale(-1, oppositeForce);
-        this.body.applyForce(oppositeForce, oppositeOffset);
-        
-        // Apply damping to prevent overshooting
-        this.body.angularVelocity.y *= this.yawDamping;
-    }
-
-    applyPitch(amount) {
-        // Update target pitch angle based on input
-        this.targetPitchAngle += amount * this.pitchRotationSpeed;
-        
-        // Get current rotation
-        const currentRotation = new CANNON.Vec3();
-        this.body.quaternion.toEuler(currentRotation);
-        
-        // Calculate pitch difference
-        const pitchDiff = this.targetPitchAngle - currentRotation.x;
-        
-        // Calculate pitch force based on difference
-        const pitchForce = pitchDiff * this.maxAngularSpeed * this.mass;
-        
-        // Get the right direction in world space
-        const right = new CANNON.Vec3(1, 0, 0);
-        this.body.vectorToWorldFrame(right, right);
-        
-        // Create a force vector in the right direction
-        const force = new CANNON.Vec3();
-        force.copy(right);
-        force.scale(pitchForce, force);
-        
-        // Apply the force at a point offset from the center of mass to create torque
-        const offset = new CANNON.Vec3(0, 0, 1); // Offset in front of center of mass
-        this.body.vectorToWorldFrame(offset, offset);
-        
-        // Apply the force at the offset point
-        this.body.applyForce(force, offset);
-        
-        // Apply an equal and opposite force at the opposite point to maintain stability
-        const oppositeOffset = new CANNON.Vec3(0, 0, -1);
-        this.body.vectorToWorldFrame(oppositeOffset, oppositeOffset);
-        const oppositeForce = new CANNON.Vec3();
-        oppositeForce.copy(force);
-        oppositeForce.scale(-1, oppositeForce);
-        this.body.applyForce(oppositeForce, oppositeOffset);
-        
-        // Apply damping to prevent overshooting
-        this.body.angularVelocity.x *= this.pitchDamping;
-    }
-
-    applyRoll(amount) {
+    applyYaw(input) {
         try {
-            // Update target roll angle based on input
-            this.targetRollAngle += amount * this.rollRotationSpeed;
+            // Calculate yaw force based on input and acceleration
+            const yawForce = input * this.yawAcceleration;
             
-            // Get current rotation
-            const currentRotation = new CANNON.Vec3();
-            this.body.quaternion.toEuler(currentRotation);
+            // Get the current angular velocity
+            const currentAngularVelocity = this.body.angularVelocity;
             
-            // Calculate roll difference
-            const rollDiff = this.targetRollAngle - currentRotation.z;
+            // Calculate the new angular velocity
+            const newAngularVelocity = new CANNON.Vec3(
+                currentAngularVelocity.x,
+                currentAngularVelocity.y + yawForce,
+                currentAngularVelocity.z
+            );
             
-            // Calculate roll force based on difference
-            const rollForce = rollDiff * this.maxAngularSpeed * this.mass;
+            // Limit the angular velocity
+            newAngularVelocity.y = Math.max(-this.maxYawSpeed, Math.min(this.maxYawSpeed, newAngularVelocity.y));
+            
+            // Apply the new angular velocity directly
+            this.body.angularVelocity.set(
+                newAngularVelocity.x,
+                newAngularVelocity.y,
+                newAngularVelocity.z
+            );
+        } catch (error) {
+            console.error('Error in applyYaw:', error);
+        }
+    }
+
+    applyPitch(input) {
+        try {
+            // Calculate pitch force based on input and acceleration
+            const pitchForce = input * this.pitchAcceleration * 0.3;
+            
+            // Get the right direction in world space (this is the axis we want to rotate around)
+            const right = new CANNON.Vec3(1, 0, 0);
+            this.body.vectorToWorldFrame(right, right);
+            
+            // Calculate the force magnitude
+            const forceMagnitude = pitchForce * this.mass * 0.3;
+            
+            // Create force vectors in the up direction
+            const up = new CANNON.Vec3(0, 1, 0);
+            this.body.vectorToWorldFrame(up, up);
+            
+            // Create force vectors
+            const force = new CANNON.Vec3();
+            force.copy(up);
+            force.scale(forceMagnitude, force);
             
             // Get the forward direction in world space
             const forward = new CANNON.Vec3(0, 0, 1);
             this.body.vectorToWorldFrame(forward, forward);
             
-            // Create a force vector in the forward direction
-            const force = new CANNON.Vec3();
-            force.copy(forward);
-            force.scale(rollForce, force);
+            // Calculate points in world space that are offset along the forward axis
+            const frontPoint = new CANNON.Vec3();
+            frontPoint.copy(forward);
+            frontPoint.scale(0.3, frontPoint);
+            frontPoint.vadd(this.body.position, frontPoint);
             
-            // Apply the force at a point offset from the center of mass to create torque
-            const offset = new CANNON.Vec3(1, 0, 0); // Offset to the right of center of mass
-            this.body.vectorToWorldFrame(offset, offset);
+            const backPoint = new CANNON.Vec3();
+            backPoint.copy(forward);
+            backPoint.scale(-0.3, backPoint);
+            backPoint.vadd(this.body.position, backPoint);
             
-            // Apply the force at the offset point
-            this.body.applyForce(force, offset);
-            
-            // Apply an equal and opposite force at the opposite point to maintain stability
-            const oppositeOffset = new CANNON.Vec3(-1, 0, 0);
-            this.body.vectorToWorldFrame(oppositeOffset, oppositeOffset);
+            // Apply forces in opposite directions to create torque around the right axis
+            this.body.applyImpulse(force, frontPoint);
             const oppositeForce = new CANNON.Vec3();
             oppositeForce.copy(force);
             oppositeForce.scale(-1, oppositeForce);
-            this.body.applyForce(oppositeForce, oppositeOffset);
+            this.body.applyImpulse(oppositeForce, backPoint);
             
-            // Apply damping to prevent overshooting
-            this.body.angularVelocity.z *= this.rollDamping;
+            // Get the current angular velocity in world space
+            const currentAngularVelocity = this.body.angularVelocity;
+            
+            // Project the angular velocity onto the right axis to get the pitch component
+            const pitchVelocity = currentAngularVelocity.dot(right);
+            
+            // Limit the pitch component of angular velocity
+            const limitedPitchVelocity = Math.max(-this.maxPitchSpeed, Math.min(this.maxPitchSpeed, pitchVelocity));
+            
+            // Calculate the new angular velocity by replacing the pitch component
+            const newAngularVelocity = new CANNON.Vec3();
+            newAngularVelocity.copy(currentAngularVelocity);
+            newAngularVelocity.vsub(right.scale(pitchVelocity, new CANNON.Vec3()), newAngularVelocity);
+            newAngularVelocity.vadd(right.scale(limitedPitchVelocity, new CANNON.Vec3()), newAngularVelocity);
+            
+            // Apply the new angular velocity
+            this.body.angularVelocity.set(
+                newAngularVelocity.x,
+                newAngularVelocity.y,
+                newAngularVelocity.z
+            );
         } catch (error) {
-            console.error('Apply roll error:', error);
+            console.error('Error in applyPitch:', error);
+        }
+    }
+
+    applyRoll(input) {
+        try {
+            // Calculate roll force based on input and acceleration
+            const rollForce = input * this.rollAcceleration * 0.2;
+            
+            // Get the forward direction in world space (this is the axis we want to rotate around)
+            const forward = new CANNON.Vec3(0, 0, 1);
+            this.body.vectorToWorldFrame(forward, forward);
+            
+            // Calculate the force magnitude
+            const forceMagnitude = rollForce * this.mass * 0.2;
+            
+            // Create force vectors in the up direction
+            const up = new CANNON.Vec3(0, 1, 0);
+            this.body.vectorToWorldFrame(up, up);
+            
+            // Create force vectors
+            const force = new CANNON.Vec3();
+            force.copy(up);
+            force.scale(forceMagnitude, force);
+            
+            // Get the right direction in world space
+            const right = new CANNON.Vec3(1, 0, 0);
+            this.body.vectorToWorldFrame(right, right);
+            
+            // Calculate points in world space that are offset along the right axis
+            const rightPoint = new CANNON.Vec3();
+            rightPoint.copy(right);
+            rightPoint.scale(0.3, rightPoint);
+            rightPoint.vadd(this.body.position, rightPoint);
+            
+            const leftPoint = new CANNON.Vec3();
+            leftPoint.copy(right);
+            leftPoint.scale(-0.3, leftPoint);
+            leftPoint.vadd(this.body.position, leftPoint);
+            
+            // Apply forces in opposite directions to create torque around the forward axis
+            this.body.applyImpulse(force, rightPoint);
+            const oppositeForce = new CANNON.Vec3();
+            oppositeForce.copy(force);
+            oppositeForce.scale(-1, oppositeForce);
+            this.body.applyImpulse(oppositeForce, leftPoint);
+            
+            // Get the current angular velocity in world space
+            const currentAngularVelocity = this.body.angularVelocity;
+            
+            // Project the angular velocity onto the forward axis to get the roll component
+            const rollVelocity = currentAngularVelocity.dot(forward);
+            
+            // Limit the roll component of angular velocity
+            const limitedRollVelocity = Math.max(-this.maxRollSpeed, Math.min(this.maxRollSpeed, rollVelocity));
+            
+            // Calculate the new angular velocity by replacing the roll component
+            const newAngularVelocity = new CANNON.Vec3();
+            newAngularVelocity.copy(currentAngularVelocity);
+            newAngularVelocity.vsub(forward.scale(rollVelocity, new CANNON.Vec3()), newAngularVelocity);
+            newAngularVelocity.vadd(forward.scale(limitedRollVelocity, new CANNON.Vec3()), newAngularVelocity);
+            
+            // Apply the new angular velocity
+            this.body.angularVelocity.set(
+                newAngularVelocity.x,
+                newAngularVelocity.y,
+                newAngularVelocity.z
+            );
+        } catch (error) {
+            console.error('Error in applyRoll:', error);
         }
     }
 
