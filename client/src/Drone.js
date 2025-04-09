@@ -1,17 +1,14 @@
 import { Schema, type } from "@colyseus/schema";
 import { Vehicle } from "./Vehicle.js";
 import { MeshBuilder, Vector3, StandardMaterial, Color3 } from '@babylonjs/core';
-import { PhysicsController } from './PhysicsController.js';
+import { PhysicsController } from './controllers/PhysicsController.js';
 
 export class Drone extends Vehicle {
     constructor(scene, type, team, canvas) {
-        super(scene, type, team, canvas);
+        super(type, team, canvas);
         this.id = `drone_${Math.random().toString(36).substr(2, 9)}`;
         this.createMesh();
         this.initialize(scene);
-        this.maxSpeed = 5; // Slower than planes
-        this.acceleration = 0.2;
-        this.turnRate = 0.05;
         this.maxHealth = 150; // More health than planes
         this.vehicleType = "drone";
         this.physics = new PhysicsController(this);
@@ -24,10 +21,10 @@ export class Drone extends Vehicle {
     }
 
     createMesh() {
-        // Create a box mesh for the drone
+        // Create a more drone-like mesh
         this.mesh = MeshBuilder.CreateBox('drone', { 
             width: 1, 
-            height: 0.5, 
+            height: 0.3, 
             depth: 1 
         }, this.scene);
         
@@ -58,27 +55,27 @@ export class Drone extends Vehicle {
             
             // Apply forces based on input
             if (input.forward) {
-                this.physics.applyForce(new Vector3(0, 0, 1)); // Forward is positive Z
+                this.physics.applyThrust(1);
             }
             if (input.backward) {
-                this.physics.applyForce(new Vector3(0, 0, -1)); // Backward is negative Z
+                this.physics.applyThrust(-1);
             }
             if (input.left) {
-                this.physics.applyForce(new Vector3(-1, 0, 0)); // Left is negative X
+                this.physics.applyYaw(-1);
             }
             if (input.right) {
-                this.physics.applyForce(new Vector3(1, 0, 0)); // Right is positive X
+                this.physics.applyYaw(1);
             }
             if (input.up) {
-                this.physics.applyForce(new Vector3(0, 1, 0)); // Up is positive Y
+                this.physics.applyLift(1);
             }
             if (input.down) {
-                this.physics.applyForce(new Vector3(0, -1, 0)); // Down is negative Y
+                this.physics.applyLift(-1);
             }
         }
         
         // Update physics
-        this.physics.update();
+        this.physics.update(1/60); // Assuming 60 FPS
     }
 }
 

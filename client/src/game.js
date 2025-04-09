@@ -15,10 +15,16 @@ class Game {
             return;
         }
 
-        // Get team from URL parameter
+        // Get URL parameters
         const urlParams = new URLSearchParams(window.location.search);
         const teamParam = urlParams.get('team');
-        this.team = teamParam === '1' ? 1 : 0; // Default to team 0 if not specified
+        const typeParam = urlParams.get('type');
+        
+        // Set team (default to team 0 if not specified)
+        this.team = teamParam === '1' ? 1 : 0;
+        
+        // Set vehicle type (default to drone if not specified)
+        this.vehicleType = typeParam === 'plane' ? 'plane' : 'drone';
 
         // Initialize the engine
         this.engine = new Engine(this.canvas, true);
@@ -47,10 +53,10 @@ class Game {
     async joinRoom() {
         try {
             this.room = await this.client.joinOrCreate("microdrone_room", { 
-                vehicleType: "drone", 
+                vehicleType: this.vehicleType, 
                 team: this.team 
             });
-            console.log("Joined room:", this.room, "Team:", this.team);
+            console.log("Joined room:", this.room, "Team:", this.team, "Vehicle Type:", this.vehicleType);
             this.setupRoomHandlers();
         } catch (err) {
             console.error("Error joining room:", err);

@@ -16,6 +16,7 @@ export class Vehicle {
         this.lastRotation = new Vector3(0, 0, 0);
         this.positionLerpFactor = 0.2;
         this.rotationLerpFactor = 0.2;
+        this.vehicleType = type;
     }
 
     initialize(scene) {
@@ -103,32 +104,69 @@ export class Vehicle {
         const input = this.inputManager.keys;
         const mouseDelta = this.inputManager.mouseDelta;
         
-        // Movement - transform local forces to world space
-        if (input.forward) {
-            this.physics.applyThrust(1);
-        }
-        if (input.backward) {
-            this.physics.applyThrust(-1);
-        }
-        if (input.left) {
-            this.physics.applyYaw(-1);
-        }
-        if (input.right) {
-            this.physics.applyYaw(1);
-        }
-        if (input.up) {
-            this.physics.applyLift(1);
-        }
-        if (input.down) {
-            this.physics.applyLift(-1);
-        }
+        if (this.vehicleType === 'drone') {
+            // Drone movement - omnidirectional
+            if (input.forward) {
+                this.physics.applyThrust(1);
+            }
+            if (input.backward) {
+                this.physics.applyThrust(-1);
+            }
+            if (input.left) {
+                this.physics.applyYaw(-1);
+            }
+            if (input.right) {
+                this.physics.applyYaw(1);
+            }
+            if (input.up) {
+                this.physics.applyLift(1);
+            }
+            if (input.down) {
+                this.physics.applyLift(-1);
+            }
 
-        // Mouse-based rotation
-        if (mouseDelta.x !== 0) {
-            this.physics.applyYaw(mouseDelta.x * 0.1);
-        }
-        if (mouseDelta.y !== 0) {
-            this.physics.applyPitch(mouseDelta.y * 0.1);
+            // Mouse-based rotation for precise control
+            if (mouseDelta.x !== 0) {
+                this.physics.applyYaw(mouseDelta.x * 0.1);
+            }
+            if (mouseDelta.y !== 0) {
+                this.physics.applyPitch(mouseDelta.y * 0.1);
+            }
+        } else {
+            // Plane movement - forward momentum required
+            if (input.forward) {
+                this.physics.applyThrust(1);
+            }
+            if (input.backward) {
+                this.physics.applyThrust(-0.5); // Limited reverse thrust
+            }
+            
+            // Banking turns
+            if (input.left) {
+                this.physics.applyRoll(-1);
+                this.physics.applyYaw(-0.5);
+            }
+            if (input.right) {
+                this.physics.applyRoll(1);
+                this.physics.applyYaw(0.5);
+            }
+            
+            // Limited vertical control
+            if (input.up) {
+                this.physics.applyPitch(-0.5);
+            }
+            if (input.down) {
+                this.physics.applyPitch(0.5);
+            }
+
+            // Mouse-based banking and pitch
+            if (mouseDelta.x !== 0) {
+                this.physics.applyRoll(mouseDelta.x * 0.1);
+                this.physics.applyYaw(mouseDelta.x * 0.05);
+            }
+            if (mouseDelta.y !== 0) {
+                this.physics.applyPitch(mouseDelta.y * 0.1);
+            }
         }
 
         // Update physics

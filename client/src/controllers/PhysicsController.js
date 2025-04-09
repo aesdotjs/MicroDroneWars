@@ -4,17 +4,32 @@ export class PhysicsController {
     constructor(vehicle) {
         this.vehicle = vehicle;
         
-        // Physics properties
+        // Base physics properties
         this.mass = 1.0;
         this.drag = 0.5;
         this.angularDrag = 0.2;
-        this.maxSpeed = 10;
-        this.maxAngularSpeed = 1;
-        this.thrust = 15;
-        this.lift = 10;
-        this.torque = 3;
         this.gravity = 9.81;
         this.groundLevel = 1;
+
+        // Vehicle-specific properties
+        if (vehicle.vehicleType === 'drone') {
+            this.maxSpeed = 5;
+            this.maxAngularSpeed = 0.5;
+            this.thrust = 20;
+            this.lift = 15;
+            this.torque = 1;
+            this.hoverForce = 10;
+            this.strafeForce = 8;
+            this.isDescending = false;
+        } else { // plane
+            this.maxSpeed = 15;
+            this.maxAngularSpeed = 1;
+            this.thrust = 30;
+            this.lift = 12;
+            this.torque = 2;
+            this.minSpeed = 3; // Minimum speed to maintain lift
+            this.bankAngle = 0.5; // Maximum bank angle for turns
+        }
 
         // State
         this.velocity = Vector3.Zero();
@@ -36,6 +51,13 @@ export class PhysicsController {
     applyPhysics(deltaTime) {
         // Apply gravity
         this.addForce(new Vector3(0, -this.gravity * this.mass, 0));
+
+        // Vehicle-specific physics
+        if (this.vehicle.vehicleType === 'drone') {
+            this.applyDronePhysics(deltaTime);
+        } else {
+            this.applyPlanePhysics(deltaTime);
+        }
 
         // Apply forces to acceleration
         this.acceleration = this.forces.scale(1 / this.mass);
@@ -65,6 +87,56 @@ export class PhysicsController {
         // Clamp angular velocity
         if (this.angularVelocity.length() > this.maxAngularSpeed) {
             this.angularVelocity.normalize().scaleInPlace(this.maxAngularSpeed);
+        }
+    }
+
+    applyDronePhysics(deltaTime) {
+        // Get input from vehicle's input manager
+        const input = this.vehicle.inputManager?.keys || {};
+        
+        // Always apply hover force to counteract gravity unless actively descending
+        if (!this.isDescending) {
+            this.addForce(new Vector3(0, this.hoverForce, 0));
+        }
+        
+        // Apply strafe force for lateral movement
+        if (input.right || input.left) {
+            const right = this.vehicle.mesh.getDirection(Vector3.Right());
+            const strafeDirection = input.right ? 1 : -1;
+            this.addForce(right.scale(this.strafeForce * strafeDirection));
+        }
+
+        // Reset descending state if down key is released
+        if (!input.down) {
+            this.isDescending = false;
+        }
+    }
+
+    applyPlanePhysics(deltaTime) {
+        // Calculate forward speed
+        const forward = this.vehicle.mesh.getDirection(Vector3.Forward());
+        const forwardSpeed = Vector3.Dot(this.velocity, forward);
+
+        // Apply lift based on forward speed
+        const liftFactor = Math.max(0, forwardSpeed / this.maxSpeed);
+        const liftForce = new Vector3(0, this.lift * liftFactor, 0);
+        this.addForce(liftForce);
+
+        // Get input from vehicle's input manager
+        const input = this.vehicle.inputManager?.keys || {};
+
+        // Apply banking effect during turns
+        if (input.right || input.left) {
+            const right = this.vehicle.mesh.getDirection(Vector3.Right());
+            const bankDirection = input.right ? 1 : -1;
+            const bankTorque = right.scale(this.bankAngle * bankDirection);
+            this.addTorque(bankTorque);
+        }
+
+        // Prevent stalling
+        if (forwardSpeed < this.minSpeed) {
+            const forwardForce = forward.scale(this.thrust * 0.5);
+            this.addForce(forwardForce);
         }
     }
 
@@ -158,7 +230,15 @@ export class PhysicsController {
 
         try {
             const up = this.vehicle.mesh.getDirection(Vector3.Up());
-            this.addForce(up.scale(amount * this.lift));
+            if (amount > 0) {
+                // Going up - apply lift force
+                this.addForce(up.scale(amount * this.lift));
+                this.isDescending = false;
+            } else if (amount < 0) {
+                // Going down - only apply force while key is pressed
+                this.addForce(up.scale(amount * this.lift * 0.5)); // Reduced downward force
+                this.isDescending = true;
+            }
         } catch (error) {
             console.error('Error applying lift:', error);
         }

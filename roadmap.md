@@ -79,7 +79,7 @@ Current Focus Areas:
 
 Next Immediate Tasks:
 
-1. Fix ground collision and prevent vehicles from falling through
+1. Fix ground collision and prevent vehicles from falling through // DONE
 2. Implement proper vehicle roll mechanics with mouse control
 3. Add zoom functionality for first-person view
 4. Implement basic weapon system
