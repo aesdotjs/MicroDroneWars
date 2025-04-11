@@ -44,27 +44,20 @@ export class GameScene {
     setupCamera() {
         try {
             // Create a third-person camera with initial valid position
-            this.camera = new ArcRotateCamera(
-                "camera",
-                -Math.PI / 2, // Alpha (horizontal rotation)
-                Math.PI / 3,  // Beta (vertical rotation)
-                10,           // Radius (distance from target)
-                new Vector3(0, 0, 0), // Initial target position
-                this.scene
-            );
-
-            // Set initial camera position
-            this.camera.position = new Vector3(0, 5, -10);
-            this.camera.target = new Vector3(0, 0, 0);
-
-            // Remove mouse wheel input to prevent zooming
-            this.camera.inputs.remove(this.camera.inputs.attached.mousewheel);
+            this.camera = new UniversalCamera("camera", new Vector3(0, 5, 10), this.scene);
             
-            // Disable camera rotation controls
-            this.camera.inputs.remove(this.camera.inputs.attached.pointers);
+            // Configure camera settings
+            this.camera.minZ = 0.1;
+            this.camera.speed = 0.5;
+            this.camera.angularSensibility = 5000;
+            this.camera.inertia = 0.9;
+            this.camera.fov = 1.2;
+            
+            // Remove default inputs
+            this.camera.inputs.clear();
             
             // Attach camera to canvas
-            this.camera.attachControl(this.engine.getRenderingCanvas(), true);
+            // this.camera.attachControl(this.engine.getRenderingCanvas(), true);
         } catch (error) {
             console.error('Camera setup error:', error);
         }
@@ -137,7 +130,7 @@ export class GameScene {
         this.camera.setTarget(vehiclePos);
         
         // Attach camera to canvas
-        this.camera.attachControl(this.engine.getRenderingCanvas(), true);
+        // this.camera.attachControl(this.engine.getRenderingCanvas(), true);
         
         // Debug logging
         console.log('Vehicle set as local player:', {
@@ -169,46 +162,29 @@ export class GameScene {
             return;
         }
         
-        // Extract yaw and pitch from the rotation quaternion
-        const eulerAngles = vehicleRotation.toEulerAngles();
-        const yaw = eulerAngles.y;
-        const pitch = eulerAngles.x;
+        // Calculate camera offset in local space
+        const localOffset = new Vector3(0, 2, -7);
         
-        // Create a new quaternion with only yaw and pitch
-        const cameraRotation = Quaternion.RotationYawPitchRoll(yaw, pitch, 0);
+        // Transform local offset to world space using vehicle's rotation
+        const rotationMatrix = new Matrix();
+        Matrix.FromQuaternionToRef(vehicleRotation, rotationMatrix);
+        const worldOffset = Vector3.TransformCoordinates(localOffset, rotationMatrix);
         
-        // Calculate forward and up vectors from the simplified rotation
-        const forward = new Vector3(0, 0, -1);
-        const up = new Vector3(0, 1, 0);
-        forward.rotateByQuaternionToRef(cameraRotation, forward);
-        up.rotateByQuaternionToRef(cameraRotation, up);
-        
-        // Calculate camera position - closer to the vehicle
-        const cameraOffset = new Vector3(0, 2, -7);
-        cameraOffset.rotateByQuaternionToRef(cameraRotation, cameraOffset);
-        
-        // Smoothly interpolate camera position
-        const targetPosition = vehiclePos.add(cameraOffset);
-        this.camera.position = Vector3.Lerp(this.camera.position, targetPosition, 0.1);
+        // Set camera position directly
+        this.camera.position = vehiclePos.add(worldOffset);
         
         // Calculate camera target - slightly in front of the vehicle
-        const targetOffset = forward.scale(3);
-        const targetPoint = vehiclePos.add(targetOffset);
+        const forwardOffset = new Vector3(0, 0, 50);
+        const worldForwardOffset = Vector3.TransformCoordinates(forwardOffset, rotationMatrix);
+        const targetPoint = vehiclePos.add(worldForwardOffset);
+        
+        // Set camera target
         this.camera.setTarget(targetPoint);
         
-        // Set camera up vector to world up
-        this.camera.upVector = new Vector3(0, 1, 0);
-
-        // console.log('Camera Update:', {
-        //     vehiclePosition: vehiclePos,
-        //     vehicleRotation: vehicle.rotation,
-        //     cameraPosition: this.camera.position,
-        //     cameraTarget: this.camera.target,
-        //     forward: forward,
-        //     up: up,
-        //     yaw: yaw * (180/Math.PI),
-        //     pitch: pitch * (180/Math.PI)
-        // });        
+        // Set camera up vector based on vehicle's up direction
+        const upVector = new Vector3(0, 1, 0);
+        const worldUpVector = Vector3.TransformCoordinates(upVector, rotationMatrix);
+        this.camera.upVector = worldUpVector;
     }
 
     createVehicle(type, team, isLocalPlayer = false) {
