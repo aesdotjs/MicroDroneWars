@@ -1,6 +1,6 @@
 import { Schema, type } from "@colyseus/schema";
 import { Vehicle } from "./Vehicle.js";
-import { MeshBuilder, Vector3, StandardMaterial, Color3 } from '@babylonjs/core';
+import { MeshBuilder, Vector3, StandardMaterial, Color3, Quaternion } from '@babylonjs/core';
 import { PhysicsController } from './controllers/PhysicsController.js';
 
 export class Plane extends Vehicle {
@@ -14,11 +14,12 @@ export class Plane extends Vehicle {
         // Create mesh first
         this.createMesh();
         
-        // Initialize physics after mesh is created
+        // Initialize physics after position is set
         this.physics = new PhysicsController(this);
         
-        // Initialize vehicle last
+        // Initialize vehicle
         this.initialize(scene);
+        
         
         console.log('Plane created:', {
             id: this.id,
@@ -38,9 +39,9 @@ export class Plane extends Vehicle {
 
         // Create a more plane-like mesh
         this.mesh = MeshBuilder.CreateBox('plane', { 
-            width: 2, 
-            height: 0.2, 
-            depth: 3 
+            width: 0.3, 
+            height: 0.3, 
+            depth: 1 
         }, this.scene);
         
         // Create and apply material
@@ -60,7 +61,8 @@ export class Plane extends Vehicle {
             height: 0.1,
             depth: 1.5
         }, this.scene);
-        this.leftWing.position = new Vector3(-1, 0, 0);
+        this.leftWing.position = new Vector3(-0.95, 0, 0);
+        this.leftWing.rotation.y = Math.PI / 2;
         this.leftWing.material = wingMaterial;
         this.leftWing.parent = this.mesh;
 
@@ -70,7 +72,8 @@ export class Plane extends Vehicle {
             height: 0.1,
             depth: 1.5
         }, this.scene);
-        this.rightWing.position = new Vector3(1, 0, 0);
+        this.rightWing.position = new Vector3(0.95, 0, 0);
+        this.rightWing.rotation.y = Math.PI / 2;
         this.rightWing.material = wingMaterial;
         this.rightWing.parent = this.mesh;
 
@@ -80,13 +83,14 @@ export class Plane extends Vehicle {
             height: 0.1,
             depth: 0.5
         }, this.scene);
-        this.tail.position = new Vector3(0, 0, -1.5);
+        this.tail.position = new Vector3(0, 0, 1);
         this.tail.material = wingMaterial;
         this.tail.parent = this.mesh;
 
-        // Set initial position and make sure it's visible
-        this.mesh.position = new Vector3(0, 5, 0); // Start higher up
-        this.mesh.rotation.y = 0;
+        // Set initial position before physics
+        this.mesh.position = new Vector3(0, 5, 0);
+
+        // Make sure it's visible
         this.mesh.isVisible = true;
         this.mesh.checkCollisions = true;
 

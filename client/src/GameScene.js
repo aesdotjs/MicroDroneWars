@@ -156,9 +156,19 @@ export class GameScene {
         const vehicle = this.localPlayer.mesh;
         const vehiclePos = vehicle.position;
         
+        // Ensure position is valid
+        if (isNaN(vehiclePos.x) || isNaN(vehiclePos.y) || isNaN(vehiclePos.z)) {
+            console.warn('Invalid vehicle position detected, resetting to origin');
+            vehiclePos.set(0, 0, 0);
+        }
+        
         // Get vehicle's rotation quaternion
         const vehicleRotation = vehicle.rotationQuaternion;
-        if (!vehicleRotation) return;
+        if (!vehicleRotation) {
+            console.warn('No rotation quaternion found, using default rotation');
+            return;
+        }
+        
         // Extract yaw and pitch from the rotation quaternion
         const eulerAngles = vehicleRotation.toEulerAngles();
         const yaw = eulerAngles.y;
@@ -188,21 +198,17 @@ export class GameScene {
         
         // Set camera up vector to world up
         this.camera.upVector = new Vector3(0, 1, 0);
-        
-        // Debug logging
-        if (Date.now() - this.lastLogTime > this.logInterval * 1000) {
-            console.log('Camera Update:', {
-                vehiclePosition: vehiclePos,
-                vehicleRotation: vehicle.rotation,
-                cameraPosition: this.camera.position,
-                cameraTarget: this.camera.target,
-                forward: forward,
-                up: up,
-                yaw: yaw * (180/Math.PI),
-                pitch: pitch * (180/Math.PI)
-            });
-            this.lastLogTime = Date.now();
-        }
+
+        // console.log('Camera Update:', {
+        //     vehiclePosition: vehiclePos,
+        //     vehicleRotation: vehicle.rotation,
+        //     cameraPosition: this.camera.position,
+        //     cameraTarget: this.camera.target,
+        //     forward: forward,
+        //     up: up,
+        //     yaw: yaw * (180/Math.PI),
+        //     pitch: pitch * (180/Math.PI)
+        // });        
     }
 
     createVehicle(type, team, isLocalPlayer = false) {

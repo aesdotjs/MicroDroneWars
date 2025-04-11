@@ -179,6 +179,23 @@ export class PhysicsController {
             angularDamping: this.angularDrag
         });
         
+        // Initialize quaternion based on vehicle type
+        if (vehicle.vehicleType === 'plane') {
+            // Initialize with nose pointing forward, wings level
+            this.body.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), 0);
+            // Also initialize the vehicle's rotationQuaternion
+            this.vehicle.rotationQuaternion = new Quaternion(
+                this.body.quaternion.x,
+                this.body.quaternion.y,
+                this.body.quaternion.z,
+                this.body.quaternion.w
+            );
+        }
+
+        // Initialize velocity and angular velocity
+        this.body.velocity.set(0, 0, 0);
+        this.body.angularVelocity.set(0, 0, 0);
+        this.lastDrag = 0;
 
         // Add body to world
         world.addBody(this.body);
@@ -224,15 +241,24 @@ export class PhysicsController {
                     this.body.position.y,
                     this.body.position.z
                 );
-                console.log(this.body.quaternion);
+                
                 // Update rotation using quaternion
                 if (this.body.quaternion) {
-                    this.vehicle.mesh.rotationQuaternion = new Quaternion(
+                    // Ensure quaternion is valid
+                    if (isNaN(this.body.quaternion.x) || isNaN(this.body.quaternion.y) || 
+                        isNaN(this.body.quaternion.z) || isNaN(this.body.quaternion.w)) {
+                        // Reset to identity quaternion if invalid
+                        this.body.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), 0);
+                    }
+                    
+                    const quat = new Quaternion(
                         this.body.quaternion.x,
                         this.body.quaternion.y,
                         this.body.quaternion.z,
                         this.body.quaternion.w
                     );
+                    this.vehicle.mesh.rotationQuaternion = quat;
+                    this.vehicle.rotationQuaternion = quat; // Also set on vehicle for camera
                 }
             }
 
@@ -399,8 +425,16 @@ export class PhysicsController {
             this.body.vectorToWorldFrame(up, up);
             this.body.vectorToWorldFrame(forward, forward);
             
-            // Calculate velocity and speed
+            // Calculate velocity and speed with safety checks
             const velocity = new CANNON.Vec3().copy(this.body.velocity);
+            
+            // Ensure velocity is valid
+            if (isNaN(velocity.x) || isNaN(velocity.y) || isNaN(velocity.z)) {
+                console.warn('Invalid velocity detected, resetting to zero');
+                velocity.set(0, 0, 0);
+                this.body.velocity.set(0, 0, 0);
+            }
+            
             const velLength1 = velocity.length();
             const currentSpeed = velocity.dot(forward);
 
@@ -426,51 +460,102 @@ export class PhysicsController {
 
             // Rotation stabilization
             let lookVelocity = velocity.clone();
-            lookVelocity.normalize();
+            const velLength = lookVelocity.length();
             
-            // Calculate rotation difference between forward and look velocity
-            const rotStabVelocity = new CANNON.Quaternion();
-            const axis = new CANNON.Vec3();
-            const angle = Math.acos(forward.dot(lookVelocity));
-            
-            if (angle > 0.001) {
-                axis.cross(forward, lookVelocity);
-                axis.normalize();
-                rotStabVelocity.setFromAxisAngle(axis, angle);
+            // Only apply rotation stabilization if we have sufficient velocity
+            if (velLength > 0.1) {  // Add minimum velocity threshold
+                lookVelocity.scale(1/velLength); // Safe normalization
                 
-                // Scale the rotation
-                rotStabVelocity.x *= 0.3;
-                rotStabVelocity.y *= 0.3;
-                rotStabVelocity.z *= 0.3;
-                rotStabVelocity.w *= 0.3;
+                // Calculate rotation difference between forward and look velocity
+                const rotStabVelocity = new CANNON.Quaternion();
+                const axis = new CANNON.Vec3();
+                const dot = forward.dot(lookVelocity);
                 
-                // Convert quaternion to euler angles
-                const rotStabEuler = new CANNON.Vec3();
-                const qx = rotStabVelocity.x;
-                const qy = rotStabVelocity.y;
-                const qz = rotStabVelocity.z;
-                const qw = rotStabVelocity.w;
+                // Clamp dot product to valid range
+                const clampedDot = Math.max(-1, Math.min(1, dot));
+                const angle = Math.acos(clampedDot);
                 
-                // Roll (x-axis rotation)
-                const sinr_cosp = 2 * (qw * qx + qy * qz);
-                const cosr_cosp = 1 - 2 * (qx * qx + qy * qy);
-                rotStabEuler.x = Math.atan2(sinr_cosp, cosr_cosp);
-                
-                // Pitch (y-axis rotation)
-                const sinp = 2 * (qw * qy - qz * qx);
-                rotStabEuler.y = Math.abs(sinp) >= 1 ? Math.sign(sinp) * Math.PI / 2 : Math.asin(sinp);
-                
-                // Yaw (z-axis rotation)
-                const siny_cosp = 2 * (qw * qz + qx * qy);
-                const cosy_cosp = 1 - 2 * (qy * qy + qz * qz);
-                rotStabEuler.z = Math.atan2(siny_cosp, cosy_cosp);
+                if (angle > 0.001) {
+                    axis.cross(forward, lookVelocity);
+                    const axisLength = axis.length();
+                    
+                    if (axisLength > 0.001) {  // Make sure we have a valid axis
+                        axis.normalize();
+                        rotStabVelocity.setFromAxisAngle(axis, angle);
+                        
+                        // Scale the rotation
+                        rotStabVelocity.x *= 0.3;
+                        rotStabVelocity.y *= 0.3;
+                        rotStabVelocity.z *= 0.3;
+                        rotStabVelocity.w *= 0.3;
+                        
+                        // Convert quaternion to euler angles
+                        const rotStabEuler = new CANNON.Vec3();
+                        const qx = rotStabVelocity.x;
+                        const qy = rotStabVelocity.y;
+                        const qz = rotStabVelocity.z;
+                        const qw = rotStabVelocity.w;
+                        
+                        // Roll (x-axis rotation)
+                        const sinr_cosp = 2 * (qw * qx + qy * qz);
+                        const cosr_cosp = 1 - 2 * (qx * qx + qy * qy);
+                        rotStabEuler.x = Math.atan2(sinr_cosp, cosr_cosp);
+                        
+                        // Pitch (y-axis rotation)
+                        const sinp = 2 * (qw * qy - qz * qx);
+                        rotStabEuler.y = Math.abs(sinp) >= 1 ? Math.sign(sinp) * Math.PI / 2 : Math.asin(sinp);
+                        
+                        // Yaw (z-axis rotation)
+                        const siny_cosp = 2 * (qw * qz + qx * qy);
+                        const cosy_cosp = 1 - 2 * (qy * qy + qz * qz);
+                        rotStabEuler.z = Math.atan2(siny_cosp, cosy_cosp);
 
-                let rotStabInfluence = Math.min(Math.max(velLength1 - 1, 0), 0.1);
-                let loopFix = (input.up && currentSpeed > 0 ? 0 : 1);
+                        let rotStabInfluence = Math.min(Math.max(velLength1 - 1, 0), 0.1);
+                        let loopFix = (input.up && currentSpeed > 0 ? 0 : 1);
+                        
+                        this.body.angularVelocity.x += rotStabEuler.x * rotStabInfluence * loopFix;
+                        this.body.angularVelocity.y += rotStabEuler.y * rotStabInfluence;
+                        this.body.angularVelocity.z += rotStabEuler.z * rotStabInfluence * loopFix;
+                    }
+                }
+            } else {
+                // When velocity is low, use a simpler stabilization
+                const globalUp = new CANNON.Vec3(0, 1, 0);
+                const dot = globalUp.dot(up);
                 
-                this.body.angularVelocity.x += rotStabEuler.x * rotStabInfluence * loopFix;
-                this.body.angularVelocity.y += rotStabEuler.y * rotStabInfluence;
-                this.body.angularVelocity.z += rotStabEuler.z * rotStabInfluence * loopFix;
+                if (Math.abs(dot) < 0.99) { // If not already aligned with up
+                    const rotStabVelocity = new CANNON.Quaternion();
+                    rotStabVelocity.setFromVectors(up, globalUp);
+                    rotStabVelocity.x *= 0.1;
+                    rotStabVelocity.y *= 0.1;
+                    rotStabVelocity.z *= 0.1;
+                    rotStabVelocity.w *= 0.1;
+                    
+                    // Convert quaternion to euler angles
+                    const rotStabEuler = new CANNON.Vec3();
+                    const qx = rotStabVelocity.x;
+                    const qy = rotStabVelocity.y;
+                    const qz = rotStabVelocity.z;
+                    const qw = rotStabVelocity.w;
+                    
+                    // Roll (x-axis rotation)
+                    const sinr_cosp = 2 * (qw * qx + qy * qz);
+                    const cosr_cosp = 1 - 2 * (qx * qx + qy * qy);
+                    rotStabEuler.x = Math.atan2(sinr_cosp, cosr_cosp);
+                    
+                    // Pitch (y-axis rotation)
+                    const sinp = 2 * (qw * qy - qz * qx);
+                    rotStabEuler.y = Math.abs(sinp) >= 1 ? Math.sign(sinp) * Math.PI / 2 : Math.asin(sinp);
+                    
+                    // Yaw (z-axis rotation)
+                    const siny_cosp = 2 * (qw * qz + qx * qy);
+                    const cosy_cosp = 1 - 2 * (qy * qy + qz * qz);
+                    rotStabEuler.z = Math.atan2(siny_cosp, cosy_cosp);
+                    
+                    this.body.angularVelocity.x += rotStabEuler.x * 0.1;
+                    this.body.angularVelocity.y += rotStabEuler.y * 0.1;
+                    this.body.angularVelocity.z += rotStabEuler.z * 0.1;
+                }
             }
 
             // Apply pitch control (I/K keys)
@@ -524,6 +609,16 @@ export class PhysicsController {
                 speedModifier = 0.06;
             } else if (!input.up && input.down) {
                 speedModifier = -0.05;
+            }
+
+            // Ensure position is valid before applying forces
+            if (isNaN(this.body.position.x) || isNaN(this.body.position.y) || isNaN(this.body.position.z)) {
+                console.warn('Invalid body position detected, resetting to mesh position');
+                this.body.position.set(
+                    this.vehicle.mesh.position.x,
+                    this.vehicle.mesh.position.y,
+                    this.vehicle.mesh.position.z
+                );
             }
 
             this.body.velocity.x += (velLength1 * this.lastDrag + speedModifier) * forward.x * this.enginePower;
