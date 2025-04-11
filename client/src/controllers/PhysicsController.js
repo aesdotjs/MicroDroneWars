@@ -341,24 +341,24 @@ export class PhysicsController {
 
             // Apply pitch control (I/K keys)
             if (input.pitchUp) {
-                this.body.angularVelocity.x -= right.x * 0.07 * this.enginePower;
-                this.body.angularVelocity.y -= right.y * 0.07 * this.enginePower;
-                this.body.angularVelocity.z -= right.z * 0.07 * this.enginePower;
-            } else if (input.pitchDown) {
                 this.body.angularVelocity.x += right.x * 0.07 * this.enginePower;
                 this.body.angularVelocity.y += right.y * 0.07 * this.enginePower;
                 this.body.angularVelocity.z += right.z * 0.07 * this.enginePower;
+            } else if (input.pitchDown) {
+                this.body.angularVelocity.x -= right.x * 0.07 * this.enginePower;
+                this.body.angularVelocity.y -= right.y * 0.07 * this.enginePower;
+                this.body.angularVelocity.z -= right.z * 0.07 * this.enginePower;
             }
 
             // Apply roll control (J/L keys)
             if (input.rollLeft) {
-                this.body.angularVelocity.x -= forward.x * 0.07 * this.enginePower;
-                this.body.angularVelocity.y -= forward.y * 0.07 * this.enginePower;
-                this.body.angularVelocity.z -= forward.z * 0.07 * this.enginePower;
-            } else if (input.rollRight) {
                 this.body.angularVelocity.x += forward.x * 0.07 * this.enginePower;
                 this.body.angularVelocity.y += forward.y * 0.07 * this.enginePower;
                 this.body.angularVelocity.z += forward.z * 0.07 * this.enginePower;
+            } else if (input.rollRight) {
+                this.body.angularVelocity.x -= forward.x * 0.07 * this.enginePower;
+                this.body.angularVelocity.y -= forward.y * 0.07 * this.enginePower;
+                this.body.angularVelocity.z -= forward.z * 0.07 * this.enginePower;
             }
 
             // Apply yaw control (Q/D keys)
@@ -379,9 +379,9 @@ export class PhysicsController {
                 this.body.angularVelocity.z += up.z * mouse.x * 0.025;
             }
             if (mouse.y !== 0) {
-                this.body.angularVelocity.x -= right.x * mouse.y * 0.025;
-                this.body.angularVelocity.y -= right.y * mouse.y * 0.025;
-                this.body.angularVelocity.z -= right.z * mouse.y * 0.025;
+                this.body.angularVelocity.x += right.x * mouse.y * 0.025;
+                this.body.angularVelocity.y += right.y * mouse.y * 0.025;
+                this.body.angularVelocity.z += right.z * mouse.y * 0.025;
             }
 
             // Rotation stabilization
@@ -571,36 +571,36 @@ export class PhysicsController {
 
             // Apply yaw control (Q/D keys)
             if (input.left) {
-                this.body.angularVelocity.x += up.x * 0.02 * flightModeInfluence * this.enginePower;
-                this.body.angularVelocity.y += up.y * 0.02 * flightModeInfluence * this.enginePower;
-                this.body.angularVelocity.z += up.z * 0.02 * flightModeInfluence * this.enginePower;
-            } else if (input.right) {
                 this.body.angularVelocity.x -= up.x * 0.02 * flightModeInfluence * this.enginePower;
                 this.body.angularVelocity.y -= up.y * 0.02 * flightModeInfluence * this.enginePower;
                 this.body.angularVelocity.z -= up.z * 0.02 * flightModeInfluence * this.enginePower;
+            } else if (input.right) {
+                this.body.angularVelocity.x += up.x * 0.02 * flightModeInfluence * this.enginePower;
+                this.body.angularVelocity.y += up.y * 0.02 * flightModeInfluence * this.enginePower;
+                this.body.angularVelocity.z += up.z * 0.02 * flightModeInfluence * this.enginePower;
             }
 
             // Apply roll control (J/L keys)
             if (input.rollLeft) {
-                this.body.angularVelocity.x -= forward.x * 0.055 * flightModeInfluence * this.enginePower;
-                this.body.angularVelocity.y -= forward.y * 0.055 * flightModeInfluence * this.enginePower;
-                this.body.angularVelocity.z -= forward.z * 0.055 * flightModeInfluence * this.enginePower;
-            } else if (input.rollRight) {
                 this.body.angularVelocity.x += forward.x * 0.055 * flightModeInfluence * this.enginePower;
                 this.body.angularVelocity.y += forward.y * 0.055 * flightModeInfluence * this.enginePower;
                 this.body.angularVelocity.z += forward.z * 0.055 * flightModeInfluence * this.enginePower;
+            } else if (input.rollRight) {
+                this.body.angularVelocity.x -= forward.x * 0.055 * flightModeInfluence * this.enginePower;
+                this.body.angularVelocity.y -= forward.y * 0.055 * flightModeInfluence * this.enginePower;
+                this.body.angularVelocity.z -= forward.z * 0.055 * flightModeInfluence * this.enginePower;
             }
 
             // Apply mouse-based control
             if (mouse.x !== 0) {
-                this.body.angularVelocity.x += up.x * mouse.x * 0.025;
-                this.body.angularVelocity.y += up.y * mouse.x * 0.025;
-                this.body.angularVelocity.z += up.z * mouse.x * 0.025;
+                this.body.angularVelocity.x += up.x * mouse.x * 0.005;
+                this.body.angularVelocity.y += up.y * mouse.x * 0.005;
+                this.body.angularVelocity.z += up.z * mouse.x * 0.005;
             }
             if (mouse.y !== 0) {
-                this.body.angularVelocity.x -= right.x * mouse.y * 0.025;
-                this.body.angularVelocity.y -= right.y * mouse.y * 0.025;
-                this.body.angularVelocity.z -= right.z * mouse.y * 0.025;
+                this.body.angularVelocity.x += right.x * mouse.y * 0.005;
+                this.body.angularVelocity.y += right.y * mouse.y * 0.005;
+                this.body.angularVelocity.z += right.z * mouse.y * 0.005;
             }
 
             // Thrust

@@ -83,12 +83,12 @@ export class Plane extends Vehicle {
             height: 0.1,
             depth: 0.5
         }, this.scene);
-        this.tail.position = new Vector3(0, 0, 1);
+        this.tail.position = new Vector3(0, 0, -1);
         this.tail.material = wingMaterial;
         this.tail.parent = this.mesh;
 
         // Set initial position before physics
-        this.mesh.position = new Vector3(0, 5, 0);
+        this.mesh.position = new Vector3(0, 50, 0);
 
         // Make sure it's visible
         this.mesh.isVisible = true;

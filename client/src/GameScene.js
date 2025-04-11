@@ -184,7 +184,7 @@ export class GameScene {
         up.rotateByQuaternionToRef(cameraRotation, up);
         
         // Calculate camera position - closer to the vehicle
-        const cameraOffset = new Vector3(0, 3, 5);
+        const cameraOffset = new Vector3(0, 2, -7);
         cameraOffset.rotateByQuaternionToRef(cameraRotation, cameraOffset);
         
         // Smoothly interpolate camera position

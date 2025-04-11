@@ -132,7 +132,7 @@ export class Drone extends Vehicle {
             diameter: 0.05,
             tessellation: 8
         }, this.scene);
-        arrow.position = new Vector3(0, 0.2, -0.5);
+        arrow.position = new Vector3(0, 0.2, 0.5);
         arrow.rotation.x = Math.PI / 2;
         arrow.material = frontMaterial;
         arrow.parent = this.mesh;
