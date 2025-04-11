@@ -372,17 +372,21 @@ export class PhysicsController {
                 this.body.angularVelocity.z += up.z * 0.07 * this.enginePower;
             }
 
-            // Apply mouse-based control
+
             if (mouse.x !== 0) {
-                this.body.angularVelocity.x += up.x * mouse.x * 0.025;
-                this.body.angularVelocity.y += up.y * mouse.x * 0.025;
-                this.body.angularVelocity.z += up.z * mouse.x * 0.025;
+                const mouseXEffect = mouse.x * 0.005;
+                this.body.angularVelocity.x += up.x * mouseXEffect;
+                this.body.angularVelocity.y += up.y * mouseXEffect;
+                this.body.angularVelocity.z += up.z * mouseXEffect;
             }
             if (mouse.y !== 0) {
-                this.body.angularVelocity.x += right.x * mouse.y * 0.025;
-                this.body.angularVelocity.y += right.y * mouse.y * 0.025;
-                this.body.angularVelocity.z += right.z * mouse.y * 0.025;
+                const mouseYEffect = mouse.y * 0.005;
+                this.body.angularVelocity.x += right.x * mouseYEffect;
+                this.body.angularVelocity.y += right.y * mouseYEffect;
+                this.body.angularVelocity.z += right.z * mouseYEffect;
             }
+            // Reset mouse delta after using it
+            this.vehicle.inputManager?.resetMouseDelta();
 
             // Rotation stabilization
             if (this.vehicle.isLocalPlayer) {
@@ -591,17 +595,22 @@ export class PhysicsController {
                 this.body.angularVelocity.z -= forward.z * 0.055 * flightModeInfluence * this.enginePower;
             }
 
-            // Apply mouse-based control
+
             if (mouse.x !== 0) {
-                this.body.angularVelocity.x += up.x * mouse.x * 0.005;
-                this.body.angularVelocity.y += up.y * mouse.x * 0.005;
-                this.body.angularVelocity.z += up.z * mouse.x * 0.005;
+                const mouseXEffect = mouse.x * 0.005;
+                this.body.angularVelocity.x += up.x * mouseXEffect;
+                this.body.angularVelocity.y += up.y * mouseXEffect;
+                this.body.angularVelocity.z += up.z * mouseXEffect;
             }
             if (mouse.y !== 0) {
-                this.body.angularVelocity.x += right.x * mouse.y * 0.005;
-                this.body.angularVelocity.y += right.y * mouse.y * 0.005;
-                this.body.angularVelocity.z += right.z * mouse.y * 0.005;
+                const mouseYEffect = mouse.y * 0.005;
+                this.body.angularVelocity.x += right.x * mouseYEffect;
+                this.body.angularVelocity.y += right.y * mouseYEffect;
+                this.body.angularVelocity.z += right.z * mouseYEffect;
             }
+
+            // Reset mouse delta after using it
+            this.vehicle.inputManager?.resetMouseDelta();
 
             // Thrust
             let speedModifier = 0.02;
@@ -644,6 +653,12 @@ export class PhysicsController {
             this.body.angularVelocity.x = this.body.angularVelocity.x * (1 - 0.02 * flightModeInfluence);
             this.body.angularVelocity.y = this.body.angularVelocity.y * (1 - 0.02 * flightModeInfluence);
             this.body.angularVelocity.z = this.body.angularVelocity.z * (1 - 0.02 * flightModeInfluence);
+
+            // Add damping to prevent continuous rotation
+            const mouseDamping = 0.95;
+            this.body.angularVelocity.x *= mouseDamping;
+            this.body.angularVelocity.y *= mouseDamping;
+            this.body.angularVelocity.z *= mouseDamping;
 
         } catch (error) {
             console.error('Plane physics error:', error);

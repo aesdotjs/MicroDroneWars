@@ -264,12 +264,12 @@ export class Drone extends Vehicle {
         this.physics.update(deltaTime);
 
         // Update propeller rotation
-        if (this.propellers) {
-            const rotationSpeed = this.physics.enginePower * 30 * deltaTime;
-            this.propellers.forEach(prop => {
-                prop.rotation.x += rotationSpeed;
-            });
-        }
+        // if (this.propellers) {
+        //     const rotationSpeed = this.physics.enginePower * 30 * deltaTime;
+        //     this.propellers.forEach(prop => {
+        //         prop.rotation.x += rotationSpeed;
+        //     });
+        // }
 
         // Update particle effects
         this.updateParticles();
