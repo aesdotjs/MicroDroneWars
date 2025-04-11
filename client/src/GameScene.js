@@ -103,11 +103,15 @@ export class GameScene {
 
     setupInputManager() {
         this.inputManager = new InputManager(this.engine.getRenderingCanvas());
+        console.log('InputManager initialized:', {
+            hasCanvas: !!this.engine.getRenderingCanvas(),
+            hasInputManager: !!this.inputManager
+        });
     }
 
     setAsLocalPlayer(vehicle) {
         this.localPlayer = vehicle;
-        this.localPlayer.inputManager = new InputManager(this.engine.getRenderingCanvas());
+        this.localPlayer.inputManager = this.inputManager;  // Use the existing input manager
         
         // Dispose of old camera if it exists
         if (this.camera) {
@@ -155,7 +159,6 @@ export class GameScene {
         // Get vehicle's rotation quaternion
         const vehicleRotation = vehicle.rotationQuaternion;
         if (!vehicleRotation) return;
-        
         // Extract yaw and pitch from the rotation quaternion
         const eulerAngles = vehicleRotation.toEulerAngles();
         const yaw = eulerAngles.y;
@@ -303,7 +306,6 @@ export class GameScene {
                     vehicle.update(deltaTime);
                 }
             });
-
             // Update camera to follow local player
             if (this.localPlayer && this.localPlayer.mesh) {
                 this.updateCamera();

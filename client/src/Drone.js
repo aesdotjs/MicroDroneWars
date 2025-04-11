@@ -7,9 +7,9 @@ import { ParticleSystem, Texture, Matrix } from '@babylonjs/core';
 export class Drone extends Vehicle {
     constructor(scene, type, team, canvas) {
         super(type, team, canvas);
-        this.scene = scene; // Store the scene reference
+        this.scene = scene;
         this.id = `drone_${Math.random().toString(36).substr(2, 9)}`;
-        this.maxHealth = 150; // More health than planes
+        this.maxHealth = 150;
         this.vehicleType = "drone";
         
         // Create mesh first
@@ -228,8 +228,9 @@ export class Drone extends Vehicle {
             // Update particle direction based on vehicle orientation
             const down = new Vector3(0, -1, 0);
             if (this.mesh.rotationQuaternion) {
-                this.mesh.rotationQuaternion.toRotationMatrix(Matrix.Temp[0]);
-                Vector3.TransformNormalToRef(down, Matrix.Temp[0], down);
+                const rotationMatrix = new Matrix();
+                this.mesh.rotationQuaternion.toRotationMatrix(rotationMatrix);
+                Vector3.TransformNormalToRef(down, rotationMatrix, down);
             }
 
             // Set direction for all thrusters
@@ -240,8 +241,8 @@ export class Drone extends Vehicle {
             });
 
             // Adjust emission rate based on thrust
-            if (this.physics) {
-                const speed = this.physics.velocity.length();
+            if (this.physics && this.physics.body) {
+                const speed = this.physics.body.velocity.length();
                 const normalizedSpeed = Math.min(speed / this.physics.maxSpeed, 1);
                 const baseEmitRate = 250;
                 const maxEmitRate = 500;
@@ -259,59 +260,19 @@ export class Drone extends Vehicle {
     update(deltaTime = 1/60) {
         if (!this.mesh || !this.physics || !this.isAlive) return;
         
-        // Process input and apply forces
-        if (this.inputManager) {
-            const input = this.inputManager.keys;
-            const mouseDelta = this.inputManager.mouseDelta;
-            
-            // Apply forces based on input
-            if (input.forward) {
-                this.physics.applyThrust(1);
-            }
-            if (input.backward) {
-                this.physics.applyThrust(-1);
-            }
-            if (input.left) {
-                this.physics.applyYaw(-3);
-            }
-            if (input.right) {
-                this.physics.applyYaw(3);
-            }
-            if (input.up) {
-                this.physics.applyLift(1);
-            }
-            if (input.down) {
-                this.physics.applyLift(-1);
-            }
-            
-            // Apply IJKL controls for pitch and roll
-            if (input.pitchUp) {
-                this.physics.applyPitch(3);
-            }
-            if (input.pitchDown) {
-                this.physics.applyPitch(-3);
-            }
-            if (input.rollLeft) {
-                this.physics.applyRoll(-3);
-            }
-            if (input.rollRight) {
-                this.physics.applyRoll(3);
-            }
-            
-            // Apply mouse-based rotation
-            if (mouseDelta.x !== 0) {
-                this.physics.applyYaw(mouseDelta.x * 0.3);
-            }
-            if (mouseDelta.y !== 0) {
-                this.physics.applyPitch(mouseDelta.y * 0.3);
-            }
-            
-            // Reset mouse delta
-            this.inputManager.resetMouseDelta();
-        }
-        
         // Update physics
         this.physics.update(deltaTime);
+
+        // Update propeller rotation
+        if (this.propellers) {
+            const rotationSpeed = this.physics.enginePower * 30 * deltaTime;
+            this.propellers.forEach(prop => {
+                prop.rotation.x += rotationSpeed;
+            });
+        }
+
+        // Update particle effects
+        this.updateParticles();
     }
 }
 

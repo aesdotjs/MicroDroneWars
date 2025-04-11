@@ -77,7 +77,6 @@ class Game {
                 vehicle.team,
                 isLocalPlayer
             );
-
             if (gameVehicle) {
                 // Set initial position from server state
                 gameVehicle.updatePosition(
