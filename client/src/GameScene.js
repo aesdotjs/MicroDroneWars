@@ -233,22 +233,6 @@ export class GameScene {
         this.flags.set(flagId, mesh);
     }
 
-    updateVehicle(sessionId, vehicleData) {
-        const vehicle = this.vehicles.get(sessionId);
-        if (vehicle && vehicle.mesh) {
-            vehicle.mesh.position = new Vector3(
-                vehicleData.x,
-                vehicleData.y,
-                vehicleData.z
-            );
-            vehicle.mesh.rotation = new Vector3(
-                vehicleData.rotationX,
-                vehicleData.rotationY,
-                vehicleData.rotationZ
-            );
-        }
-    }
-
     updateFlag(flagId, flagData) {
         const flag = this.flags.get(flagId);
         if (flag) {

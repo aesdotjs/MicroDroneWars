@@ -4,9 +4,10 @@ export class Vehicle extends Schema {
     @type("number") x = 0;
     @type("number") y = 0;
     @type("number") z = 0;
-    @type("number") rotationX = 0;
-    @type("number") rotationY = 0;
-    @type("number") rotationZ = 0;
+    @type("number") quaternionX = 0;
+    @type("number") quaternionY = 0;
+    @type("number") quaternionZ = 0;
+    @type("number") quaternionW = 1;
     @type("number") velocityX = 0;
     @type("number") velocityY = 0;
     @type("number") velocityZ = 0;

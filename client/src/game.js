@@ -3,7 +3,7 @@ import { Drone } from './Drone.js';
 import { Plane } from './Plane.js';
 import { Flag } from './Flag.js';
 import * as Colyseus from 'colyseus.js';
-import { Engine, Vector3, Color3 } from '@babylonjs/core';
+import { Engine, Vector3, Color3, Quaternion } from '@babylonjs/core';
 import { GameScene } from './GameScene';
 
 class Game {
@@ -44,6 +44,14 @@ class Game {
             this.engine.resize();
         });
 
+        // Handle page unload (refresh/close)
+        window.addEventListener('beforeunload', () => {
+            if (this.room) {
+                this.room.send('playerLeft');
+                this.room.leave();
+            }
+        });
+
         // Start the render loop
         this.engine.runRenderLoop(() => {
             if (this.gameScene && this.gameScene.scene) {
@@ -78,10 +86,10 @@ class Game {
                 isLocalPlayer
             );
             if (gameVehicle) {
-                // Set initial position from server state
+                // Set initial position and rotation from server state
                 gameVehicle.updatePosition(
                     { x: vehicle.x, y: vehicle.y, z: vehicle.z },
-                    { x: vehicle.rotationX, y: vehicle.rotationY, z: vehicle.rotationZ }
+                    { x: vehicle.quaternionX, y: vehicle.quaternionY, z: vehicle.quaternionZ, w: vehicle.quaternionW }
                 );
 
                 // Listen for vehicle updates
@@ -89,12 +97,26 @@ class Game {
                     if (gameVehicle && gameVehicle.mesh && !gameVehicle.isLocalPlayer) {
                         // Update position and rotation
                         gameVehicle.mesh.position.set(vehicle.x, vehicle.y, vehicle.z);
-                        gameVehicle.mesh.rotation.set(vehicle.rotationX, vehicle.rotationY, vehicle.rotationZ);
+                        if (!gameVehicle.mesh.rotationQuaternion) {
+                            gameVehicle.mesh.rotationQuaternion = new Quaternion();
+                        }
+                        gameVehicle.mesh.rotationQuaternion = new Quaternion(
+                            vehicle.quaternionX,
+                            vehicle.quaternionY,
+                            vehicle.quaternionZ,
+                            vehicle.quaternionW
+                        );
                         
                         // Update physics if available
                         if (gameVehicle.physics && gameVehicle.physics.body) {
                             gameVehicle.physics.body.velocity.set(vehicle.velocityX, vehicle.velocityY, vehicle.velocityZ);
                             gameVehicle.physics.body.position.set(vehicle.x, vehicle.y, vehicle.z);
+                            gameVehicle.physics.body.quaternion.set(
+                                vehicle.quaternionX,
+                                vehicle.quaternionY,
+                                vehicle.quaternionZ,
+                                vehicle.quaternionW
+                            );
                         }
                     }
                 });
@@ -155,7 +177,7 @@ class Game {
             if (gameVehicle) {
                 gameVehicle.updatePosition(
                     { x: vehicle.x, y: vehicle.y, z: vehicle.z },
-                    { x: vehicle.rotationX, y: vehicle.rotationY, z: vehicle.rotationZ }
+                    { x: vehicle.quaternionX, y: vehicle.quaternionY, z: vehicle.quaternionZ, w: vehicle.quaternionW }
                 );
             }
         });
@@ -170,13 +192,15 @@ class Game {
         if (!this.room || !vehicle || !vehicle.mesh || !vehicle.physics) return;
         // Only send updates for local player
         if (vehicle.isLocalPlayer) {
+            const quaternion = vehicle.mesh.rotationQuaternion || new Quaternion();
             this.room.send('movement', {
                 x: vehicle.mesh.position.x,
                 y: vehicle.mesh.position.y,
                 z: vehicle.mesh.position.z,
-                rotationX: vehicle.mesh.rotation.x,
-                rotationY: vehicle.mesh.rotation.y,
-                rotationZ: vehicle.mesh.rotation.z,
+                quaternionX: quaternion.x,
+                quaternionY: quaternion.y,
+                quaternionZ: quaternion.z,
+                quaternionW: quaternion.w,
                 velocityX: vehicle.physics.body.velocity.x,
                 velocityY: vehicle.physics.body.velocity.y,
                 velocityZ: vehicle.physics.body.velocity.z

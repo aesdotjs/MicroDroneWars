@@ -13,7 +13,7 @@ export class Vehicle {
         this.isAlive = true;
         this.inputManager = null; // Will be set by setAsLocalPlayer
         this.lastPosition = new Vector3(0, 0, 0);
-        this.lastRotation = new Vector3(0, 0, 0);
+        this.lastRotationQuaternion = new Quaternion(0, 0, 0, 1);
         this.positionLerpFactor = 0.2;
         this.rotationLerpFactor = 0.2;
         this.vehicleType = type;
@@ -36,7 +36,7 @@ export class Vehicle {
         const spawnPoint = this.getTeamSpawnPoint(this.team);
         this.mesh.position = new Vector3(spawnPoint.x, spawnPoint.y, spawnPoint.z);
         this.lastPosition.copyFrom(this.mesh.position);
-        this.lastRotation.copyFrom(this.mesh.rotation);
+        this.lastRotationQuaternion.copyFrom(this.mesh.rotationQuaternion || new Quaternion(0, 0, 0, 1));
         
         console.log('Vehicle initialized:', {
             type: this.type,
@@ -75,7 +75,7 @@ export class Vehicle {
         });
     }
 
-    updatePosition(position, rotation) {
+    updatePosition(position, quaternion) {
         if (!this.isLocalPlayer && this.mesh) {
             // Smoothly interpolate position for remote players
             this.mesh.position = Vector3.Lerp(
@@ -84,16 +84,19 @@ export class Vehicle {
                 this.positionLerpFactor
             );
             
-            // Smoothly interpolate rotation for remote players
-            this.mesh.rotation = Vector3.Lerp(
-                this.mesh.rotation,
-                new Vector3(rotation.x, rotation.y, rotation.z),
+            // Smoothly interpolate rotation for remote players using quaternion
+            if (!this.mesh.rotationQuaternion) {
+                this.mesh.rotationQuaternion = new Quaternion();
+            }
+            this.mesh.rotationQuaternion = Quaternion.Slerp(
+                this.mesh.rotationQuaternion,
+                new Quaternion(quaternion.x, quaternion.y, quaternion.z, quaternion.w),
                 this.rotationLerpFactor
             );
             
             // Update last known position and rotation
             this.lastPosition.copyFrom(this.mesh.position);
-            this.lastRotation.copyFrom(this.mesh.rotation);
+            this.lastRotationQuaternion.copyFrom(this.mesh.rotationQuaternion);
         }
     }
 
@@ -115,7 +118,7 @@ export class Vehicle {
 
         // Update last known position
         this.lastPosition.copyFrom(this.mesh.position);
-        this.lastRotation.copyFrom(this.mesh.rotation);
+        this.lastRotationQuaternion.copyFrom(this.mesh.rotationQuaternion);
     }
 
     fire() {

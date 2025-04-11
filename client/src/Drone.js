@@ -1,6 +1,6 @@
 import { Schema, type } from "@colyseus/schema";
 import { Vehicle } from "./Vehicle.js";
-import { MeshBuilder, Vector3, StandardMaterial, Color3, MultiMaterial, Color4 } from '@babylonjs/core';
+import { MeshBuilder, Vector3, StandardMaterial, Color3, MultiMaterial, Color4, Quaternion } from '@babylonjs/core';
 import { PhysicsController } from './controllers/PhysicsController.js';
 import { ParticleSystem, Texture, Matrix } from '@babylonjs/core';
 
@@ -137,13 +137,15 @@ export class Drone extends Vehicle {
         arrow.material = frontMaterial;
         arrow.parent = this.mesh;
 
-        // Rotate the mesh 180 degrees around Y axis so the front faces the camera
-        this.mesh.rotation.y = Math.PI;
-
         // Set initial position and make sure it's visible
         this.mesh.position = new Vector3(0, 5, 0); // Start higher up
         this.mesh.isVisible = true;
         this.mesh.checkCollisions = true;
+
+        // Initialize rotation quaternion
+        this.mesh.rotationQuaternion = new Quaternion();
+        // Rotate the mesh 180 degrees around Y axis so the front faces the camera
+        this.mesh.rotationQuaternion = Quaternion.RotationAxis(new Vector3(0, 1, 0), Math.PI);
 
         return this.mesh;
     }

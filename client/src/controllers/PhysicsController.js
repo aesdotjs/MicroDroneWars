@@ -184,12 +184,7 @@ export class PhysicsController {
             // Initialize with nose pointing forward, wings level
             this.body.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), 0);
             // Also initialize the vehicle's rotationQuaternion
-            this.vehicle.rotationQuaternion = new Quaternion(
-                this.body.quaternion.x,
-                this.body.quaternion.y,
-                this.body.quaternion.z,
-                this.body.quaternion.w
-            );
+            this.vehicle.rotationQuaternion = Quaternion.RotationAxis(new Vector3(0, 1, 0), 0);
         }
 
         // Initialize velocity and angular velocity
@@ -251,14 +246,16 @@ export class PhysicsController {
                         this.body.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), 0);
                     }
                     
-                    const quat = new Quaternion(
+                    // Create Babylon.js quaternion from Cannon.js quaternion
+                    if (!this.vehicle.mesh.rotationQuaternion) {
+                        this.vehicle.mesh.rotationQuaternion = new Quaternion();
+                    }
+                    this.vehicle.mesh.rotationQuaternion = new Quaternion(
                         this.body.quaternion.x,
                         this.body.quaternion.y,
                         this.body.quaternion.z,
                         this.body.quaternion.w
                     );
-                    this.vehicle.mesh.rotationQuaternion = quat;
-                    this.vehicle.rotationQuaternion = quat; // Also set on vehicle for camera
                 }
             }
 

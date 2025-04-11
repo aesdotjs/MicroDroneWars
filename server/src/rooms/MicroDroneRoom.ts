@@ -27,10 +27,11 @@ export class MicroDroneRoom extends Room<State> {
           vehicle.y = data.y;
           vehicle.z = data.z;
           
-          // Update rotation
-          vehicle.rotationX = data.rotationX;
-          vehicle.rotationY = data.rotationY;
-          vehicle.rotationZ = data.rotationZ;
+          // Update rotation using quaternion
+          vehicle.quaternionX = data.quaternionX;
+          vehicle.quaternionY = data.quaternionY;
+          vehicle.quaternionZ = data.quaternionZ;
+          vehicle.quaternionW = data.quaternionW;
           
           // Update velocity
           vehicle.velocityX = data.velocityX;
@@ -39,8 +40,14 @@ export class MicroDroneRoom extends Room<State> {
         }
       });
   
+      // Handle player leaving
+      this.onMessage('playerLeft', (client) => {
+        console.log(`Player ${client.sessionId} left the game`);
+        this.onLeave(client);
+      });
+  
       // Set update interval (50fps)
-      this.setSimulationInterval(() => this.update(), 1000 / 50);
+      this.setSimulationInterval(() => this.update(), 1000 / 60);
     }
   
     onJoin(client: Client, options: { vehicleType: string, team: number }) {

@@ -57,22 +57,22 @@ export class Plane extends Vehicle {
 
         // Left wing
         this.leftWing = MeshBuilder.CreateBox('leftWing', {
-            width: 0.1,
+            width: 0.3,
             height: 0.1,
             depth: 1.5
         }, this.scene);
-        this.leftWing.position = new Vector3(-0.95, 0, 0);
+        this.leftWing.position = new Vector3(-0.90, 0, 0);
         this.leftWing.rotation.y = Math.PI / 2;
         this.leftWing.material = wingMaterial;
         this.leftWing.parent = this.mesh;
 
         // Right wing
         this.rightWing = MeshBuilder.CreateBox('rightWing', {
-            width: 0.1,
+            width: 0.3,
             height: 0.1,
             depth: 1.5
         }, this.scene);
-        this.rightWing.position = new Vector3(0.95, 0, 0);
+        this.rightWing.position = new Vector3(0.90, 0, 0);
         this.rightWing.rotation.y = Math.PI / 2;
         this.rightWing.material = wingMaterial;
         this.rightWing.parent = this.mesh;
@@ -89,6 +89,9 @@ export class Plane extends Vehicle {
 
         // Set initial position before physics
         this.mesh.position = new Vector3(0, 50, 0);
+
+        // Initialize rotation quaternion
+        this.mesh.rotationQuaternion = new Quaternion();
 
         // Make sure it's visible
         this.mesh.isVisible = true;
@@ -112,7 +115,7 @@ export class Plane extends Vehicle {
             // Update wing angles for roll
             this.leftWing.rotation.z = rollAmount;
             this.rightWing.rotation.z = -rollAmount;
-
+            
             // Update tail angle for pitch
             this.tail.rotation.x = pitchAmount;
 
