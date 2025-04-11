@@ -194,6 +194,7 @@ export class InputManager {
     }
 
     handleMouseDown(event) {
+        this.handleClick();
         if (event.button === 2) { // Right click
             this.keys.zoom = true;
         }
