@@ -389,21 +389,24 @@ export class PhysicsController {
             this.vehicle.inputManager?.resetMouseDelta();
 
             // Rotation stabilization
-            if (this.vehicle.isLocalPlayer) {
-                const rotStabVelocity = new CANNON.Quaternion();
-                rotStabVelocity.setFromVectors(up, globalUp);
-                rotStabVelocity.x *= 0.3;
-                rotStabVelocity.y *= 0.3;
-                rotStabVelocity.z *= 0.3;
-                rotStabVelocity.w *= 0.3;
+            // if (this.vehicle.isLocalPlayer) {
+            //     const rotStabVelocity = new CANNON.Quaternion();
+            //     rotStabVelocity.setFromVectors(up, globalUp);
+            //     rotStabVelocity.x *= 0.3;
+            //     rotStabVelocity.y *= 0.3;
+            //     rotStabVelocity.z *= 0.3;
+            //     rotStabVelocity.w *= 0.3;
                 
-                const rotStabEuler = new CANNON.Vec3();
-                rotStabEuler.setFromQuaternion(rotStabVelocity);
+            //     // Convert quaternion to Euler angles
+            //     const rotStabEuler = new CANNON.Vec3();
+            //     const euler = new CANNON.Vec3();
+            //     rotStabVelocity.toEuler(euler);
+            //     rotStabEuler.copy(euler);
                 
-                this.body.angularVelocity.x += rotStabEuler.x * this.enginePower;
-                this.body.angularVelocity.y += rotStabEuler.y * this.enginePower;
-                this.body.angularVelocity.z += rotStabEuler.z * this.enginePower;
-            }
+            //     this.body.angularVelocity.x += rotStabEuler.x * this.enginePower;
+            //     this.body.angularVelocity.y += rotStabEuler.y * this.enginePower;
+            //     this.body.angularVelocity.z += rotStabEuler.z * this.enginePower;
+            // }
 
             // Angular damping
             this.body.angularVelocity.x *= 0.97;
@@ -495,25 +498,10 @@ export class PhysicsController {
                         
                         // Convert quaternion to euler angles
                         const rotStabEuler = new CANNON.Vec3();
-                        const qx = rotStabVelocity.x;
-                        const qy = rotStabVelocity.y;
-                        const qz = rotStabVelocity.z;
-                        const qw = rotStabVelocity.w;
+                        const euler = new CANNON.Vec3();
+                        rotStabVelocity.toEuler(euler);
+                        rotStabEuler.copy(euler);
                         
-                        // Roll (x-axis rotation)
-                        const sinr_cosp = 2 * (qw * qx + qy * qz);
-                        const cosr_cosp = 1 - 2 * (qx * qx + qy * qy);
-                        rotStabEuler.x = Math.atan2(sinr_cosp, cosr_cosp);
-                        
-                        // Pitch (y-axis rotation)
-                        const sinp = 2 * (qw * qy - qz * qx);
-                        rotStabEuler.y = Math.abs(sinp) >= 1 ? Math.sign(sinp) * Math.PI / 2 : Math.asin(sinp);
-                        
-                        // Yaw (z-axis rotation)
-                        const siny_cosp = 2 * (qw * qz + qx * qy);
-                        const cosy_cosp = 1 - 2 * (qy * qy + qz * qz);
-                        rotStabEuler.z = Math.atan2(siny_cosp, cosy_cosp);
-
                         let rotStabInfluence = Math.min(Math.max(velLength1 - 1, 0), 0.1);
                         let loopFix = (input.up && currentSpeed > 0 ? 0 : 1);
                         
@@ -537,24 +525,9 @@ export class PhysicsController {
                     
                     // Convert quaternion to euler angles
                     const rotStabEuler = new CANNON.Vec3();
-                    const qx = rotStabVelocity.x;
-                    const qy = rotStabVelocity.y;
-                    const qz = rotStabVelocity.z;
-                    const qw = rotStabVelocity.w;
-                    
-                    // Roll (x-axis rotation)
-                    const sinr_cosp = 2 * (qw * qx + qy * qz);
-                    const cosr_cosp = 1 - 2 * (qx * qx + qy * qy);
-                    rotStabEuler.x = Math.atan2(sinr_cosp, cosr_cosp);
-                    
-                    // Pitch (y-axis rotation)
-                    const sinp = 2 * (qw * qy - qz * qx);
-                    rotStabEuler.y = Math.abs(sinp) >= 1 ? Math.sign(sinp) * Math.PI / 2 : Math.asin(sinp);
-                    
-                    // Yaw (z-axis rotation)
-                    const siny_cosp = 2 * (qw * qz + qx * qy);
-                    const cosy_cosp = 1 - 2 * (qy * qy + qz * qz);
-                    rotStabEuler.z = Math.atan2(siny_cosp, cosy_cosp);
+                    const euler = new CANNON.Vec3();
+                    rotStabVelocity.toEuler(euler);
+                    rotStabEuler.copy(euler);
                     
                     this.body.angularVelocity.x += rotStabEuler.x * 0.1;
                     this.body.angularVelocity.y += rotStabEuler.y * 0.1;

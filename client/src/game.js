@@ -30,7 +30,7 @@ class Game {
         this.engine = new Engine(this.canvas, true);
         
         // Create the game scene
-        this.gameScene = new GameScene(this.engine);
+        this.gameScene = new GameScene(this.engine, this);
 
         // Connect to the server
         this.client = new Colyseus.Client('ws://localhost:2567');
@@ -86,11 +86,16 @@ class Game {
 
                 // Listen for vehicle updates
                 vehicle.onChange(() => {
-                    if (gameVehicle && gameVehicle.mesh) {
-                        gameVehicle.updatePosition(
-                            { x: vehicle.x, y: vehicle.y, z: vehicle.z },
-                            { x: vehicle.rotationX, y: vehicle.rotationY, z: vehicle.rotationZ }
-                        );
+                    if (gameVehicle && gameVehicle.mesh && !gameVehicle.isLocalPlayer) {
+                        // Update position and rotation
+                        gameVehicle.mesh.position.set(vehicle.x, vehicle.y, vehicle.z);
+                        gameVehicle.mesh.rotation.set(vehicle.rotationX, vehicle.rotationY, vehicle.rotationZ);
+                        
+                        // Update physics if available
+                        if (gameVehicle.physics && gameVehicle.physics.body) {
+                            gameVehicle.physics.body.velocity.set(vehicle.velocityX, vehicle.velocityY, vehicle.velocityZ);
+                            gameVehicle.physics.body.position.set(vehicle.x, vehicle.y, vehicle.z);
+                        }
                     }
                 });
 
@@ -162,8 +167,7 @@ class Game {
     }
 
     sendMovementUpdate(vehicle) {
-        if (!this.room || !vehicle || !vehicle.mesh) return;
-
+        if (!this.room || !vehicle || !vehicle.mesh || !vehicle.physics) return;
         // Only send updates for local player
         if (vehicle.isLocalPlayer) {
             this.room.send('movement', {
@@ -172,7 +176,10 @@ class Game {
                 z: vehicle.mesh.position.z,
                 rotationX: vehicle.mesh.rotation.x,
                 rotationY: vehicle.mesh.rotation.y,
-                rotationZ: vehicle.mesh.rotation.z
+                rotationZ: vehicle.mesh.rotation.z,
+                velocityX: vehicle.physics.body.velocity.x,
+                velocityY: vehicle.physics.body.velocity.y,
+                velocityZ: vehicle.physics.body.velocity.z
             });
         }
     }

@@ -22,8 +22,29 @@ export class MicroDroneRoom extends Room<State> {
     teamBFlag.z = 0;
     this.state.flags.set("teamB", teamBFlag);
 
-    // Set update interval
-    this.setSimulationInterval(() => this.update(), 1000 / 20);
+    // Set up message handlers
+    this.onMessage("movement", (client, data) => {
+      const vehicle = this.state.vehicles.get(client.sessionId);
+      if (vehicle) {
+        // Update position
+        vehicle.x = data.x;
+        vehicle.y = data.y;
+        vehicle.z = data.z;
+        
+        // Update rotation
+        vehicle.rotationX = data.rotationX;
+        vehicle.rotationY = data.rotationY;
+        vehicle.rotationZ = data.rotationZ;
+        
+        // Update velocity
+        vehicle.velocityX = data.velocityX;
+        vehicle.velocityY = data.velocityY;
+        vehicle.velocityZ = data.velocityZ;
+      }
+    });
+
+    // Set update interval (50fps)
+    this.setSimulationInterval(() => this.update(), 1000 / 50);
   }
 
   onJoin(client: Client, options: { vehicleType: string, team: number }) {
@@ -64,9 +85,14 @@ export class MicroDroneRoom extends Room<State> {
   update() {
     // Update vehicle positions based on velocity
     this.state.vehicles.forEach((vehicle, sessionId) => {
-      vehicle.x += vehicle.velocityX;
-      vehicle.y += vehicle.velocityY;
-      vehicle.z += vehicle.velocityZ;
+      // Only apply velocity-based updates for non-active players
+      // Active players send their own updates
+      const client = this.clients.find(c => c.sessionId === sessionId);
+      if (!client) {
+        vehicle.x += vehicle.velocityX * (1/50); // deltaTime = 1/50
+        vehicle.y += vehicle.velocityY * (1/50);
+        vehicle.z += vehicle.velocityZ * (1/50);
+      }
     });
 
     // Update flag positions if carried

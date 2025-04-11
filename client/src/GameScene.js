@@ -6,9 +6,10 @@ import { Drone } from './Drone';
 import { Plane } from './Plane';
 
 export class GameScene {
-    constructor(engine) {
+    constructor(engine, game) {
         this.scene = new Scene(engine);
         this.engine = engine;
+        this.game = game;
         
         this.vehicles = new Map();
         this.flags = new Map();
@@ -104,6 +105,7 @@ export class GameScene {
 
     setAsLocalPlayer(vehicle) {
         this.localPlayer = vehicle;
+        this.localPlayer.isLocalPlayer = true;
         this.localPlayer.inputManager = this.inputManager;  // Use the existing input manager
         
         // Dispose of old camera if it exists
@@ -288,6 +290,12 @@ export class GameScene {
                     vehicle.update(deltaTime);
                 }
             });
+
+            // Send movement update for local player
+            if (this.localPlayer && this.localPlayer.mesh) {
+                this.game.sendMovementUpdate(this.localPlayer);
+            }
+
             // Update camera to follow local player
             if (this.localPlayer && this.localPlayer.mesh) {
                 this.updateCamera();
