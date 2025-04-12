@@ -80,6 +80,7 @@ class Game {
             
             // Create vehicle in the game scene
             const isLocalPlayer = sessionId === this.room.sessionId;
+            console.log(vehicle);
             const gameVehicle = this.gameScene.createVehicle(
                 vehicle.vehicleType,
                 vehicle.team,
@@ -90,7 +91,9 @@ class Game {
                 // Set initial position and rotation from server state
                 gameVehicle.updatePosition(
                     { x: vehicle.x, y: vehicle.y, z: vehicle.z },
-                    { x: vehicle.quaternionX, y: vehicle.quaternionY, z: vehicle.quaternionZ, w: vehicle.quaternionW }
+                    { x: vehicle.quaternionX, y: vehicle.quaternionY, z: vehicle.quaternionZ, w: vehicle.quaternionW },
+                    { x: vehicle.velocityX, y: vehicle.velocityY, z: vehicle.velocityZ },
+                    false,
                 );
 
                 // Listen for vehicle updates

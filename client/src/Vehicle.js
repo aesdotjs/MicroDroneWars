@@ -75,14 +75,16 @@ export class Vehicle {
         });
     }
 
-    updatePosition(position, quaternion, velocity = null) {
+    updatePosition(position, quaternion, velocity = null, interpolate = true) {
         if (!this.isLocalPlayer && this.mesh) {
+            const positionLerpFactor = interpolate ? this.positionLerpFactor : 1;
+            const rotationLerpFactor = interpolate ? this.rotationLerpFactor : 1;
             // Smoothly interpolate position for remote players
             const targetPosition = new Vector3(position.x, position.y, position.z);
             this.mesh.position = Vector3.Lerp(
                 this.mesh.position,
                 targetPosition,
-                this.positionLerpFactor
+                positionLerpFactor
             );
             
             // Smoothly interpolate rotation for remote players using quaternion
@@ -93,7 +95,7 @@ export class Vehicle {
             this.mesh.rotationQuaternion = Quaternion.Slerp(
                 this.mesh.rotationQuaternion,
                 targetQuaternion,
-                this.rotationLerpFactor
+                rotationLerpFactor
             );
             
             // Update physics body if available
@@ -107,7 +109,7 @@ export class Vehicle {
                 const interpolatedBodyPos = Vector3.Lerp(
                     currentBodyPos,
                     targetPosition,
-                    this.positionLerpFactor
+                    positionLerpFactor
                 );
                 this.physics.body.position.set(
                     interpolatedBodyPos.x,
@@ -125,7 +127,7 @@ export class Vehicle {
                 const interpolatedBodyQuat = Quaternion.Slerp(
                     currentBodyQuat,
                     targetQuaternion,
-                    this.rotationLerpFactor
+                    rotationLerpFactor
                 );
                 this.physics.body.quaternion.set(
                     interpolatedBodyQuat.x,
@@ -145,7 +147,7 @@ export class Vehicle {
                     const interpolatedVelocity = Vector3.Lerp(
                         currentVelocity,
                         targetVelocity,
-                        this.positionLerpFactor
+                        positionLerpFactor
                     );
                     this.physics.body.velocity.set(
                         interpolatedVelocity.x,
