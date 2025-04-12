@@ -1,9 +1,9 @@
 import { Vector3, Quaternion } from '@babylonjs/core';
 import * as CANNON from 'cannon';
-import { PhysicsState, PhysicsInput, VehiclePhysicsConfig } from '../../../shared/src/physics/types';
-import { BasePhysicsController } from '../../../shared/src/physics/BasePhysicsController';
-import { DronePhysicsController } from '../../../shared/src/physics/DronePhysicsController';
-import { PlanePhysicsController } from '../../../shared/src/physics/PlanePhysicsController';
+import { PhysicsState, PhysicsInput, VehiclePhysicsConfig } from '@shared/physics/types';
+import { BasePhysicsController } from '@shared/physics/BasePhysicsController';
+import { DronePhysicsController } from '@shared/physics/DronePhysicsController';
+import { PlanePhysicsController } from '@shared/physics/PlanePhysicsController';
 
 export class ClientPhysicsWorld {
     private world: CANNON.World;

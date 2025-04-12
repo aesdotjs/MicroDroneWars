@@ -1,10 +1,10 @@
 import { Vector3, Quaternion } from '@babylonjs/core';
 import * as CANNON from 'cannon';
-import { SpringSimulator } from '../../../shared/src/utils/SpringSimulator';
-import { PhysicsState, PhysicsInput, VehiclePhysicsConfig } from '../../../shared/src/physics/types';
-import { BasePhysicsController } from '../../../shared/src/physics/BasePhysicsController';
-import { DronePhysicsController } from '../../../shared/src/physics/DronePhysicsController';
-import { PlanePhysicsController } from '../../../shared/src/physics/PlanePhysicsController';
+import { SpringSimulator } from '@shared/utils/SpringSimulator';
+import { PhysicsState, PhysicsInput, VehiclePhysicsConfig } from '@shared/physics/types';
+import { BasePhysicsController } from '@shared/physics/BasePhysicsController';
+import { DronePhysicsController } from '@shared/physics/DronePhysicsController';
+import { PlanePhysicsController } from '@shared/physics/PlanePhysicsController';
 
 export class PhysicsController {
     private world: CANNON.World;

@@ -1,7 +1,7 @@
 import { Vector3, Quaternion, ArcRotateCamera, Mesh, Scene, StandardMaterial, Color3 } from '@babylonjs/core';
 import { PhysicsController } from './controllers/PhysicsController';
 import { InputManager } from './InputManager';
-import { PhysicsState } from '../../shared/src/physics/types';
+import { PhysicsState } from '@shared/physics/types';
 
 export class Vehicle {
     public id!: string;

@@ -1,7 +1,7 @@
 import { Scene, Engine, ArcRotateCamera, Vector3, HemisphericLight, MeshBuilder, StandardMaterial, Color3, Mesh } from '@babylonjs/core';
 import { Vehicle } from './Vehicle';
 import { Flag } from './Flag';
-import { PhysicsState } from '../../shared/src/physics/types';
+import { PhysicsState } from '@shared/physics/types';
 
 export class GameScene {
     private scene: Scene;

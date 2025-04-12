@@ -1,5 +1,4 @@
 import { Scene, Vector3, Ray, AbstractMesh } from '@babylonjs/core';
-import { PhysicsState } from '../../shared/src/physics/types';
 
 interface Vehicle {
     mesh: AbstractMesh;

@@ -1,4 +1,4 @@
-import { PhysicsInput } from '../../shared/src/physics/types';
+import { PhysicsInput } from '@shared/physics/types';
 import { KeyBinding } from './KeyBinding';
 
 export class InputManager {
