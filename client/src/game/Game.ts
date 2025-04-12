@@ -187,8 +187,3 @@ export class Game {
         }
     }
 }
-
-// Initialize the game when the window loads
-window.addEventListener('load', () => {
-    new Game();
-}); 

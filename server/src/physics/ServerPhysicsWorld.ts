@@ -40,9 +40,26 @@ export class ServerPhysicsWorld {
         // Update the physics world
         this.physicsWorld.update(deltaTime);
 
+        // Update all vehicle controllers with default input
+        const defaultInput: PhysicsInput = {
+            forward: false,
+            backward: false,
+            left: false,
+            right: false,
+            up: false,
+            down: false,
+            pitchUp: false,
+            pitchDown: false,
+            yawLeft: false,
+            yawRight: false,
+            rollLeft: false,
+            rollRight: false,
+            mouseDelta: { x: 0, y: 0 }
+        };
+
         // Update all vehicle controllers
         this.controllers.forEach((controller) => {
-            controller.update(deltaTime);
+            controller.update(deltaTime, defaultInput);
         });
     }
 
