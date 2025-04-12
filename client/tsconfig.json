@@ -1,29 +1,28 @@
 {
     "compilerOptions": {
-        "target": "es2019",
-        "module": "commonjs",
-        "lib": ["es2019", "dom"],
-        "strict": true,
-        "esModuleInterop": true,
-        "experimentalDecorators": true,
-        "emitDecoratorMetadata": true,
+        "target": "ES2020",
+        "useDefineForClassFields": true,
+        "module": "ESNext",
+        "lib": ["ES2020", "DOM", "DOM.Iterable"],
         "skipLibCheck": true,
-        "forceConsistentCasingInFileNames": true,
-        "outDir": "./dist",
-        "rootDir": "./src",
-        "baseUrl": ".",
-        "paths": {
-            "@shared/*": ["../shared/src/*"]
-        },
-        "moduleResolution": "node",
+        "moduleResolution": "bundler",
+        "allowImportingTsExtensions": true,
         "resolveJsonModule": true,
         "isolatedModules": true,
-        "noEmitOnError": true,
-        "sourceMap": true
+        "noEmit": true,
+        "jsx": "preserve",
+        "strict": true,
+        "noUnusedLocals": true,
+        "noUnusedParameters": true,
+        "noFallthroughCasesInSwitch": true,
+        "experimentalDecorators": true,
+        "emitDecoratorMetadata": true,
+        "baseUrl": ".",
+        "paths": {
+            "@/*": ["src/*"],
+            "@shared/*": ["../shared/src/*"]
+        }
     },
-    "include": ["src/**/*"],
-    "exclude": ["node_modules", "**/*.spec.ts"],
-    "references": [
-        { "path": "../shared" }
-    ]
+    "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue", "src/*.vue","../shared/src/**/*"],
+    "references": [{ "path": "./tsconfig.node.json" }]
 } 

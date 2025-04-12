@@ -11,8 +11,8 @@ export class GameScene {
     private flags: Map<number, Flag> = new Map();
     private ground!: Mesh;
 
-    constructor(canvas: HTMLCanvasElement) {
-        this.engine = new Engine(canvas, true);
+    constructor(canvas: HTMLCanvasElement, engine: Engine) {
+        this.engine = engine;
         this.scene = new Scene(this.engine);
         this.setupCamera();
         this.setupLights();

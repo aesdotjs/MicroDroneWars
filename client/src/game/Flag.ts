@@ -1,17 +1,15 @@
-import { Schema, type } from "@colyseus/schema";
 import { Vector3, Scene, Mesh, StandardMaterial, Color3 } from 'babylonjs';
 
-export class Flag extends Schema {
-    @type("number") x: number = 0;
-    @type("number") y: number = 0;
-    @type("number") z: number = 0;
-    @type("number") team: number = 0; // 0 for team A, 1 for team B
-    @type("string") carriedBy: string | null = null; // Session ID of vehicle carrying the flag
-    @type("boolean") atBase: boolean = true;
+export class Flag {
+    x: number = 0;
+    y: number = 0;
+    z: number = 0;
+    team: number = 0; // 0 for team A, 1 for team B
+    carriedBy: string | null = null; // Session ID of vehicle carrying the flag
+    atBase: boolean = true;
     private mesh: Mesh;
 
     constructor(scene: Scene, team: number) {
-        super();
         this.mesh = Mesh.CreateBox("flag", 1, scene);
         const material = new StandardMaterial("flagMaterial", scene);
         material.diffuseColor = team === 0 ? new Color3(1, 0, 0) : new Color3(0, 0, 1);

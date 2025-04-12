@@ -3,20 +3,15 @@ import { Drone as DroneSchema } from './schemas/Drone';
 import { Plane as PlaneSchema } from './schemas/Plane';
 import { Flag as FlagSchema } from './schemas/Flag';
 import { Vehicle as VehicleSchema } from './schemas/Vehicle';
-import { PhysicsState as SchemaPhysicsState } from './schemas/PhysicsState';
 import { PhysicsState } from '@shared/physics/types';
 import * as Colyseus from 'colyseus.js';
-import { Engine, Vector3, Color3, Quaternion, Scene } from 'babylonjs';
+import { Engine, Vector3, Quaternion } from 'babylonjs';
 import { GameScene } from './GameScene';
 import { PhysicsInput } from '@shared/physics/types';
 import { Drone } from './Drone';
 import { Plane } from './Plane';
 import { Flag } from './Flag';
 
-interface GameOptions {
-    team: number;
-    vehicleType: 'drone' | 'plane';
-}
 
 export class Game {
     private canvas!: HTMLCanvasElement;
@@ -50,8 +45,8 @@ export class Game {
         // Initialize the engine
         this.engine = new Engine(this.canvas, true);
         
-        // Create the game scene
-        this.gameScene = new GameScene(this.canvas);
+        // Create the game scene with the engine
+        this.gameScene = new GameScene(this.canvas, this.engine);
 
         // Connect to the server
         this.client = new Colyseus.Client('ws://localhost:2567');

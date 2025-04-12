@@ -1,23 +1,26 @@
-import { Schema, type } from "@colyseus/schema";
+import { type } from "@colyseus/schema";
 import { Vehicle } from "./Vehicle";
 import { MeshBuilder, Vector3, StandardMaterial, Color3, Quaternion, Scene, Mesh } from 'babylonjs';
 import { PhysicsController } from './controllers/PhysicsController';
 
 export class Plane extends Vehicle {
-    public maxSpeed: number;
-    public acceleration: number;
-    public turnRate: number;
-    public maxHealth: number;
-    public vehicleType: string;
-    private leftWing: Mesh;
-    private rightWing: Mesh;
-    private tail: Mesh;
+    public maxSpeed: number = 0;
+    public acceleration: number = 0;
+    public turnRate: number = 0;
+    public maxHealth: number = 0;
+    public vehicleType: string = "";
+    private leftWing!: Mesh;
+    private rightWing!: Mesh;
+    private tail!: Mesh;
 
     constructor(scene: Scene, type: string, team: number, canvas: HTMLCanvasElement, isLocalPlayer: boolean = false) {
         super(scene, type, team, canvas, isLocalPlayer);
         this.id = `plane_${Math.random().toString(36).substr(2, 9)}`;
         this.maxHealth = 100;
         this.vehicleType = "plane";
+        this.maxSpeed = 50;
+        this.acceleration = 10;
+        this.turnRate = 2;
         
         // Create mesh first
         this.createMesh();

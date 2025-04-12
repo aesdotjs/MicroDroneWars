@@ -8,13 +8,13 @@ import { MicroDroneRoom } from "./rooms/MicroDroneRoom";
 const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 2567;
 const app = express();
 
-// Serve static files (client-side)
-app.use(express.static(path.join(__dirname, "../../client/dist")));
-
-// Serve index.html for all routes
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, "../../client/dist/index.html"));
-});
+// Only serve static files in production
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(path.join(__dirname, "../../client/dist")));
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, "../../client/dist/index.html"));
+  });
+}
 
 const server = http.createServer(app);
 const gameServer = new Server({ server });
