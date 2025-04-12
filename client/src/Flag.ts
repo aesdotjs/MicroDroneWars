@@ -1,5 +1,5 @@
 import { Schema, type } from "@colyseus/schema";
-import { Vector3, Scene, Mesh, StandardMaterial, Color3 } from '@babylonjs/core';
+import { Vector3, Scene, Mesh, StandardMaterial, Color3 } from 'babylonjs';
 
 export class Flag extends Schema {
     @type("number") x: number = 0;

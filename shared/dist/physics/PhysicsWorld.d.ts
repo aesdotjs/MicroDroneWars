@@ -1,4 +1,4 @@
-import { Engine } from '@babylonjs/core';
+import { Engine } from 'babylonjs';
 import * as CANNON from 'cannon';
 import { PhysicsState } from '../types';
 export declare class PhysicsWorld {

@@ -1,4 +1,4 @@
-import { Vector3, Quaternion } from '@babylonjs/core';
+import { Vector3, Quaternion } from 'babylonjs';
 export interface PhysicsState {
     position: Vector3;
     quaternion: Quaternion;

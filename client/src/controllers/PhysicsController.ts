@@ -1,4 +1,4 @@
-import { Vector3, Quaternion } from '@babylonjs/core';
+import { Vector3, Quaternion } from 'babylonjs';
 import * as CANNON from 'cannon';
 import { SpringSimulator } from '@shared/utils/SpringSimulator';
 import { PhysicsState, PhysicsInput, VehiclePhysicsConfig } from '@shared/physics/types';

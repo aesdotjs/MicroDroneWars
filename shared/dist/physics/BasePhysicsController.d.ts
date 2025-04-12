@@ -1,5 +1,5 @@
 import * as CANNON from 'cannon';
-import { Vector3 } from '@babylonjs/core';
+import { Vector3 } from 'babylonjs';
 import { PhysicsState, PhysicsConfig, PhysicsInput } from './types';
 import { SpringSimulator } from '../utils/SpringSimulator';
 export declare abstract class BasePhysicsController {

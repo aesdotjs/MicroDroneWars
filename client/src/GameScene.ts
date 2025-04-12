@@ -1,4 +1,4 @@
-import { Scene, Engine, ArcRotateCamera, Vector3, HemisphericLight, MeshBuilder, StandardMaterial, Color3, Mesh } from '@babylonjs/core';
+import { Scene, Engine, ArcRotateCamera, Vector3, HemisphericLight, MeshBuilder, StandardMaterial, Color3, Mesh } from 'babylonjs';
 import { Vehicle } from './Vehicle';
 import { Flag } from './Flag';
 import { PhysicsState } from '@shared/physics/types';

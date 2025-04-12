@@ -1,6 +1,6 @@
 import { Schema, type } from "@colyseus/schema";
 import { Vehicle } from "./Vehicle";
-import { MeshBuilder, Vector3, StandardMaterial, Color3, Quaternion, Scene, Mesh } from '@babylonjs/core';
+import { MeshBuilder, Vector3, StandardMaterial, Color3, Quaternion, Scene, Mesh } from 'babylonjs';
 import { PhysicsController } from './controllers/PhysicsController';
 
 export class Plane extends Vehicle {

@@ -1,4 +1,4 @@
-import { Vector3, Quaternion } from '@babylonjs/core';
+import { Vector3, Quaternion } from 'babylonjs';
 import * as CANNON from 'cannon';
 import { PhysicsState, PhysicsInput, VehiclePhysicsConfig } from '@shared/physics/types';
 import { BasePhysicsController } from '@shared/physics/BasePhysicsController';

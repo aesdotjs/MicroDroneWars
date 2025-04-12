@@ -1,4 +1,4 @@
-import { Vector3, Quaternion, ArcRotateCamera, Mesh, Scene, StandardMaterial, Color3 } from '@babylonjs/core';
+import { Vector3, Quaternion, ArcRotateCamera, Mesh, Scene, StandardMaterial, Color3 } from 'babylonjs';
 import { PhysicsController } from './controllers/PhysicsController';
 import { InputManager } from './InputManager';
 import { PhysicsState } from '@shared/physics/types';

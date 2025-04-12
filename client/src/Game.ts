@@ -6,7 +6,7 @@ import { Vehicle as VehicleSchema } from './schemas/Vehicle';
 import { PhysicsState as SchemaPhysicsState } from './schemas/PhysicsState';
 import { PhysicsState } from '@shared/physics/types';
 import * as Colyseus from 'colyseus.js';
-import { Engine, Vector3, Color3, Quaternion, Scene } from '@babylonjs/core';
+import { Engine, Vector3, Color3, Quaternion, Scene } from 'babylonjs';
 import { GameScene } from './GameScene';
 import { PhysicsInput } from '@shared/physics/types';
 import { Drone } from './Drone';

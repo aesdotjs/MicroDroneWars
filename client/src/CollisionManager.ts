@@ -1,4 +1,4 @@
-import { Scene, Vector3, Ray, AbstractMesh } from '@babylonjs/core';
+import { Scene, Vector3, Ray, AbstractMesh } from 'babylonjs';
 
 interface Vehicle {
     mesh: AbstractMesh;
