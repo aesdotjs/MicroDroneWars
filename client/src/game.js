@@ -45,12 +45,12 @@ class Game {
         });
 
         // Handle page unload (refresh/close)
-        window.addEventListener('beforeunload', () => {
-            if (this.room) {
-                this.room.send('playerLeft');
-                this.room.leave();
-            }
-        });
+        // window.addEventListener('beforeunload', () => {
+        //     if (this.room) {
+        //         this.room.send('playerLeft');
+        //         this.room.leave();
+        //     }
+        // });
 
         // Start the render loop
         this.engine.runRenderLoop(() => {
@@ -83,7 +83,8 @@ class Game {
             const gameVehicle = this.gameScene.createVehicle(
                 vehicle.vehicleType,
                 vehicle.team,
-                isLocalPlayer
+                isLocalPlayer,
+                sessionId
             );
             if (gameVehicle) {
                 // Set initial position and rotation from server state
@@ -95,29 +96,12 @@ class Game {
                 // Listen for vehicle updates
                 vehicle.onChange(() => {
                     if (gameVehicle && gameVehicle.mesh && !gameVehicle.isLocalPlayer) {
-                        // Update position and rotation
-                        gameVehicle.mesh.position.set(vehicle.x, vehicle.y, vehicle.z);
-                        if (!gameVehicle.mesh.rotationQuaternion) {
-                            gameVehicle.mesh.rotationQuaternion = new Quaternion();
-                        }
-                        gameVehicle.mesh.rotationQuaternion = new Quaternion(
-                            vehicle.quaternionX,
-                            vehicle.quaternionY,
-                            vehicle.quaternionZ,
-                            vehicle.quaternionW
+                        // Update position, rotation, and velocity using interpolation
+                        gameVehicle.updatePosition(
+                            { x: vehicle.x, y: vehicle.y, z: vehicle.z },
+                            { x: vehicle.quaternionX, y: vehicle.quaternionY, z: vehicle.quaternionZ, w: vehicle.quaternionW },
+                            { x: vehicle.velocityX, y: vehicle.velocityY, z: vehicle.velocityZ }
                         );
-                        
-                        // Update physics if available
-                        if (gameVehicle.physics && gameVehicle.physics.body) {
-                            gameVehicle.physics.body.velocity.set(vehicle.velocityX, vehicle.velocityY, vehicle.velocityZ);
-                            gameVehicle.physics.body.position.set(vehicle.x, vehicle.y, vehicle.z);
-                            gameVehicle.physics.body.quaternion.set(
-                                vehicle.quaternionX,
-                                vehicle.quaternionY,
-                                vehicle.quaternionZ,
-                                vehicle.quaternionW
-                            );
-                        }
                     }
                 });
 
@@ -141,10 +125,10 @@ class Game {
         });
 
         // Handle vehicle removal
-        this.room.state.vehicles.onRemove((vehicle, sessionId) => {
-            console.log('Vehicle removed:', sessionId);
-            this.gameScene.removeVehicle(sessionId);
-        });
+        // this.room.state.vehicles.onRemove((vehicle, sessionId) => {
+        //     console.log('Vehicle removed:', sessionId);
+        //     this.gameScene.removeVehicle(sessionId);
+        // });
 
         // Handle flag updates
         this.room.state.flags.onAdd((flag, flagId) => {
@@ -176,7 +160,8 @@ class Game {
             const gameVehicle = this.gameScene.createVehicle(
                 vehicle.vehicleType,
                 vehicle.team,
-                isLocalPlayer
+                isLocalPlayer,
+                sessionId
             );
 
             if (gameVehicle) {

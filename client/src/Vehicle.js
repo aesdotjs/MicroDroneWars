@@ -75,12 +75,13 @@ export class Vehicle {
         });
     }
 
-    updatePosition(position, quaternion) {
+    updatePosition(position, quaternion, velocity = null) {
         if (!this.isLocalPlayer && this.mesh) {
             // Smoothly interpolate position for remote players
+            const targetPosition = new Vector3(position.x, position.y, position.z);
             this.mesh.position = Vector3.Lerp(
                 this.mesh.position,
-                new Vector3(position.x, position.y, position.z),
+                targetPosition,
                 this.positionLerpFactor
             );
             
@@ -88,11 +89,71 @@ export class Vehicle {
             if (!this.mesh.rotationQuaternion) {
                 this.mesh.rotationQuaternion = new Quaternion();
             }
+            const targetQuaternion = new Quaternion(quaternion.x, quaternion.y, quaternion.z, quaternion.w);
             this.mesh.rotationQuaternion = Quaternion.Slerp(
                 this.mesh.rotationQuaternion,
-                new Quaternion(quaternion.x, quaternion.y, quaternion.z, quaternion.w),
+                targetQuaternion,
                 this.rotationLerpFactor
             );
+            
+            // Update physics body if available
+            if (this.physics && this.physics.body) {
+                // Interpolate physics body position
+                const currentBodyPos = new Vector3(
+                    this.physics.body.position.x,
+                    this.physics.body.position.y,
+                    this.physics.body.position.z
+                );
+                const interpolatedBodyPos = Vector3.Lerp(
+                    currentBodyPos,
+                    targetPosition,
+                    this.positionLerpFactor
+                );
+                this.physics.body.position.set(
+                    interpolatedBodyPos.x,
+                    interpolatedBodyPos.y,
+                    interpolatedBodyPos.z
+                );
+
+                // Interpolate physics body rotation
+                const currentBodyQuat = new Quaternion(
+                    this.physics.body.quaternion.x,
+                    this.physics.body.quaternion.y,
+                    this.physics.body.quaternion.z,
+                    this.physics.body.quaternion.w
+                );
+                const interpolatedBodyQuat = Quaternion.Slerp(
+                    currentBodyQuat,
+                    targetQuaternion,
+                    this.rotationLerpFactor
+                );
+                this.physics.body.quaternion.set(
+                    interpolatedBodyQuat.x,
+                    interpolatedBodyQuat.y,
+                    interpolatedBodyQuat.z,
+                    interpolatedBodyQuat.w
+                );
+
+                // Interpolate velocity if provided
+                if (velocity) {
+                    const targetVelocity = new Vector3(velocity.x, velocity.y, velocity.z);
+                    const currentVelocity = new Vector3(
+                        this.physics.body.velocity.x,
+                        this.physics.body.velocity.y,
+                        this.physics.body.velocity.z
+                    );
+                    const interpolatedVelocity = Vector3.Lerp(
+                        currentVelocity,
+                        targetVelocity,
+                        this.positionLerpFactor
+                    );
+                    this.physics.body.velocity.set(
+                        interpolatedVelocity.x,
+                        interpolatedVelocity.y,
+                        interpolatedVelocity.z
+                    );
+                }
+            }
             
             // Update last known position and rotation
             this.lastPosition.copyFrom(this.mesh.position);

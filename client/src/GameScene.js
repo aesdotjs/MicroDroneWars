@@ -189,8 +189,8 @@ export class GameScene {
         this.camera.upVector = worldUpVector;
     }
 
-    createVehicle(type, team, isLocalPlayer = false) {
-        console.log('Creating vehicle:', { type, team, isLocalPlayer });
+    createVehicle(type, team, isLocalPlayer = false, sessionId = null) {
+        console.log('Creating vehicle:', { type, team, isLocalPlayer, sessionId });
         let vehicle;
         
         if (type === 'drone') {
@@ -208,7 +208,17 @@ export class GameScene {
             this.setAsLocalPlayer(vehicle);
         }
         
-        this.vehicles.set(vehicle.id, vehicle);
+        // Use sessionId as the key in the vehicles map
+        if (sessionId) {
+            vehicle.id = sessionId;
+            this.vehicles.set(sessionId, vehicle);
+        } else {
+            // For local player, generate a temporary ID
+            const tempId = 'local_' + Date.now();
+            vehicle.id = tempId;
+            this.vehicles.set(tempId, vehicle);
+        }
+        
         console.log('Vehicle added to scene:', {
             id: vehicle.id,
             type: vehicle.type,
@@ -244,13 +254,60 @@ export class GameScene {
     }
 
     removeVehicle(sessionId) {
+        console.log('Removing vehicle:', sessionId, this.vehicles);
         const vehicle = this.vehicles.get(sessionId);
         if (vehicle) {
-            this.collisionManager.removeVehicle(vehicle);
-            if (vehicle.mesh) {
-                vehicle.mesh.dispose();
+            console.log('Found vehicle to remove:', {
+                id: vehicle.id,
+                type: vehicle.type,
+                hasMesh: !!vehicle.mesh,
+                hasPhysics: !!vehicle.physics
+            });
+
+            // Remove from collision manager
+            if (this.collisionManager) {
+                this.collisionManager.removeVehicle(vehicle);
             }
+
+            // Clean up physics
+            if (vehicle.physics && vehicle.physics.body) {
+                console.log('Removing physics body');
+                if (vehicle.physics.body.world) {
+                    vehicle.physics.body.world.remove(vehicle.physics.body);
+                }
+                vehicle.physics = null;
+            }
+
+            // Clean up mesh and its children
+            if (vehicle.mesh) {
+                console.log('Disposing mesh and children');
+                // Dispose all children first
+                vehicle.mesh.getChildMeshes().forEach(child => {
+                    if (child.material) {
+                        child.material.dispose();
+                    }
+                    child.dispose();
+                });
+                
+                // Dispose the main mesh
+                if (vehicle.mesh.material) {
+                    vehicle.mesh.material.dispose();
+                }
+                vehicle.mesh.dispose();
+                vehicle.mesh = null;
+            }
+
+            // Remove from vehicles map
             this.vehicles.delete(sessionId);
+            console.log('Vehicle removed from vehicles map');
+
+            // If this was the local player, clear the reference
+            if (this.localPlayer && this.localPlayer.id === sessionId) {
+                console.log('Clearing local player reference');
+                this.localPlayer = null;
+            }
+        } else {
+            console.log('Vehicle not found in vehicles map:', sessionId);
         }
     }
 

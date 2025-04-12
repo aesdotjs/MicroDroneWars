@@ -45,8 +45,10 @@ export class MicroDroneRoom extends Room<State> {
         console.log(`Player ${client.sessionId} left the game`);
         this.onLeave(client);
       });
+
+      this.patchRate = 1000 / 60;
   
-      // Set update interval (50fps)
+      // Set update interval (60fps)
       this.setSimulationInterval(() => this.update(), 1000 / 60);
     }
   
