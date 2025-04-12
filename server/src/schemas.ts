@@ -1,19 +1,26 @@
 import { Schema, MapSchema, type } from "@colyseus/schema";
 
-export class Vehicle extends Schema {
-    @type("number") x = 0;
-    @type("number") y = 0;
-    @type("number") z = 0;
+export class PhysicsState extends Schema {
+    @type("number") positionX = 0;
+    @type("number") positionY = 0;
+    @type("number") positionZ = 0;
     @type("number") quaternionX = 0;
     @type("number") quaternionY = 0;
     @type("number") quaternionZ = 0;
     @type("number") quaternionW = 1;
-    @type("number") velocityX = 0;
-    @type("number") velocityY = 0;
-    @type("number") velocityZ = 0;
+    @type("number") linearVelocityX = 0;
+    @type("number") linearVelocityY = 0;
+    @type("number") linearVelocityZ = 0;
+    @type("number") angularVelocityX = 0;
+    @type("number") angularVelocityY = 0;
+    @type("number") angularVelocityZ = 0;
+}
+
+export class Vehicle extends PhysicsState {
     @type("number") health = 100;
     @type("boolean") hasFlag = false;
     @type("number") team = 0;
+    @type("string") vehicleType = "";
 }
 
 export class Drone extends Vehicle {
@@ -21,7 +28,6 @@ export class Drone extends Vehicle {
     @type("number") acceleration = 0.2;
     @type("number") turnRate = 0.05;
     @type("number") maxHealth = 150;
-    @type("string") vehicleType = "drone";
 }
 
 export class Plane extends Vehicle {
@@ -29,7 +35,6 @@ export class Plane extends Vehicle {
     @type("number") acceleration = 0.3;
     @type("number") turnRate = 0.03;
     @type("number") maxHealth = 100;
-    @type("string") vehicleType = "plane";
 }
 
 export class Flag extends Schema {

@@ -637,10 +637,4 @@ export class PhysicsController {
             console.error('Plane physics error:', error);
         }
     }
-
-    cleanup() {
-        if (this.body) {
-            world.removeBody(this.body);
-        }
-    }
 } 

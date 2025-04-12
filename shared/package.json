@@ -1,0 +1,20 @@
+{
+  "name": "shared",
+  "version": "1.0.0",
+  "description": "Shared code between client and server",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w"
+  },
+  "dependencies": {
+    "@babylonjs/core": "^6.35.0",
+    "cannon": "^0.6.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3",
+    "@types/cannon": "^0.1.13"
+  }
+}
+  
