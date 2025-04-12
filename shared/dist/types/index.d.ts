@@ -1,12 +1,10 @@
-import { Vector3, Quaternion } from 'babylonjs';
-
+import { Vector3, Quaternion } from '@babylonjs/core';
 export interface PhysicsState {
     position: Vector3;
     quaternion: Quaternion;
     linearVelocity: Vector3;
     angularVelocity: Vector3;
 }
-
 export interface VehicleConfig {
     mass: number;
     maxSpeed: number;
@@ -15,7 +13,6 @@ export interface VehicleConfig {
     maxHealth: number;
     vehicleType: 'drone' | 'plane';
 }
-
 export interface PhysicsInput {
     up: boolean;
     down: boolean;
@@ -27,4 +24,4 @@ export interface PhysicsInput {
     rollRight: boolean;
     mouseX: number;
     mouseY: number;
-} 
+}

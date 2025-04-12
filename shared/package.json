@@ -10,11 +10,12 @@
   },
   "dependencies": {
     "@babylonjs/core": "^6.35.0",
+    "babylonjs": "^8.2.0",
     "cannon": "^0.6.2"
   },
   "devDependencies": {
-    "typescript": "^5.3.3",
-    "@types/cannon": "^0.1.13"
+    "@types/cannon": "^0.1.13",
+    "@types/babylon": "^6.16.9",
+    "typescript": "^5.3.3"
   }
 }
-  

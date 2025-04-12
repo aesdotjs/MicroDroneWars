@@ -1,4 +1,4 @@
-import { Engine, Scene, Vector3, Quaternion } from '@babylonjs/core';
+import { Engine, Scene, Vector3, Quaternion } from 'babylonjs';
 import * as CANNON from 'cannon';
 import { PhysicsState } from '../types';
 

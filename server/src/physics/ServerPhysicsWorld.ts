@@ -1,9 +1,7 @@
-import { Engine, Scene, Vector3, Quaternion } from '@babylonjs/core';
-import * as CANNON from 'cannon';
-import { PhysicsWorld } from '../../../shared/src/physics/PhysicsWorld';
-import { PhysicsControllerFactory } from '../../../shared/src/physics/PhysicsControllerFactory';
-import { VehiclePhysicsConfig, PhysicsInput, PhysicsState } from '../../../shared/src/physics/types';
-
+import { PhysicsWorld } from '@shared/physics/PhysicsWorld';
+import { PhysicsControllerFactory } from '@shared/physics/PhysicsControllerFactory';
+import { VehiclePhysicsConfig, PhysicsInput, PhysicsState } from '@shared/physics/types';
+import { Engine, Scene, NullEngine } from 'babylonjs';
 export class ServerPhysicsWorld {
     private engine: Engine;
     private scene: Scene;
@@ -14,7 +12,8 @@ export class ServerPhysicsWorld {
 
     constructor() {
         // Create NullEngine for server-side physics
-        this.engine = new Engine(null, true);
+        this.engine = new NullEngine();
+
         this.scene = new Scene(this.engine);
         this.physicsWorld = new PhysicsWorld(this.engine);
 
