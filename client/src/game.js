@@ -121,6 +121,11 @@ class Game {
                     }
                 });
 
+                vehicle.onRemove(() => {
+                    console.log('Vehicle removed:', sessionId);
+                    this.gameScene.removeVehicle(sessionId);
+                });
+
                 // Log vehicle creation details
                 console.log('Vehicle created:', {
                     id: gameVehicle.id,
