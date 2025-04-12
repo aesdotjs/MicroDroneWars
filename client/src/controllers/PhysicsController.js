@@ -11,6 +11,7 @@ world.defaultContactMaterial.friction = 0.5;
 
 export class PhysicsController {
     constructor(vehicle) {
+        console.log(vehicle);
         this.vehicle = vehicle;
         this.body = null;
         this.world = null;
@@ -191,6 +192,8 @@ export class PhysicsController {
         this.body.velocity.set(0, 0, 0);
         this.body.angularVelocity.set(0, 0, 0);
         this.lastDrag = 0;
+
+        this.body.type = this.vehicle.isLocalPlayer ? CANNON.Body.DYNAMIC : CANNON.Body.STATIC;
 
         // Add body to world
         world.addBody(this.body);

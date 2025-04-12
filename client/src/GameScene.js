@@ -1,4 +1,4 @@
-import { Scene, Vector3, HemisphericLight, ArcRotateCamera, MeshBuilder, StandardMaterial, Color3, TransformNode, UniversalCamera, Quaternion, Matrix } from '@babylonjs/core';
+import { Scene, Vector3, HemisphericLight, ArcRotateCamera, MeshBuilder, StandardMaterial, Color3, TransformNode, UniversalCamera, Quaternion, Matrix, Body } from '@babylonjs/core';
 import { Vehicle } from './Vehicle';
 import { InputManager } from './InputManager';
 import { CollisionManager } from './CollisionManager';
@@ -194,9 +194,9 @@ export class GameScene {
         let vehicle;
         
         if (type === 'drone') {
-            vehicle = new Drone(this.scene, type, team, this.engine.getRenderingCanvas());
+            vehicle = new Drone(this.scene, type, team, this.engine.getRenderingCanvas(), isLocalPlayer);
         } else {
-            vehicle = new Plane(this.scene, type, team, this.engine.getRenderingCanvas());
+            vehicle = new Plane(this.scene, type, team, this.engine.getRenderingCanvas(), isLocalPlayer);
         }
         
         // Ensure the vehicle is properly initialized

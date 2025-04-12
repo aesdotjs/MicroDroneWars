@@ -80,7 +80,6 @@ class Game {
             
             // Create vehicle in the game scene
             const isLocalPlayer = sessionId === this.room.sessionId;
-            console.log(vehicle);
             const gameVehicle = this.gameScene.createVehicle(
                 vehicle.vehicleType,
                 vehicle.team,
@@ -127,11 +126,6 @@ class Game {
             }
         });
 
-        // Handle vehicle removal
-        // this.room.state.vehicles.onRemove((vehicle, sessionId) => {
-        //     console.log('Vehicle removed:', sessionId);
-        //     this.gameScene.removeVehicle(sessionId);
-        // });
 
         // Handle flag updates
         this.room.state.flags.onAdd((flag, flagId) => {
@@ -147,33 +141,13 @@ class Game {
                         }
                     }
                 });
+                flag.onRemove(() => {
+                    console.log('Flag removed:', flagId);
+                    this.gameScene.removeFlag(flagId);
+                });
             }
         });
 
-        // Handle flag removal
-        this.room.state.flags.onRemove((flag, flagId) => {
-            console.log('Flag removed:', flagId);
-            this.gameScene.removeFlag(flagId);
-        });
-
-        // Handle initial state
-        this.room.state.vehicles.forEach((vehicle, sessionId) => {
-            console.log('Initial vehicle state:', sessionId);
-            const isLocalPlayer = sessionId === this.room.sessionId;
-            const gameVehicle = this.gameScene.createVehicle(
-                vehicle.vehicleType,
-                vehicle.team,
-                isLocalPlayer,
-                sessionId
-            );
-
-            if (gameVehicle) {
-                gameVehicle.updatePosition(
-                    { x: vehicle.x, y: vehicle.y, z: vehicle.z },
-                    { x: vehicle.quaternionX, y: vehicle.quaternionY, z: vehicle.quaternionZ, w: vehicle.quaternionW }
-                );
-            }
-        });
 
         this.room.state.flags.forEach((flag, flagId) => {
             console.log('Initial flag state:', flagId);

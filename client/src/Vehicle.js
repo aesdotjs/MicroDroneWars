@@ -3,7 +3,7 @@ import { PhysicsController } from './controllers/PhysicsController';
 import { InputManager } from './InputManager';
 
 export class Vehicle {
-    constructor(type, team, canvas) {
+    constructor(type, team, canvas, isLocalPlayer = false) {
         this.type = type;
         this.team = team;
         this.mesh = null;
@@ -11,11 +11,12 @@ export class Vehicle {
         this.angularVelocity = new Vector3(0, 0, 0);
         this.health = 100;
         this.isAlive = true;
+        this.isLocalPlayer = isLocalPlayer;
         this.inputManager = null; // Will be set by setAsLocalPlayer
         this.lastPosition = new Vector3(0, 0, 0);
         this.lastRotationQuaternion = new Quaternion(0, 0, 0, 1);
-        this.positionLerpFactor = 0.2;
-        this.rotationLerpFactor = 0.2;
+        this.positionLerpFactor = 0.3;
+        this.rotationLerpFactor = 0.3;
         this.vehicleType = type;
         this.scene = null; // Will be set by initialize
     }

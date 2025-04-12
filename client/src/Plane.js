@@ -4,8 +4,8 @@ import { MeshBuilder, Vector3, StandardMaterial, Color3, Quaternion } from '@bab
 import { PhysicsController } from './controllers/PhysicsController.js';
 
 export class Plane extends Vehicle {
-    constructor(scene, type, team, canvas) {
-        super(type, team, canvas);
+    constructor(scene, type, team, canvas, isLocalPlayer = false) {
+        super(type, team, canvas, isLocalPlayer);
         this.scene = scene;
         this.id = `plane_${Math.random().toString(36).substr(2, 9)}`;
         this.maxHealth = 100;

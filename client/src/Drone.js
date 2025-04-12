@@ -5,8 +5,8 @@ import { PhysicsController } from './controllers/PhysicsController.js';
 import { ParticleSystem, Texture, Matrix } from '@babylonjs/core';
 
 export class Drone extends Vehicle {
-    constructor(scene, type, team, canvas) {
-        super(type, team, canvas);
+    constructor(scene, type, team, canvas, isLocalPlayer = false) {
+        super(type, team, canvas, isLocalPlayer);
         this.scene = scene;
         this.id = `drone_${Math.random().toString(36).substr(2, 9)}`;
         this.maxHealth = 150;
