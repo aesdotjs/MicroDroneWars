@@ -1,7 +1,8 @@
 import * as CANNON from 'cannon';
-import { Vector3, Quaternion } from 'babylonjs';
+import { Vector3, Quaternion, Matrix } from 'babylonjs';
 import { PhysicsState, PhysicsConfig, PhysicsInput } from './types';
 import { SpringSimulator } from '../utils/SpringSimulator';
+import { CollisionGroups, collisionMasks } from './CollisionGroups';
 
 export abstract class BasePhysicsController {
     protected body: CANNON.Body;
@@ -21,11 +22,30 @@ export abstract class BasePhysicsController {
         this.world = world;
         this.config = config;
         
-        // Initialize physics body
+        // Get collision group and mask based on vehicle type
+        const vehicleGroup = config.vehicleType === 'drone' ? CollisionGroups.Drones : CollisionGroups.Planes;
+        const vehicleMask = collisionMasks[config.vehicleType === 'drone' ? 'Drone' : 'Plane'];
+        
+        // Initialize physics body with proper collision filters
         this.body = new CANNON.Body({
             mass: config.mass,
-            material: new CANNON.Material('vehicleMaterial')
+            material: new CANNON.Material('vehicleMaterial'),
+            collisionFilterGroup: vehicleGroup,
+            collisionFilterMask: vehicleMask,
+            fixedRotation: false,
+            linearDamping: 0.5,
+            angularDamping: 0.5,
+            type: CANNON.Body.DYNAMIC
         });
+
+        // Add collision shape based on vehicle type
+        if (config.vehicleType === 'drone') {
+            // Drone shape - box with dimensions matching the drone mesh
+            this.body.addShape(new CANNON.Box(new CANNON.Vec3(0.5, 0.15, 0.5)));
+        } else {
+            // Plane shape - box with dimensions matching the plane mesh
+            this.body.addShape(new CANNON.Box(new CANNON.Vec3(1.5, 0.3, 0.5)));
+        }
         
         // Add body to world
         this.world.addBody(this.body);
@@ -36,6 +56,14 @@ export abstract class BasePhysicsController {
         this.elevatorSimulator = new SpringSimulator(60, 0.1, 0.3);
         this.rudderSimulator = new SpringSimulator(60, 0.1, 0.3);
         this.steeringSimulator = new SpringSimulator(60, 0.1, 0.3);
+
+        console.log('Physics body created:', {
+            type: config.vehicleType,
+            collisionGroup: vehicleGroup,
+            collisionMask: vehicleMask,
+            hasShape: this.body.shapes.length > 0,
+            shapeType: this.body.shapes[0]?.type
+        });
     }
 
     abstract update(deltaTime: number, input: PhysicsInput): void;
@@ -104,6 +132,11 @@ export abstract class BasePhysicsController {
     }
 
     protected updateEnginePower(input: PhysicsInput): void {
+        if (!input) {
+            this.enginePower = 0;
+            return;
+        }
+
         if (input.up) {
             this.enginePower = Math.min(this.enginePower + this.enginePowerChangeRate, this.maxEnginePower);
         } else if (input.down) {
@@ -112,21 +145,22 @@ export abstract class BasePhysicsController {
     }
 
     protected getOrientationVectors(): { forward: Vector3; right: Vector3; up: Vector3 } {
-        const forward = new Vector3(0, 0, 1);
-        const right = new Vector3(1, 0, 0);
-        const up = new Vector3(0, 1, 0);
-        
-        const quaternion = new Quaternion(
-            this.body.quaternion.x,
-            this.body.quaternion.y,
-            this.body.quaternion.z,
-            this.body.quaternion.w
+        // Initialize vectors in local space
+        let forward = new Vector3(0, 0, 1);
+        let right = new Vector3(1, 0, 0);
+        let up = new Vector3(0, 1, 0);
+
+        // Transform vectors to world space using body's quaternion
+        const quaternion = this.body.quaternion;
+        const rotationMatrix = Matrix.FromQuaternionToRef(
+            new Quaternion(quaternion.x, quaternion.y, quaternion.z, quaternion.w),
+            new Matrix()
         );
-        
-        forward.rotateByQuaternionAroundPointToRef(quaternion, Vector3.Zero(), forward);
-        right.rotateByQuaternionAroundPointToRef(quaternion, Vector3.Zero(), right);
-        up.rotateByQuaternionAroundPointToRef(quaternion, Vector3.Zero(), up);
-        
+
+        forward = Vector3.TransformCoordinates(forward, rotationMatrix);
+        right = Vector3.TransformCoordinates(right, rotationMatrix);
+        up = Vector3.TransformCoordinates(up, rotationMatrix);
+
         return { forward, right, up };
     }
 

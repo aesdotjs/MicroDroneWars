@@ -58,7 +58,7 @@ export class Vehicle {
         }
         
         if (this.physics) {
-            this.physics.update(deltaTime);
+            this.physics.update(deltaTime, this.input);
         }
     }
 
@@ -133,7 +133,7 @@ export class Vehicle {
 
     public dispose(): void {
         if (this.physics) {
-            this.physics.cleanup();
+            this.physics.dispose();
         }
         if (this.mesh) {
             this.mesh.dispose();

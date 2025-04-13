@@ -34,6 +34,12 @@ export class ServerPhysicsWorld {
             config
         );
         this.controllers.set(id, controller);
+        
+        // Log initial vehicle creation only
+        console.log('Server: Vehicle created:', {
+            id,
+            type: config.vehicleType
+        });
     }
 
     public update(deltaTime: number): void {
@@ -57,7 +63,7 @@ export class ServerPhysicsWorld {
             mouseDelta: { x: 0, y: 0 }
         };
 
-        // Update all vehicle controllers
+        // Update all vehicle controllers without logging
         this.controllers.forEach((controller) => {
             controller.update(deltaTime, defaultInput);
         });

@@ -4,6 +4,7 @@ import { BasePhysicsController } from '@shared/physics/BasePhysicsController';
 import { DronePhysicsController } from '@shared/physics/DronePhysicsController';
 import { PlanePhysicsController } from '@shared/physics/PlanePhysicsController';
 import { PhysicsWorld } from '@shared/physics/PhysicsWorld';
+import { CollisionEvent } from '@shared/physics/types';
 
 export class ClientPhysicsWorld {
     private engine: Engine;
@@ -34,9 +35,16 @@ export class ClientPhysicsWorld {
             controller = new PlanePhysicsController(this.physicsWorld.getWorld(), config);
         }
 
+        // Ensure initial position is above ground
+        const spawnPosition = new Vector3(
+            initialPosition.x,
+            Math.max(initialPosition.y, 10), // Ensure at least 10 units above ground
+            initialPosition.z
+        );
+
         // Set initial state
         controller.setState({
-            position: new Vector3(initialPosition.x, initialPosition.y, initialPosition.z),
+            position: spawnPosition,
             quaternion: new Quaternion(0, 0, 0, 1),
             linearVelocity: new Vector3(0, 0, 0),
             angularVelocity: new Vector3(0, 0, 0)
@@ -44,7 +52,13 @@ export class ClientPhysicsWorld {
 
         this.controllers.set(id, controller);
         this.stateBuffer.set(id, []);
-        console.log('Vehicle created successfully:', { id, type, controller });
+        
+        console.log('Vehicle created successfully:', { 
+            id, 
+            type, 
+            initialPosition: spawnPosition,
+            controller 
+        });
         return controller;
     }
 
@@ -170,5 +184,21 @@ export class ClientPhysicsWorld {
         });
         this.controllers.clear();
         this.stateBuffer.clear();
+    }
+
+    public getGroundBody(): CANNON.Body | null {
+        return this.physicsWorld.getGroundBody();
+    }
+
+    public getGroundMesh(): any {
+        return this.physicsWorld.getGroundMesh();
+    }
+
+    public registerCollisionCallback(id: string, callback: (event: CollisionEvent) => void): void {
+        this.physicsWorld.registerCollisionCallback(id, callback);
+    }
+
+    public unregisterCollisionCallback(id: string): void {
+        this.physicsWorld.unregisterCollisionCallback(id);
     }
 } 

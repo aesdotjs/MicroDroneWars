@@ -10,7 +10,6 @@ export interface PhysicsState {
 
 export interface PhysicsConfig {
     mass: number;
-    gravity: number;
     drag: number;
     angularDrag: number;
     maxSpeed: number;
@@ -18,13 +17,14 @@ export interface PhysicsConfig {
     maxAngularAcceleration: number;
     angularDamping: number;
     forceMultiplier: number;
-}
-
-export interface VehiclePhysicsConfig extends PhysicsConfig {
     vehicleType: 'drone' | 'plane';
     thrust: number;
     lift: number;
     torque: number;
+    gravity: number;
+}
+
+export interface VehiclePhysicsConfig extends PhysicsConfig {
     minSpeed?: number;
     bankAngle?: number;
     wingArea?: number;
@@ -47,3 +47,23 @@ export interface PhysicsInput {
     rollRight: boolean;
     mouseDelta?: { x: number; y: number };
 } 
+
+export interface CollisionEvent {
+    bodyA: CANNON.Body;
+    bodyB: CANNON.Body;
+    contact: {
+        getImpactVelocityAlongNormal: () => number;
+        getNormal: () => CANNON.Vec3;
+        ri: CANNON.Vec3;
+        rj: CANNON.Vec3;
+    };
+}
+
+export interface VehicleCollisionEvent {
+    body: CANNON.Body;
+    contact: {
+        getImpactVelocityAlongNormal: () => number;
+        ri: CANNON.Vec3;
+        rj: CANNON.Vec3;
+    };
+}

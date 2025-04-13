@@ -2,6 +2,7 @@ import { Vehicle } from "./Vehicle";
 import { MeshBuilder, Vector3, StandardMaterial, Color3, MultiMaterial, Color4, Quaternion, Scene, Mesh, ParticleSystem, Texture, Matrix } from 'babylonjs';
 import { PhysicsController } from './controllers/PhysicsController';
 import { ClientPhysicsWorld } from './physics/ClientPhysicsWorld';
+import { PhysicsInput } from '@shared/physics/types';
 
 export class Plane extends Vehicle {
     public maxSpeed: number = 8;
@@ -152,8 +153,27 @@ export class Plane extends Vehicle {
     public update(deltaTime: number = 1/60): void {
         if (!this.mesh || !this.physics) return;
         
+        // Get input from input manager if available, or use default input
+        const defaultInput: PhysicsInput = {
+            forward: false,
+            backward: false,
+            left: false,
+            right: false,
+            up: false,
+            down: false,
+            pitchUp: false,
+            pitchDown: false,
+            yawLeft: false,
+            yawRight: false,
+            rollLeft: false,
+            rollRight: false,
+            mouseDelta: { x: 0, y: 0 }
+        };
+        
+        const input = this.inputManager ? this.inputManager.getInput() : defaultInput;
+        
         // Update physics
-        this.physics.update(deltaTime);
+        this.physics.update(deltaTime, input);
 
         // Update control surfaces
         if (this.leftWing && this.rightWing && this.tail) {

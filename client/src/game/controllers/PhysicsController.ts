@@ -1,10 +1,7 @@
-import { Vector3, Quaternion } from 'babylonjs';
-import * as CANNON from 'cannon';
+import { Vector3 } from 'babylonjs';
 import { SpringSimulator } from '@shared/utils/SpringSimulator';
 import { PhysicsState, PhysicsInput, VehiclePhysicsConfig } from '@shared/physics/types';
 import { BasePhysicsController } from '@shared/physics/BasePhysicsController';
-import { DronePhysicsController } from '@shared/physics/DronePhysicsController';
-import { PlanePhysicsController } from '@shared/physics/PlanePhysicsController';
 import { ClientPhysicsWorld } from '../physics/ClientPhysicsWorld';
 
 export class PhysicsController {
@@ -62,70 +59,56 @@ export class PhysicsController {
         );
     }
 
-    update(deltaTime: number): void {
-        try {
-            // Get input from vehicle's input manager
-            const input: PhysicsInput = this.vehicle.inputManager?.getInput() || {
-                up: false,
-                down: false,
-                left: false,
-                right: false,
-                pitchUp: false,
-                pitchDown: false,
-                rollLeft: false,
-                rollRight: false,
-                fire: false,
-                zoom: false,
-                mouseDelta: { x: 0, y: 0 }
-            };
+    public update(deltaTime: number, input: PhysicsInput): void {
+        // Ensure input is properly initialized
+        const defaultInput: PhysicsInput = {
+            forward: false,
+            backward: false,
+            left: false,
+            right: false,
+            up: false,
+            down: false,
+            pitchUp: false,
+            pitchDown: false,
+            yawLeft: false,
+            yawRight: false,
+            rollLeft: false,
+            rollRight: false,
+            mouseDelta: { x: 0, y: 0 }
+        };
 
-            // Update spring simulators
-            this.aileronSimulator.simulate(deltaTime);
-            this.elevatorSimulator.simulate(deltaTime);
-            this.rudderSimulator.simulate(deltaTime);
-            this.steeringSimulator.simulate(deltaTime);
+        // Merge provided input with defaults
+        const mergedInput = { ...defaultInput, ...input };
 
-            // Apply input to physics world
-            this.physicsWorld.applyInput(this.vehicle.id, input);
+        // Update spring simulators
+        this.aileronSimulator.simulate(deltaTime);
+        this.elevatorSimulator.simulate(deltaTime);
+        this.rudderSimulator.simulate(deltaTime);
+        this.steeringSimulator.simulate(deltaTime);
 
-            // Sync Babylon.js mesh with physics body
-            if (this.vehicle.mesh) {
-                const state = this.physicsWorld.getState(this.vehicle.id);
-                if (state) {
-                    // Update position
-                    this.vehicle.mesh.position.set(
-                        state.position.x,
-                        state.position.y,
-                        state.position.z
-                    );
-                    
-                    // Update rotation using quaternion
-                    if (!this.vehicle.mesh.rotationQuaternion) {
-                        this.vehicle.mesh.rotationQuaternion = new Quaternion();
-                    }
-                    this.vehicle.mesh.rotationQuaternion = new Quaternion(
-                        state.quaternion.x,
-                        state.quaternion.y,
-                        state.quaternion.z,
-                        state.quaternion.w
-                    );
-                }
+        // Update physics controller
+        this.controller.update(deltaTime, mergedInput);
+
+        // Sync mesh with physics body
+        if (this.vehicle.mesh) {
+            const state = this.controller.getState();
+            if (state) {
+                this.vehicle.mesh.position.copyFrom(state.position);
+                this.vehicle.mesh.rotationQuaternion = state.quaternion;
             }
-        } catch (error) {
-            console.error('Physics update error:', error);
         }
     }
 
-    getState(): PhysicsState | null {
-        return this.physicsWorld.getState(this.vehicle.id);
+    public getState(): PhysicsState | null {
+        return this.controller.getState();
     }
 
-    setState(state: PhysicsState): void {
-        this.physicsWorld.addState(this.vehicle.id, state);
+    public setState(state: PhysicsState): void {
+        this.controller.setState(state);
     }
 
-    cleanup(): void {
-        this.physicsWorld.removeVehicle(this.vehicle.id);
+    public dispose(): void {
+        // Cleanup is handled by the physics world
     }
 
     // Add getters for control surface positions

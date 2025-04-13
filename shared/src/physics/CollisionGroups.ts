@@ -16,8 +16,8 @@ export interface CollisionMasks {
 }
 
 export const collisionMasks: CollisionMasks = {
-    Drone: CollisionGroups.Environment | CollisionGroups.Projectiles | CollisionGroups.Flags,
-    Plane: CollisionGroups.Environment | CollisionGroups.Projectiles | CollisionGroups.Flags,
+    Drone: CollisionGroups.Environment | CollisionGroups.Projectiles | CollisionGroups.Flags | CollisionGroups.Planes,
+    Plane: CollisionGroups.Environment | CollisionGroups.Projectiles | CollisionGroups.Flags | CollisionGroups.Drones,
     Projectile: CollisionGroups.Drones | CollisionGroups.Planes | CollisionGroups.Environment,
     Flag: CollisionGroups.Drones | CollisionGroups.Planes
 }; 

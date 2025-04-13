@@ -1,29 +1,16 @@
-import { Engine, Scene, Vector3, Quaternion, CannonJSPlugin } from 'babylonjs';
+import { Engine, Scene, Vector3, Mesh, Quaternion, CannonJSPlugin, MeshBuilder, StandardMaterial, Color3 } from 'babylonjs';
 import * as CANNON from 'cannon';
-import { PhysicsState } from '../types';
 import { CollisionGroups, collisionMasks } from './CollisionGroups';
-
-interface CollisionEvent {
-    bodyA: CANNON.Body;
-    bodyB: CANNON.Body;
-    contact: {
-        getImpactVelocityAlongNormal: () => number;
-        getNormal: () => CANNON.Vec3;
-    };
-}
-
-interface VehicleCollisionEvent {
-    contact: {
-        getImpactVelocityAlongNormal: () => number;
-    };
-}
+import { CollisionEvent, VehicleCollisionEvent, PhysicsState } from './types';
+import { PhysicsImpostor } from 'babylonjs';
 
 export class PhysicsWorld {
     private engine: Engine;
     private scene: Scene;
     private world: CANNON.World;
     private bodies: Map<string, CANNON.Body> = new Map();
-    private groundBody: CANNON.Body;
+    private groundBody!: CANNON.Body;
+    private groundMesh!: Mesh;
     private collisionCallbacks: Map<string, (event: CollisionEvent) => void> = new Map();
 
     constructor(engine: Engine, scene: Scene) {
@@ -37,7 +24,7 @@ export class PhysicsWorld {
         this.world = new CANNON.World();
         this.world.gravity.set(0, -9.81, 0);
         this.world.broadphase = new CANNON.NaiveBroadphase();
-        this.world.solver.iterations = 7;
+        this.world.solver.iterations = 10;
         
         // Create materials
         const groundMaterial = new CANNON.Material('groundMaterial');
@@ -49,28 +36,50 @@ export class PhysicsWorld {
             vehicleMaterial,
             {
                 friction: 0.5,
-                restitution: 0.7
+                restitution: 0.3
             }
         );
         this.world.addContactMaterial(groundVehicleContactMaterial);
-        this.world.defaultContactMaterial.friction = 0.5;
-        this.world.defaultContactMaterial.restitution = 0.7;
 
-        // Create ground plane
-        const groundShape = new CANNON.Plane();
-        this.groundBody = new CANNON.Body({
-            mass: 0,
-            material: groundMaterial,
-            collisionFilterGroup: CollisionGroups.Environment,
-            collisionFilterMask: CollisionGroups.Drones | CollisionGroups.Planes
-        });
-        this.groundBody.addShape(groundShape);
-        this.groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
-        this.world.addBody(this.groundBody);
-
+        // Create ground
+        this.createGround(groundMaterial);
+        
         // Add collision event listeners
         this.world.addEventListener('beginContact', (event: CollisionEvent) => {
-            this.handleCollision(event);
+            const isGroundCollision = event.bodyA === this.groundBody || event.bodyB === this.groundBody;
+            if (isGroundCollision) {
+                const vehicleBody = event.bodyA === this.groundBody ? event.bodyB : event.bodyA;
+                const impactVelocity = event.contact.getImpactVelocityAlongNormal();
+                
+                console.log('Ground collision:', {
+                    vehicleId: vehicleBody.id,
+                    impactVelocity,
+                    vehiclePosition: vehicleBody.position,
+                    groundPosition: this.groundBody.position,
+                    vehicleVelocity: vehicleBody.velocity,
+                    contactPoint: event.contact.ri
+                });
+
+                // Calculate collision normal from contact points
+                const normal = new CANNON.Vec3();
+                normal.copy(event.contact.ri);
+                normal.normalize();
+                
+                // Calculate reflection vector
+                const dot = vehicleBody.velocity.dot(normal);
+                const reflection = vehicleBody.velocity.vsub(normal.scale(2 * dot));
+                
+                // Apply collision response with damping
+                vehicleBody.velocity.copy(reflection.scale(0.5));
+                
+                // Add some random torque for visual effect
+                const randomTorque = new CANNON.Vec3(
+                    (Math.random() - 0.5) * impactVelocity,
+                    (Math.random() - 0.5) * impactVelocity,
+                    (Math.random() - 0.5) * impactVelocity
+                );
+                vehicleBody.angularVelocity.vadd(randomTorque, vehicleBody.angularVelocity);
+            }
         });
     }
 
@@ -90,6 +99,67 @@ export class PhysicsWorld {
         });
     }
 
+    private createGround(groundMaterial: CANNON.Material): void {
+        // Create ground plane
+        const groundShape = new CANNON.Plane();
+        this.groundBody = new CANNON.Body({
+            mass: 0,
+            material: groundMaterial,
+            collisionFilterGroup: CollisionGroups.Environment,
+            collisionFilterMask: CollisionGroups.Drones | CollisionGroups.Planes,
+            position: new CANNON.Vec3(0, 0, 0)
+        });
+        this.groundBody.addShape(groundShape);
+        this.groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
+        this.world.addBody(this.groundBody);
+
+        console.log('Ground body created:', {
+            collisionGroup: this.groundBody.collisionFilterGroup,
+            collisionMask: this.groundBody.collisionFilterMask,
+            position: this.groundBody.position,
+            quaternion: this.groundBody.quaternion,
+            shape: this.groundBody.shapes[0]?.type
+        });
+
+        // Create ground mesh if we have a scene
+        if (this.scene) {
+            this.groundMesh = MeshBuilder.CreateGround("ground", {
+                width: 200,
+                height: 200,
+                subdivisions: 1
+            }, this.scene);
+
+            const groundMaterial = new StandardMaterial("groundMaterial", this.scene);
+            groundMaterial.diffuseColor = new Color3(0.2, 0.2, 0.8); // Blue color
+            groundMaterial.specularColor = new Color3(0.1, 0.1, 0.1);
+            groundMaterial.alpha = 0.8; // Slightly transparent
+            this.groundMesh.material = groundMaterial;
+            this.groundMesh.position.y = 0;
+            this.groundMesh.checkCollisions = true;
+            this.groundMesh.receiveShadows = true;
+
+            // Add collision shape to mesh
+            this.groundMesh.physicsImpostor = new PhysicsImpostor(
+                this.groundMesh,
+                PhysicsImpostor.BoxImpostor,
+                { 
+                    mass: 0, 
+                    restitution: 0.3, 
+                    friction: 0.5
+                },
+                this.scene
+            );
+
+            console.log('Ground mesh created:', {
+                size: { width: 200, height: 200 },
+                position: this.groundMesh.position,
+                hasMaterial: !!this.groundMesh.material,
+                hasPhysicsImpostor: !!this.groundMesh.physicsImpostor,
+                physicsImpostorType: this.groundMesh.physicsImpostor?.type
+            });
+        }
+    }
+
     private handleCollision(event: CollisionEvent): void {
         const bodyA = event.bodyA;
         const bodyB = event.bodyB;
@@ -102,6 +172,16 @@ export class PhysicsWorld {
 
         if (isGroundCollision && vehicleBody) {
             const impactVelocity = event.contact.getImpactVelocityAlongNormal();
+            console.log('Ground collision:', {
+                vehicleId: vehicleBody.id,
+                impactVelocity,
+                vehiclePosition: vehicleBody.position,
+                groundPosition: this.groundBody.position,
+                vehicleVelocity: vehicleBody.velocity,
+                contactPoint: event.contact.ri
+            });
+            
+            // Apply bounce and friction
             if (Math.abs(impactVelocity) > 5) {
                 // Find the vehicle ID for this body
                 for (const [id, body] of this.bodies.entries()) {
@@ -140,27 +220,115 @@ export class PhysicsWorld {
     }
 
     public update(deltaTime: number) {
-        this.world.step(Math.min(deltaTime, 1/60));
+        // Use smaller time steps for better stability
+        const stepSize = 1/60;
+        const steps = Math.ceil(deltaTime / stepSize);
+        for (let i = 0; i < steps; i++) {
+            this.world.step(stepSize);
+        }
+        
+        // Sync ground mesh with physics body if we have a scene
+        if (this.scene && this.groundMesh) {
+            this.groundMesh.position.set(
+                this.groundBody.position.x,
+                this.groundBody.position.y,
+                this.groundBody.position.z
+            );
+            
+            if (this.groundBody.quaternion) {
+                this.groundMesh.rotationQuaternion = new Quaternion(
+                    this.groundBody.quaternion.x,
+                    this.groundBody.quaternion.y,
+                    this.groundBody.quaternion.z,
+                    this.groundBody.quaternion.w
+                );
+            }
+        }
     }
 
     public createVehicle(id: string, config: any): CANNON.Body {
+        // Get spawn point based on team
+        const spawnPoint = this.getTeamSpawnPoint(config.team);
+        
+        // Create vehicle body with proper collision filters
+        const vehicleGroup = config.vehicleType === 'drone' ? CollisionGroups.Drones : CollisionGroups.Planes;
+        const vehicleMask = collisionMasks[config.vehicleType === 'drone' ? 'Drone' : 'Plane'];
+        
+        console.log('Creating vehicle body:', {
+            id,
+            type: config.vehicleType,
+            collisionGroup: vehicleGroup,
+            collisionMask: vehicleMask,
+            spawnPoint
+        });
+
         const body = new CANNON.Body({
             mass: config.mass || 50,
-            position: new CANNON.Vec3(0, 2, 0),
+            position: new CANNON.Vec3(spawnPoint.x, spawnPoint.y, spawnPoint.z),
             shape: new CANNON.Box(new CANNON.Vec3(0.5, 0.15, 0.5)),
             material: new CANNON.Material('vehicleMaterial'),
-            collisionFilterGroup: config.vehicleType === 'drone' ? CollisionGroups.Drones : CollisionGroups.Planes,
-            collisionFilterMask: collisionMasks[config.vehicleType === 'drone' ? 'Drone' : 'Plane']
+            collisionFilterGroup: vehicleGroup,
+            collisionFilterMask: vehicleMask,
+            fixedRotation: false,
+            linearDamping: 0.5,
+            angularDamping: 0.5,
+            type: CANNON.Body.DYNAMIC
         });
 
         // Add collision event listeners for this vehicle
         body.addEventListener('collide', (event: VehicleCollisionEvent) => {
-            this.handleVehicleCollision(id, event);
+            const impactVelocity = event.contact.getImpactVelocityAlongNormal();
+            const isGroundCollision = event.body === this.groundBody;
+            
+            console.log(`Vehicle ${id} collision detected:`, {
+                withBody: isGroundCollision ? 'ground' : 'other',
+                impactVelocity,
+                contactPoint: event.contact.ri,
+                vehiclePosition: body.position,
+                vehicleVelocity: body.velocity
+            });
+
+            if (isGroundCollision) {
+                // Calculate collision normal from contact points
+                const normal = new CANNON.Vec3();
+                normal.copy(event.contact.ri);
+                normal.normalize();
+                
+                // Calculate reflection vector
+                const dot = body.velocity.dot(normal);
+                const reflection = body.velocity.vsub(normal.scale(2 * dot));
+                
+                // Apply collision response with damping
+                body.velocity.copy(reflection.scale(0.5));
+                
+                // Add some random torque for visual effect
+                const randomTorque = new CANNON.Vec3(
+                    (Math.random() - 0.5) * impactVelocity,
+                    (Math.random() - 0.5) * impactVelocity,
+                    (Math.random() - 0.5) * impactVelocity
+                );
+                body.angularVelocity.vadd(randomTorque, body.angularVelocity);
+            }
         });
 
         this.world.addBody(body);
         this.bodies.set(id, body);
+
+        console.log('Vehicle body added to world:', {
+            id,
+            position: body.position,
+            collisionGroup: body.collisionFilterGroup,
+            collisionMask: body.collisionFilterMask,
+            hasCollisionListener: true
+        });
+
         return body;
+    }
+
+    private getTeamSpawnPoint(team: number): { x: number, y: number, z: number } {
+        return team === 0 
+            ? { x: -20, y: 10, z: 0 }  // Team A spawn, higher up
+            : { x: 20, y: 10, z: 0 };  // Team B spawn, higher up
     }
 
     private handleVehicleCollision(id: string, event: VehicleCollisionEvent): void {
@@ -210,5 +378,18 @@ export class PhysicsWorld {
         
         // Remove ground body
         this.world.remove(this.groundBody);
+
+        // Dispose of ground mesh if we have a scene
+        if (this.scene && this.groundMesh) {
+            this.groundMesh.dispose();
+        }
+    }
+
+    public getGroundBody(): CANNON.Body {
+        return this.groundBody;
+    }
+
+    public getGroundMesh(): any {
+        return this.groundMesh;
     }
 } 
