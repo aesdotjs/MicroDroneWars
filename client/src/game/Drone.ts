@@ -151,6 +151,12 @@ export class Drone extends Vehicle {
         this.mesh.position = new Vector3(0, 5, 0);
         this.mesh.isVisible = true;
         this.mesh.checkCollisions = true;
+        this.mesh.receiveShadows = true;
+
+        // Make all child meshes cast shadows
+        this.propellers.forEach(prop => {
+            prop.receiveShadows = true;
+        });
 
         // Initialize rotation quaternion
         this.mesh.rotationQuaternion = new Quaternion();
@@ -193,7 +199,7 @@ export class Drone extends Vehicle {
 
                 // Try to load texture, fallback to solid color if fails
                 try {
-                    thruster.particleTexture = new Texture("assets/textures/flare.png", scene);
+                    thruster.particleTexture = new Texture("/assets/textures/flare.png", scene);
                 } catch (textureError) {
                     console.warn(`Failed to load texture for ${name}, using solid color:`, textureError);
                     thruster.particleTexture = null;

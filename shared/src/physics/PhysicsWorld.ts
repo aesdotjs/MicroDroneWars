@@ -130,8 +130,11 @@ export class PhysicsWorld {
             }, this.scene);
 
             const groundMaterial = new StandardMaterial("groundMaterial", this.scene);
-            groundMaterial.diffuseColor = new Color3(0.2, 0.2, 0.8); // Blue color
+            groundMaterial.diffuseColor = new Color3(0.3, 0.3, 0.3); // Grey color
             groundMaterial.specularColor = new Color3(0.1, 0.1, 0.1);
+            groundMaterial.specularPower = 64;
+            groundMaterial.ambientColor = new Color3(0.3, 0.3, 0.3); // Add ambient color
+            
             this.groundMesh.material = groundMaterial;
             this.groundMesh.position.y = 0;
             this.groundMesh.checkCollisions = true;

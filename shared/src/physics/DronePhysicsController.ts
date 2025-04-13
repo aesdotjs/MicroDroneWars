@@ -6,11 +6,14 @@ import { BasePhysicsController } from './BasePhysicsController';
 export class DronePhysicsController extends BasePhysicsController {
     protected config: VehiclePhysicsConfig;
     private momentumDamping: number = 0.99;
-    private moveSpeed: number = 0.1;
-    private rotationSpeed: number = 0.02; // Reduced from 0.1 for less sensitive keyboard controls
+    private moveSpeed: number = 0.05;
+    private rotationSpeed: number = 0.005; // Reduced from 0.1 for less sensitive keyboard controls
     private mouseSensitivity: number = 0.002; // Reduced sensitivity for smoother movement
     private integralError: number = 0;
-    private targetAltitude: number = 0;
+    private targetAltitude: number = 10;
+    private rollStabilizationStrength: number = 5.0; // Strength of auto-stabilization
+    private maxRollAngle: number = Math.PI / 4; // Maximum allowed roll angle (45 degrees)
+    private maxPitchAngle: number = Math.PI / 2.5; // Maximum pitch angle (about 72 degrees)
 
     constructor(world: CANNON.World, config: VehiclePhysicsConfig) {
         super(world, config);
@@ -18,8 +21,48 @@ export class DronePhysicsController extends BasePhysicsController {
         this.config = config;
     }
 
+    private applyStabilization(deltaTime: number): void {
+        const { right, up, forward } = this.getOrientationVectors();
+        
+        // Get current orientation
+        const currentUp = new Vector3(up.x, up.y, up.z);
+        const targetUp = new Vector3(0, 1, 0);
+        
+        // Calculate roll angle
+        const rightDotUp = Vector3.Dot(new Vector3(right.x, right.y, right.z), targetUp);
+        const rollAngle = Math.asin(rightDotUp);
+        
+        // Calculate pitch angle
+        const forwardFlat = new Vector3(forward.x, 0, forward.z).normalize();
+        const pitchAngle = Math.acos(Vector3.Dot(new Vector3(forward.x, forward.y, forward.z), forwardFlat));
+        
+        // Apply roll stabilization
+        if (Math.abs(rollAngle) > 0.01) {
+            const rollCorrection = -rollAngle * this.rollStabilizationStrength * deltaTime;
+            const rollAxis = new Vector3(forward.x, forward.y, forward.z);
+            const rollQuat = new CANNON.Quaternion();
+            rollQuat.setFromAxisAngle(new CANNON.Vec3(rollAxis.x, rollAxis.y, rollAxis.z), rollCorrection);
+            this.body.quaternion = this.body.quaternion.mult(rollQuat);
+        }
+        
+        // Limit maximum pitch angle
+        if (Math.abs(pitchAngle) > this.maxPitchAngle) {
+            const correction = (Math.abs(pitchAngle) - this.maxPitchAngle) * Math.sign(pitchAngle);
+            const pitchCorrection = -correction * deltaTime * 2.0;
+            const pitchQuat = new CANNON.Quaternion();
+            pitchQuat.setFromAxisAngle(new CANNON.Vec3(right.x, right.y, right.z), pitchCorrection);
+            this.body.quaternion = this.body.quaternion.mult(pitchQuat);
+        }
+        
+        // Apply additional damping to angular velocity
+        this.body.angularVelocity.scale(0.95, this.body.angularVelocity);
+    }
+
     public update(deltaTime: number, input: PhysicsInput): void {
         const { right, up, forward } = this.getOrientationVectors();
+
+        // Apply stabilization first
+        this.applyStabilization(deltaTime);
 
         // Calculate velocity and speed
         const velocity = new Vector3(this.body.velocity.x, this.body.velocity.y, this.body.velocity.z);
@@ -30,13 +73,9 @@ export class DronePhysicsController extends BasePhysicsController {
         const gravityForce = new Vector3(-gravity.x, -gravity.y, -gravity.z);
         
         // Dynamic target altitude - maintain current height when not actively moving
-        if (input.up) {
+        if (input.up || input.down) {
             // When actively moving up/down, update target altitude
             this.targetAltitude = this.body.position.y + this.body.velocity.y * deltaTime;
-        }
-        if (input.down) {
-            // When actively moving up/down, update target altitude
-            this.targetAltitude = this.body.position.y - this.body.velocity.y * deltaTime;
         }
         
         // Calculate altitude error
@@ -79,22 +118,22 @@ export class DronePhysicsController extends BasePhysicsController {
         
         // Forward/backward movement (relative to vehicle's yaw)
         if (input.forward) {
-            this.body.velocity.x += forwardDirection.x * moveSpeed * 0.5;
-            this.body.velocity.z += forwardDirection.z * moveSpeed * 0.5;
+            this.body.velocity.x += forwardDirection.x * moveSpeed;
+            this.body.velocity.z += forwardDirection.z * moveSpeed;
         }
         if (input.backward) {
-            this.body.velocity.x -= forwardDirection.x * moveSpeed * 0.5;
-            this.body.velocity.z -= forwardDirection.z * moveSpeed * 0.5;
+            this.body.velocity.x -= forwardDirection.x * moveSpeed;
+            this.body.velocity.z -= forwardDirection.z * moveSpeed;
         }
 
         // Left/right strafing (relative to vehicle's yaw)
         if (input.left) {
-            this.body.velocity.x -= rightDirection.x * moveSpeed * 0.5;
-            this.body.velocity.z -= rightDirection.z * moveSpeed * 0.5;
+            this.body.velocity.x -= rightDirection.x * moveSpeed;
+            this.body.velocity.z -= rightDirection.z * moveSpeed;
         }
         if (input.right) {
-            this.body.velocity.x += rightDirection.x * moveSpeed * 0.5;
-            this.body.velocity.z += rightDirection.z * moveSpeed * 0.5;
+            this.body.velocity.x += rightDirection.x * moveSpeed;
+            this.body.velocity.z += rightDirection.z * moveSpeed;
         }
 
         // Vertical movement (using global up direction)
@@ -105,48 +144,57 @@ export class DronePhysicsController extends BasePhysicsController {
             this.body.velocity.y -= moveSpeed;
         }
 
-        // Apply pitch control (keyboard only) - reduced sensitivity
-        if (input.pitchUp) {
-            this.body.angularVelocity.x -= right.x * this.rotationSpeed * 0.5;
-            this.body.angularVelocity.y -= right.y * this.rotationSpeed * 0.5;
-            this.body.angularVelocity.z -= right.z * this.rotationSpeed * 0.5;
-        }
-        if (input.pitchDown) {
-            this.body.angularVelocity.x += right.x * this.rotationSpeed * 0.5;
-            this.body.angularVelocity.y += right.y * this.rotationSpeed * 0.5;
-            this.body.angularVelocity.z += right.z * this.rotationSpeed * 0.5;
-        }
-
-        // Apply yaw control (keyboard only) - fixed to not affect Z movement
-        if (input.yawLeft) {
-            const yawAmount = -this.rotationSpeed * 0.5;
-            const yawQuat = new CANNON.Quaternion();
-            yawQuat.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), yawAmount);
-            this.body.quaternion.mult(yawQuat, this.body.quaternion);
-        }
-        if (input.yawRight) {
-            const yawAmount = this.rotationSpeed * 0.5;
-            const yawQuat = new CANNON.Quaternion();
-            yawQuat.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), yawAmount);
-            this.body.quaternion.mult(yawQuat, this.body.quaternion);
+        // Apply pitch control (keyboard only) - using quaternion multiplication
+        if (input.pitchUp || input.pitchDown) {
+            // Calculate current pitch angle
+            const currentPitch = Math.asin(2 * (
+                this.body.quaternion.w * this.body.quaternion.x -
+                this.body.quaternion.y * this.body.quaternion.z
+            ));
+            
+            // Only apply pitch if within limits
+            const pitchAmount = input.pitchUp ? -this.rotationSpeed : this.rotationSpeed;
+            if (Math.abs(currentPitch + pitchAmount) < this.maxPitchAngle) {
+                const pitchQuat = new CANNON.Quaternion();
+                pitchQuat.setFromAxisAngle(new CANNON.Vec3(right.x, right.y, right.z), pitchAmount);
+                this.body.quaternion = pitchQuat.mult(this.body.quaternion);
+            }
         }
 
-        // Apply mouse control (direct rotation)
+        // Apply yaw control (keyboard only) - using quaternion multiplication
+        if (input.yawLeft || input.yawRight) {
+            const yawAmount = input.yawLeft ? -this.rotationSpeed : this.rotationSpeed;
+            const yawQuat = new CANNON.Quaternion();
+            yawQuat.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), yawAmount);
+            this.body.quaternion = yawQuat.mult(this.body.quaternion);
+        }
+
+        // Modified mouse control to use quaternion-based rotation
         if (input.mouseDelta) {
             // Yaw (horizontal mouse movement)
             if (input.mouseDelta.x !== 0) {
                 const yawAmount = input.mouseDelta.x * this.mouseSensitivity;
                 const yawQuat = new CANNON.Quaternion();
                 yawQuat.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), yawAmount);
-                this.body.quaternion.mult(yawQuat, this.body.quaternion);
+                this.body.quaternion = yawQuat.mult(this.body.quaternion);
             }
 
-            // Pitch (vertical mouse movement)
+            // Pitch (vertical mouse movement) with angle limiting
             if (input.mouseDelta.y !== 0) {
                 const pitchAmount = input.mouseDelta.y * this.mouseSensitivity;
-                const pitchQuat = new CANNON.Quaternion();
-                pitchQuat.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), pitchAmount);
-                this.body.quaternion.mult(pitchQuat, this.body.quaternion);
+                
+                // Calculate current pitch angle
+                const currentPitch = Math.asin(2 * (
+                    this.body.quaternion.w * this.body.quaternion.x -
+                    this.body.quaternion.y * this.body.quaternion.z
+                ));
+                
+                // Only apply pitch if within limits
+                if (Math.abs(currentPitch + pitchAmount) < this.maxPitchAngle) {
+                    const pitchQuat = new CANNON.Quaternion();
+                    pitchQuat.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), pitchAmount);
+                    this.body.quaternion = this.body.quaternion.mult(pitchQuat);
+                }
             }
         }
 
