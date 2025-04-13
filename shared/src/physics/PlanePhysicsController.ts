@@ -5,7 +5,6 @@ import { BasePhysicsController } from './BasePhysicsController';
 
 export class PlanePhysicsController extends BasePhysicsController {
     protected config: VehiclePhysicsConfig;
-    private lastDrag: number = 0;
     protected enginePower: number = 0;
 
     constructor(world: CANNON.World, config: VehiclePhysicsConfig) {
@@ -106,20 +105,7 @@ export class PlanePhysicsController extends BasePhysicsController {
         }
 
         // Apply mouse control
-        if (input.mouseDelta) {
-            if (input.mouseDelta.x !== 0) {
-                const mouseXEffect = input.mouseDelta.x * 0.005;
-                this.body.angularVelocity.x += up.x * mouseXEffect;
-                this.body.angularVelocity.y += up.y * mouseXEffect;
-                this.body.angularVelocity.z += up.z * mouseXEffect;
-            }
-            if (input.mouseDelta.y !== 0) {
-                const mouseYEffect = input.mouseDelta.y * 0.005;
-                this.body.angularVelocity.x += right.x * mouseYEffect;
-                this.body.angularVelocity.y += right.y * mouseYEffect;
-                this.body.angularVelocity.z += right.z * mouseYEffect;
-            }
-        }
+        this.applyMouseControl(input, right, up);
 
         // Thrust
         let speedModifier = 0.02;
@@ -147,15 +133,10 @@ export class PlanePhysicsController extends BasePhysicsController {
         this.body.velocity.y += up.y * lift;
         this.body.velocity.z += up.z * lift;
 
-        // Angular damping
-        this.body.angularVelocity.x = this.body.angularVelocity.x * (1 - 0.02 * flightModeInfluence);
-        this.body.angularVelocity.y = this.body.angularVelocity.y * (1 - 0.02 * flightModeInfluence);
-        this.body.angularVelocity.z = this.body.angularVelocity.z * (1 - 0.02 * flightModeInfluence);
+        // Apply angular damping with flight mode influence
+        this.applyAngularDamping(1 - 0.02 * flightModeInfluence);
 
-        // Add damping to prevent continuous rotation
-        const mouseDamping = 0.95;
-        this.body.angularVelocity.x *= mouseDamping;
-        this.body.angularVelocity.y *= mouseDamping;
-        this.body.angularVelocity.z *= mouseDamping;
+        // Add extra damping to prevent continuous rotation
+        this.applyAngularDamping(0.95);
     }
 } 

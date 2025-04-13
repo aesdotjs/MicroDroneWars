@@ -13,6 +13,9 @@ export abstract class BasePhysicsController {
     protected rudderSimulator: SpringSimulator;
     protected steeringSimulator: SpringSimulator;
     protected enginePower: number = 0;
+    protected maxEnginePower: number = 1.0;
+    protected enginePowerChangeRate: number = 0.2;
+    protected lastDrag: number = 0;
 
     constructor(world: CANNON.World, config: PhysicsConfig) {
         this.world = world;
@@ -101,11 +104,10 @@ export abstract class BasePhysicsController {
     }
 
     protected updateEnginePower(input: PhysicsInput): void {
-        // Update engine power based on input
         if (input.up) {
-            this.enginePower = Math.min(this.enginePower + 0.1, 1.0);
+            this.enginePower = Math.min(this.enginePower + this.enginePowerChangeRate, this.maxEnginePower);
         } else if (input.down) {
-            this.enginePower = Math.max(this.enginePower - 0.1, 0.0);
+            this.enginePower = Math.max(this.enginePower - this.enginePowerChangeRate, 0);
         }
     }
 
@@ -114,7 +116,6 @@ export abstract class BasePhysicsController {
         const right = new Vector3(1, 0, 0);
         const up = new Vector3(0, 1, 0);
         
-        // Transform vectors by body's quaternion
         const quaternion = new Quaternion(
             this.body.quaternion.x,
             this.body.quaternion.y,
@@ -127,6 +128,29 @@ export abstract class BasePhysicsController {
         up.rotateByQuaternionAroundPointToRef(quaternion, Vector3.Zero(), up);
         
         return { forward, right, up };
+    }
+
+    protected applyMouseControl(input: PhysicsInput, right: Vector3, up: Vector3): void {
+        if (input.mouseDelta) {
+            if (input.mouseDelta.x !== 0) {
+                const mouseXEffect = input.mouseDelta.x * 0.005;
+                this.body.angularVelocity.x += up.x * mouseXEffect;
+                this.body.angularVelocity.y += up.y * mouseXEffect;
+                this.body.angularVelocity.z += up.z * mouseXEffect;
+            }
+            if (input.mouseDelta.y !== 0) {
+                const mouseYEffect = input.mouseDelta.y * 0.005;
+                this.body.angularVelocity.x += right.x * mouseYEffect;
+                this.body.angularVelocity.y += right.y * mouseYEffect;
+                this.body.angularVelocity.z += right.z * mouseYEffect;
+            }
+        }
+    }
+
+    protected applyAngularDamping(damping: number = 0.97): void {
+        this.body.angularVelocity.x *= damping;
+        this.body.angularVelocity.y *= damping;
+        this.body.angularVelocity.z *= damping;
     }
 
     getBody(): CANNON.Body {

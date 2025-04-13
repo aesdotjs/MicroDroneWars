@@ -46,7 +46,7 @@ export class Game {
         this.engine = new Engine(this.canvas, true);
         
         // Create the game scene with the engine
-        this.gameScene = new GameScene(this.canvas, this.engine);
+        this.gameScene = new GameScene(this.engine, this);
 
         // Connect to the server
         this.client = new Colyseus.Client('ws://localhost:2567');
@@ -60,8 +60,11 @@ export class Game {
         });
 
         // Start the render loop
+        console.log('Starting render loop...');
         this.engine.runRenderLoop(() => {
-            this.gameScene.render();
+            if (this.gameScene) {
+                this.gameScene.render();
+            }
         });
     }
 
@@ -83,47 +86,74 @@ export class Game {
 
         // Handle vehicle updates
         this.room.state.vehicles.onAdd((vehicle: VehicleSchema, sessionId: string) => {
-            console.log('Vehicle added:', sessionId);
+            console.log('Vehicle added to room:', { sessionId, vehicleType: vehicle.vehicleType, team: vehicle.team });
             
+            // Validate vehicle type
+            if (!vehicle.vehicleType) {
+                console.error('Invalid vehicle type:', vehicle);
+                return;
+            }
+
             // Create vehicle in the game scene
             const isLocalPlayer = sessionId === this.room?.sessionId;
-            let gameVehicle;
+            let gameVehicle: Drone | Plane | undefined;
             
-            if (vehicle instanceof DroneSchema) {
-                gameVehicle = new Drone(this.gameScene.getScene(), vehicle.vehicleType, vehicle.team, this.canvas, isLocalPlayer);
-            } else if (vehicle instanceof PlaneSchema) {
-                gameVehicle = new Plane(this.gameScene.getScene(), vehicle.vehicleType, vehicle.team, this.canvas, isLocalPlayer);
-            }
-            
-            if (gameVehicle) {
-                this.gameScene.addVehicle(sessionId, gameVehicle);
+            try {
+                if (vehicle.vehicleType === 'drone') {
+                    console.log('Creating drone vehicle...');
+                    gameVehicle = new Drone(this.gameScene.getScene(), 'drone', vehicle.team, this.canvas, isLocalPlayer);
+                    gameVehicle.initialize(this.gameScene.getScene(), this.gameScene.getPhysicsWorld());
+                } else if (vehicle.vehicleType === 'plane') {
+                    console.log('Creating plane vehicle...');
+                    gameVehicle = new Plane(this.gameScene.getScene(), 'plane', vehicle.team, this.canvas, isLocalPlayer);
+                    gameVehicle.initialize(this.gameScene.getScene(), this.gameScene.getPhysicsWorld());
+                } else {
+                    console.error('Unknown vehicle type:', vehicle.vehicleType);
+                    return;
+                }
+                
+                if (gameVehicle) {
+                    console.log('Vehicle created:', {
+                        id: gameVehicle.id,
+                        type: gameVehicle.type,
+                        team: gameVehicle.team,
+                        isLocalPlayer,
+                        hasMesh: !!gameVehicle.mesh,
+                        meshPosition: gameVehicle.mesh?.position,
+                        hasPhysics: !!gameVehicle.physics
+                    });
 
-                // Set initial position and rotation from server state
-                const physicsState: PhysicsState = {
-                    position: new Vector3(vehicle.positionX, vehicle.positionY, vehicle.positionZ),
-                    quaternion: new Quaternion(vehicle.quaternionX, vehicle.quaternionY, vehicle.quaternionZ, vehicle.quaternionW),
-                    linearVelocity: new Vector3(vehicle.linearVelocityX, vehicle.linearVelocityY, vehicle.linearVelocityZ),
-                    angularVelocity: new Vector3(vehicle.angularVelocityX, vehicle.angularVelocityY, vehicle.angularVelocityZ)
-                };
-                gameVehicle.updateState(physicsState);
+                    this.gameScene.addVehicle(sessionId, gameVehicle);
 
-                // Listen for vehicle updates
-                vehicle.onChange(() => {
-                    if (!isLocalPlayer) {
-                        const updatedState: PhysicsState = {
-                            position: new Vector3(vehicle.positionX, vehicle.positionY, vehicle.positionZ),
-                            quaternion: new Quaternion(vehicle.quaternionX, vehicle.quaternionY, vehicle.quaternionZ, vehicle.quaternionW),
-                            linearVelocity: new Vector3(vehicle.linearVelocityX, vehicle.linearVelocityY, vehicle.linearVelocityZ),
-                            angularVelocity: new Vector3(vehicle.angularVelocityX, vehicle.angularVelocityY, vehicle.angularVelocityZ)
-                        };
-                        gameVehicle.updateState(updatedState);
-                    }
-                });
+                    // Set initial position and rotation from server state
+                    const physicsState: PhysicsState = {
+                        position: new Vector3(vehicle.positionX, vehicle.positionY, vehicle.positionZ),
+                        quaternion: new Quaternion(vehicle.quaternionX, vehicle.quaternionY, vehicle.quaternionZ, vehicle.quaternionW),
+                        linearVelocity: new Vector3(vehicle.linearVelocityX, vehicle.linearVelocityY, vehicle.linearVelocityZ),
+                        angularVelocity: new Vector3(vehicle.angularVelocityX, vehicle.angularVelocityY, vehicle.angularVelocityZ)
+                    };
+                    gameVehicle.updateState(physicsState);
 
-                vehicle.onRemove(() => {
-                    console.log('Vehicle removed:', sessionId);
-                    this.gameScene.removeVehicle(sessionId);
-                });
+                    // Listen for vehicle updates
+                    vehicle.onChange(() => {
+                        if (!isLocalPlayer && gameVehicle) {
+                            const updatedState: PhysicsState = {
+                                position: new Vector3(vehicle.positionX, vehicle.positionY, vehicle.positionZ),
+                                quaternion: new Quaternion(vehicle.quaternionX, vehicle.quaternionY, vehicle.quaternionZ, vehicle.quaternionW),
+                                linearVelocity: new Vector3(vehicle.linearVelocityX, vehicle.linearVelocityY, vehicle.linearVelocityZ),
+                                angularVelocity: new Vector3(vehicle.angularVelocityX, vehicle.angularVelocityY, vehicle.angularVelocityZ)
+                            };
+                            gameVehicle.updateState(updatedState);
+                        }
+                    });
+
+                    vehicle.onRemove(() => {
+                        console.log('Vehicle removed:', sessionId);
+                        this.gameScene.removeVehicle(sessionId);
+                    });
+                }
+            } catch (error) {
+                console.error('Error creating vehicle:', error);
             }
         });
 
@@ -167,7 +197,6 @@ export class Game {
         
         // Only send updates for local player
         if (vehicle.isLocalPlayer) {
-            const quaternion = vehicle.mesh.rotationQuaternion || new Quaternion();
             const input: PhysicsInput = {
                 forward: vehicle.input.forward,
                 backward: vehicle.input.backward,

@@ -5,9 +5,10 @@ import { PhysicsState, PhysicsInput, VehiclePhysicsConfig } from '@shared/physic
 import { BasePhysicsController } from '@shared/physics/BasePhysicsController';
 import { DronePhysicsController } from '@shared/physics/DronePhysicsController';
 import { PlanePhysicsController } from '@shared/physics/PlanePhysicsController';
+import { ClientPhysicsWorld } from '../physics/ClientPhysicsWorld';
 
 export class PhysicsController {
-    private world: CANNON.World;
+    private physicsWorld: ClientPhysicsWorld;
     private controller: BasePhysicsController;
     private vehicle: any; // TODO: Type this properly
     private aileronSimulator: SpringSimulator;
@@ -17,16 +18,10 @@ export class PhysicsController {
     private enginePower: number = 0;
     private lastDrag: number = 0;
 
-    constructor(vehicle: any) {
+    constructor(vehicle: any, physicsWorld: ClientPhysicsWorld) {
         this.vehicle = vehicle;
+        this.physicsWorld = physicsWorld;
         
-        // Initialize physics world
-        this.world = new CANNON.World();
-        this.world.gravity.set(0, -9.81, 0);
-        this.world.broadphase = new CANNON.NaiveBroadphase();
-        this.world.solver.iterations = 7;
-        this.world.defaultContactMaterial.friction = 0.5;
-
         // Initialize spring simulators
         this.aileronSimulator = new SpringSimulator(60, 0.1, 0.3);
         this.elevatorSimulator = new SpringSimulator(60, 0.1, 0.3);
@@ -50,12 +45,6 @@ export class PhysicsController {
             gravity: 9.81
         };
 
-        if (vehicle.vehicleType === 'drone') {
-            this.controller = new DronePhysicsController(this.world, config);
-        } else {
-            this.controller = new PlanePhysicsController(this.world, config);
-        }
-
         // Get initial position from vehicle mesh
         const initialPosition = vehicle.mesh ? 
             new Vector3(
@@ -64,34 +53,13 @@ export class PhysicsController {
                 vehicle.mesh.position.z
             ) : new Vector3(0, 2, 0);
 
-        // Set initial state
-        this.controller.setState({
-            position: initialPosition,
-            quaternion: new Quaternion(0, 0, 0, 1),
-            linearVelocity: new Vector3(0, 0, 0),
-            angularVelocity: new Vector3(0, 0, 0)
-        });
-
-        // Create ground plane
-        const groundShape = new CANNON.Plane();
-        const groundBody = new CANNON.Body({
-            mass: 0,
-            material: new CANNON.Material('groundMaterial')
-        });
-        groundBody.addShape(groundShape);
-        groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
-        this.world.addBody(groundBody);
-
-        // Add contact material for ground-vehicle interaction
-        const contactMaterial = new CANNON.ContactMaterial(
-            groundBody.material,
-            this.controller.getBody().material,
-            {
-                friction: 0.5,
-                restitution: 0.3
-            }
+        // Create controller through physics world
+        this.controller = this.physicsWorld.createVehicle(
+            vehicle.id,
+            vehicle.vehicleType,
+            config,
+            initialPosition
         );
-        this.world.addContactMaterial(contactMaterial);
     }
 
     update(deltaTime: number): void {
@@ -111,21 +79,18 @@ export class PhysicsController {
                 mouseDelta: { x: 0, y: 0 }
             };
 
-            // Update physics world
-            this.world.step(Math.min(deltaTime, 1/60));
-
             // Update spring simulators
             this.aileronSimulator.simulate(deltaTime);
             this.elevatorSimulator.simulate(deltaTime);
             this.rudderSimulator.simulate(deltaTime);
             this.steeringSimulator.simulate(deltaTime);
 
-            // Update physics controller
-            this.controller.update(deltaTime, input);
+            // Apply input to physics world
+            this.physicsWorld.applyInput(this.vehicle.id, input);
 
             // Sync Babylon.js mesh with physics body
             if (this.vehicle.mesh) {
-                const state = this.controller.getState();
+                const state = this.physicsWorld.getState(this.vehicle.id);
                 if (state) {
                     // Update position
                     this.vehicle.mesh.position.set(
@@ -152,17 +117,15 @@ export class PhysicsController {
     }
 
     getState(): PhysicsState | null {
-        return this.controller.getState();
+        return this.physicsWorld.getState(this.vehicle.id);
     }
 
     setState(state: PhysicsState): void {
-        this.controller.setState(state);
+        this.physicsWorld.addState(this.vehicle.id, state);
     }
 
     cleanup(): void {
-        if (this.controller) {
-            this.controller.cleanup();
-        }
+        this.physicsWorld.removeVehicle(this.vehicle.id);
     }
 
     // Add getters for control surface positions

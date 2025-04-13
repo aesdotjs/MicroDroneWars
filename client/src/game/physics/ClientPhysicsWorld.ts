@@ -1,24 +1,23 @@
-import { Vector3, Quaternion } from 'babylonjs';
-import * as CANNON from 'cannon';
+import { Vector3, Quaternion, Engine, Scene } from 'babylonjs';
 import { PhysicsState, PhysicsInput, VehiclePhysicsConfig } from '@shared/physics/types';
 import { BasePhysicsController } from '@shared/physics/BasePhysicsController';
 import { DronePhysicsController } from '@shared/physics/DronePhysicsController';
 import { PlanePhysicsController } from '@shared/physics/PlanePhysicsController';
+import { PhysicsWorld } from '@shared/physics/PhysicsWorld';
 
 export class ClientPhysicsWorld {
-    private world: CANNON.World;
+    private engine: Engine;
+    private scene: Scene;
+    private physicsWorld: PhysicsWorld;
     private controllers: Map<string, BasePhysicsController>;
     private stateBuffer: Map<string, PhysicsState[]>;
     private interpolationDelay: number;
     private lastUpdateTime: number;
 
-    constructor() {
-        this.world = new CANNON.World();
-        this.world.gravity.set(0, -9.81, 0);
-        this.world.broadphase = new CANNON.NaiveBroadphase();
-        this.world.solver.iterations = 7;
-        this.world.defaultContactMaterial.friction = 0.5;
-
+    constructor(engine: Engine, scene: Scene) {
+        this.engine = engine;
+        this.scene = scene;
+        this.physicsWorld = new PhysicsWorld(this.engine, this.scene);
         this.controllers = new Map();
         this.stateBuffer = new Map();
         this.interpolationDelay = 100; // ms
@@ -26,12 +25,13 @@ export class ClientPhysicsWorld {
     }
 
     createVehicle(id: string, type: 'drone' | 'plane', config: VehiclePhysicsConfig, initialPosition: Vector3): BasePhysicsController {
+        console.log('Creating vehicle:', { id, type, initialPosition });
         let controller: BasePhysicsController;
 
         if (type === 'drone') {
-            controller = new DronePhysicsController(this.world, config);
+            controller = new DronePhysicsController(this.physicsWorld.getWorld(), config);
         } else {
-            controller = new PlanePhysicsController(this.world, config);
+            controller = new PlanePhysicsController(this.physicsWorld.getWorld(), config);
         }
 
         // Set initial state
@@ -44,6 +44,7 @@ export class ClientPhysicsWorld {
 
         this.controllers.set(id, controller);
         this.stateBuffer.set(id, []);
+        console.log('Vehicle created successfully:', { id, type, controller });
         return controller;
     }
 
@@ -58,7 +59,7 @@ export class ClientPhysicsWorld {
 
     update(deltaTime: number, input: PhysicsInput): void {
         // Step physics world
-        this.world.step(Math.min(deltaTime, 1/60));
+        this.physicsWorld.update(deltaTime);
 
         // Update all controllers
         this.controllers.forEach(controller => {

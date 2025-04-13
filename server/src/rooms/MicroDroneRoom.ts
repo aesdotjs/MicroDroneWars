@@ -56,6 +56,7 @@ export class MicroDroneRoom extends Room<State> {
         vehicle.team = options.team;
         vehicle.positionX = options.team === 0 ? -15 : 15;
         vehicle.positionZ = 0;
+        vehicle.vehicleType = options.vehicleType;
 
         // Create physics controller for the vehicle
         const config: VehiclePhysicsConfig = {

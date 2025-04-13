@@ -15,7 +15,7 @@ export class ServerPhysicsWorld {
         this.engine = new NullEngine();
 
         this.scene = new Scene(this.engine);
-        this.physicsWorld = new PhysicsWorld(this.engine);
+        this.physicsWorld = new PhysicsWorld(this.engine, this.scene);
 
         // Start the physics update loop
         this.startUpdateLoop();

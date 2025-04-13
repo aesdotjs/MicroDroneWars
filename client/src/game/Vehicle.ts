@@ -2,6 +2,7 @@ import { Vector3, Quaternion, ArcRotateCamera, Mesh, Scene, StandardMaterial, Co
 import { PhysicsController } from './controllers/PhysicsController';
 import { InputManager } from './InputManager';
 import { PhysicsState } from '@shared/physics/types';
+import { ClientPhysicsWorld } from './physics/ClientPhysicsWorld';
 
 export class Vehicle {
     public id!: string;
@@ -12,6 +13,10 @@ export class Vehicle {
     public isLocalPlayer: boolean;
     public type: string;
     public team: number;
+    public input: any = {}; // Property needed for sendMovementUpdate
+    public collisionSphere!: { position: Vector3; radius: number };
+    public health: number = 100;
+    public maxHealth: number = 100;
 
     constructor(scene: Scene, type: string, team: number, canvas: HTMLCanvasElement, isLocalPlayer: boolean = false) {
         this.scene = scene;
@@ -24,20 +29,34 @@ export class Vehicle {
         }
     }
 
-    public initialize(scene: Scene): void {
-        // Create basic mesh for the vehicle
-        this.mesh = Mesh.CreateBox("vehicle", 1, scene);
-        
-        // Set up material based on team
-        const material = new StandardMaterial("vehicleMaterial", scene);
-        material.diffuseColor = this.team === 0 ? new Color3(1, 0, 0) : new Color3(0, 0, 1);
-        this.mesh.material = material;
-
+    public initialize(scene: Scene, physicsWorld: ClientPhysicsWorld): void {
         // Initialize physics
-        this.physics = new PhysicsController(this);
+        this.physics = new PhysicsController(this, physicsWorld);
+
+        // Initialize collision sphere
+        this.collisionSphere = {
+            position: this.mesh.position,
+            radius: 2.0
+        };
+    }
+
+    public takeDamage(amount: number): void {
+        this.health = Math.max(0, this.health - amount);
+        if (this.health <= 0) {
+            this.onDestroyed();
+        }
+    }
+
+    protected onDestroyed(): void {
+        // Override in subclasses for specific destruction behavior
+        this.dispose();
     }
 
     public update(deltaTime: number): void {
+        if (this.inputManager) {
+            this.input = this.inputManager.getInput();
+        }
+        
         if (this.physics) {
             this.physics.update(deltaTime);
         }

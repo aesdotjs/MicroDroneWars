@@ -116,24 +116,9 @@ export class DronePhysicsController extends BasePhysicsController {
         }
 
         // Apply mouse control
-        if (input.mouseDelta) {
-            if (input.mouseDelta.x !== 0) {
-                const mouseXEffect = input.mouseDelta.x * 0.005;
-                this.body.angularVelocity.x += up.x * mouseXEffect;
-                this.body.angularVelocity.y += up.y * mouseXEffect;
-                this.body.angularVelocity.z += up.z * mouseXEffect;
-            }
-            if (input.mouseDelta.y !== 0) {
-                const mouseYEffect = input.mouseDelta.y * 0.005;
-                this.body.angularVelocity.x += right.x * mouseYEffect;
-                this.body.angularVelocity.y += right.y * mouseYEffect;
-                this.body.angularVelocity.z += right.z * mouseYEffect;
-            }
-        }
+        this.applyMouseControl(input, right, up);
 
-        // Angular damping
-        this.body.angularVelocity.x *= 0.97;
-        this.body.angularVelocity.y *= 0.97;
-        this.body.angularVelocity.z *= 0.97;
+        // Apply angular damping
+        this.applyAngularDamping();
     }
 } 

@@ -1,7 +1,7 @@
-import { Schema, type } from "@colyseus/schema";
 import { Vehicle } from "./Vehicle";
 import { MeshBuilder, Vector3, StandardMaterial, Color3, MultiMaterial, Color4, Quaternion, Scene, Mesh, ParticleSystem, Texture, Matrix } from 'babylonjs';
 import { PhysicsController } from './controllers/PhysicsController';
+import { ClientPhysicsWorld } from './physics/ClientPhysicsWorld';
 
 export class Drone extends Vehicle {
     public maxSpeed: number = 5;
@@ -20,15 +20,15 @@ export class Drone extends Vehicle {
     constructor(scene: Scene, type: string, team: number, canvas: HTMLCanvasElement, isLocalPlayer: boolean = false) {
         super(scene, type, team, canvas, isLocalPlayer);
         this.id = `drone_${Math.random().toString(36).substr(2, 9)}`;
+        this.maxHealth = 150;
+        this.health = 150;
         
         // Create mesh first
         this.createMesh();
-        
-        // Initialize physics after mesh is created
-        this.physics = new PhysicsController(this);
-        
-        // Initialize vehicle last
-        this.initialize(scene);
+    }
+
+    public initialize(scene: Scene, physicsWorld: ClientPhysicsWorld): void {
+        super.initialize(scene, physicsWorld);
         
         console.log('Drone created:', {
             id: this.id,
@@ -298,10 +298,3 @@ export class Drone extends Vehicle {
         super.dispose();
     }
 }
-
-// Define schema types for Colyseus
-type("number")(Drone.prototype, "maxSpeed");
-type("number")(Drone.prototype, "acceleration");
-type("number")(Drone.prototype, "turnRate");
-type("number")(Drone.prototype, "maxHealth");
-type("string")(Drone.prototype, "vehicleType"); 

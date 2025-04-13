@@ -1,35 +1,34 @@
-import { type } from "@colyseus/schema";
 import { Vehicle } from "./Vehicle";
-import { MeshBuilder, Vector3, StandardMaterial, Color3, Quaternion, Scene, Mesh } from 'babylonjs';
+import { MeshBuilder, Vector3, StandardMaterial, Color3, MultiMaterial, Color4, Quaternion, Scene, Mesh, ParticleSystem, Texture, Matrix } from 'babylonjs';
 import { PhysicsController } from './controllers/PhysicsController';
+import { ClientPhysicsWorld } from './physics/ClientPhysicsWorld';
 
 export class Plane extends Vehicle {
-    public maxSpeed: number = 0;
-    public acceleration: number = 0;
-    public turnRate: number = 0;
-    public maxHealth: number = 0;
-    public vehicleType: string = "";
+    public maxSpeed: number = 8;
+    public acceleration: number = 0.15;
+    public turnRate: number = 0.03;
+    public maxHealth: number = 200;
+    public vehicleType: string = "plane";
     private leftWing!: Mesh;
     private rightWing!: Mesh;
     private tail!: Mesh;
+    private engineThrusters!: {
+        left: ParticleSystem;
+        right: ParticleSystem;
+    };
 
     constructor(scene: Scene, type: string, team: number, canvas: HTMLCanvasElement, isLocalPlayer: boolean = false) {
         super(scene, type, team, canvas, isLocalPlayer);
         this.id = `plane_${Math.random().toString(36).substr(2, 9)}`;
-        this.maxHealth = 100;
-        this.vehicleType = "plane";
-        this.maxSpeed = 50;
-        this.acceleration = 10;
-        this.turnRate = 2;
+        this.maxHealth = 200;
+        this.health = 200;
         
         // Create mesh first
         this.createMesh();
-        
-        // Initialize physics after position is set
-        this.physics = new PhysicsController(this);
-        
-        // Initialize vehicle
-        this.initialize(scene);
+    }
+
+    public initialize(scene: Scene, physicsWorld: ClientPhysicsWorld): void {
+        super.initialize(scene, physicsWorld);
         
         console.log('Plane created:', {
             id: this.id,
@@ -47,23 +46,56 @@ export class Plane extends Vehicle {
             return;
         }
 
-        // Create a more plane-like mesh
+        // Create main fuselage with multi-colored faces
         this.mesh = MeshBuilder.CreateBox('plane', { 
             width: 0.3, 
             height: 0.3, 
-            depth: 1 
+            depth: 1,
+            faceColors: [
+                new Color4(0.5, 0.5, 0.5, 1),    // Right face
+                new Color4(0.5, 0.5, 0.5, 1),    // Left face
+                new Color4(0.5, 0.5, 0.5, 1),    // Top face
+                new Color4(0.5, 0.5, 0.5, 1),    // Bottom face
+                new Color4(1, 0, 0, 1),          // Front face (Red)
+                new Color4(0, 0, 1, 1)           // Back face (Blue)
+            ]
         }, this.scene);
-        
-        // Create and apply material
-        const material = new StandardMaterial('planeMaterial', this.scene);
-        material.diffuseColor = this.team === 0 ? new Color3(1, 0, 0) : new Color3(0, 0, 1);
-        material.emissiveColor = this.team === 0 ? new Color3(0.2, 0, 0) : new Color3(0, 0, 0.2);
-        this.mesh.material = material;
+
+        // Create materials for each side
+        const frontMaterial = new StandardMaterial("frontMaterial", this.scene);
+        frontMaterial.diffuseColor = new Color3(1, 0, 0);
+        frontMaterial.emissiveColor = new Color3(0.2, 0, 0);
+        frontMaterial.backFaceCulling = false;
+
+        const backMaterial = new StandardMaterial("backMaterial", this.scene);
+        backMaterial.diffuseColor = new Color3(0, 0, 1);
+        backMaterial.emissiveColor = new Color3(0, 0, 0.2);
+        backMaterial.backFaceCulling = false;
+
+        const bodyMaterial = new StandardMaterial("bodyMaterial", this.scene);
+        bodyMaterial.diffuseColor = new Color3(0.5, 0.5, 0.5);
+        bodyMaterial.emissiveColor = new Color3(0.1, 0.1, 0.1);
+        bodyMaterial.backFaceCulling = false;
+
+        // Create a multi-material
+        const multiMaterial = new MultiMaterial("planeMultiMaterial", this.scene);
+        multiMaterial.subMaterials = [
+            bodyMaterial,    // Right face
+            bodyMaterial,    // Left face
+            bodyMaterial,    // Top face
+            bodyMaterial,    // Bottom face
+            frontMaterial,   // Front face
+            backMaterial     // Back face
+        ];
+
+        // Apply the multi-material to the mesh
+        this.mesh.material = multiMaterial;
         
         // Create wings
         const wingMaterial = new StandardMaterial('wingMaterial', this.scene);
         wingMaterial.diffuseColor = new Color3(0.5, 0.5, 0.5);
         wingMaterial.emissiveColor = new Color3(0.1, 0.1, 0.1);
+        wingMaterial.backFaceCulling = false;
 
         // Left wing
         this.leftWing = MeshBuilder.CreateBox('leftWing', {
@@ -97,15 +129,24 @@ export class Plane extends Vehicle {
         this.tail.material = wingMaterial;
         this.tail.parent = this.mesh;
 
-        // Set initial position before physics
+        // Add a small arrow to indicate front
+        const arrow = MeshBuilder.CreateCylinder("frontArrow", {
+            height: 0.3,
+            diameter: 0.05,
+            tessellation: 8
+        }, this.scene);
+        arrow.position = new Vector3(0, 0.2, 0.5);
+        arrow.rotation.x = Math.PI / 2;
+        arrow.material = frontMaterial;
+        arrow.parent = this.mesh;
+
+        // Set initial position and make sure it's visible
         this.mesh.position = new Vector3(0, 50, 0);
+        this.mesh.isVisible = true;
+        this.mesh.checkCollisions = true;
 
         // Initialize rotation quaternion
         this.mesh.rotationQuaternion = new Quaternion();
-
-        // Make sure it's visible
-        this.mesh.isVisible = true;
-        this.mesh.checkCollisions = true;
     }
 
     public update(deltaTime: number = 1/60): void {
@@ -148,10 +189,3 @@ export class Plane extends Vehicle {
         super.dispose();
     }
 }
-
-// Define schema types for Colyseus
-type("number")(Plane.prototype, "maxSpeed");
-type("number")(Plane.prototype, "acceleration");
-type("number")(Plane.prototype, "turnRate");
-type("number")(Plane.prototype, "maxHealth");
-type("string")(Plane.prototype, "vehicleType"); 
