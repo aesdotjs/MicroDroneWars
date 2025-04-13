@@ -196,7 +196,7 @@ export class InputManager {
             binding.update();
         });
 
-        return {
+        const input = {
             forward: this.keys.forward.getIsPressed(),
             backward: this.keys.backward.getIsPressed(),
             left: this.keys.left.getIsPressed(),
@@ -211,6 +211,16 @@ export class InputManager {
             rollRight: this.keys.rollRight.getIsPressed(),
             mouseDelta: { ...this.mouseDelta }
         };
+
+        // // Log only if there's any active input
+        // if (Object.values(input).some(value => 
+        //     value === true || 
+        //     (typeof value === 'object' && value.x !== 0 && value.y !== 0)
+        // )) {
+        //     console.log('InputManager - Current Input:', input);
+        // }
+
+        return input;
     }
 
     public resetMouseDelta(): void {

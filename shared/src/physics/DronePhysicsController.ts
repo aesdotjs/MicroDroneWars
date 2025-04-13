@@ -38,6 +38,18 @@ export class DronePhysicsController extends BasePhysicsController {
     }
 
     public update(deltaTime: number, input: PhysicsInput): void {
+        // // Log only if there's any active input
+        // if (Object.values(input).some(value => 
+        //     value === true || 
+        //     (typeof value === 'object' && value.x !== 0 && value.y !== 0)
+        // )) {
+        //     console.log('DronePhysicsController Update - Input:', {
+        //         input,
+        //         currentPosition: this.body.position,
+        //         currentVelocity: this.body.velocity
+        //     });
+        // }
+
         this.updateEnginePower(input);
         const { right, up, forward } = this.getOrientationVectors();
 

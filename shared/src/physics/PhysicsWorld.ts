@@ -132,7 +132,6 @@ export class PhysicsWorld {
             const groundMaterial = new StandardMaterial("groundMaterial", this.scene);
             groundMaterial.diffuseColor = new Color3(0.2, 0.2, 0.8); // Blue color
             groundMaterial.specularColor = new Color3(0.1, 0.1, 0.1);
-            groundMaterial.alpha = 0.8; // Slightly transparent
             this.groundMesh.material = groundMaterial;
             this.groundMesh.position.y = 0;
             this.groundMesh.checkCollisions = true;
@@ -220,30 +219,12 @@ export class PhysicsWorld {
     }
 
     public update(deltaTime: number) {
-        // Use smaller time steps for better stability
-        const stepSize = 1/60;
-        const steps = Math.ceil(deltaTime / stepSize);
-        for (let i = 0; i < steps; i++) {
-            this.world.step(stepSize);
-        }
+        // Use fixed time step for better stability
+        const fixedTimeStep = 1/60;
+        const maxSubSteps = 3; // Maximum number of substeps to prevent spiral of death
         
-        // Sync ground mesh with physics body if we have a scene
-        if (this.scene && this.groundMesh) {
-            this.groundMesh.position.set(
-                this.groundBody.position.x,
-                this.groundBody.position.y,
-                this.groundBody.position.z
-            );
-            
-            if (this.groundBody.quaternion) {
-                this.groundMesh.rotationQuaternion = new Quaternion(
-                    this.groundBody.quaternion.x,
-                    this.groundBody.quaternion.y,
-                    this.groundBody.quaternion.z,
-                    this.groundBody.quaternion.w
-                );
-            }
-        }
+        // Step the physics world
+        this.world.step(fixedTimeStep, deltaTime, maxSubSteps);
     }
 
     public createVehicle(id: string, config: any): CANNON.Body {
@@ -352,21 +333,6 @@ export class PhysicsWorld {
             linearVelocity: new Vector3(body.velocity.x, body.velocity.y, body.velocity.z),
             angularVelocity: new Vector3(body.angularVelocity.x, body.angularVelocity.y, body.angularVelocity.z)
         };
-    }
-
-    public applyInput(id: string, input: any) {
-        const body = this.bodies.get(id);
-        if (!body) return;
-
-        // Apply forces based on input
-        const force = new CANNON.Vec3(
-            input.forward ? 10 : input.backward ? -10 : 0,
-            0,
-            input.left ? -10 : input.right ? 10 : 0
-        );
-        
-        // Apply force at the center of mass
-        body.applyForce(force, body.position);
     }
 
     public cleanup(): void {

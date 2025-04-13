@@ -76,7 +76,7 @@ export class ClientPhysicsWorld {
         this.physicsWorld.update(deltaTime);
 
         // Update all controllers
-        this.controllers.forEach(controller => {
+        this.controllers.forEach((controller, id) => {
             controller.update(deltaTime, input);
         });
 
@@ -85,6 +85,14 @@ export class ClientPhysicsWorld {
     }
 
     applyInput(id: string, input: PhysicsInput): void {
+        // Log only if there's any active input
+        if (Object.values(input).some(value => 
+            value === true || 
+            (typeof value === 'object' && value.x !== 0 && value.y !== 0)
+        )) {
+            console.log('ClientPhysicsWorld ApplyInput:', { id, input });
+        }
+
         const controller = this.controllers.get(id);
         if (controller) {
             controller.update(1/60, input);

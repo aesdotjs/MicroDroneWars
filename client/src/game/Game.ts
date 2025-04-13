@@ -136,7 +136,7 @@ export class Game {
 
                     // Listen for vehicle updates
                     vehicle.onChange(() => {
-                        if (!isLocalPlayer && gameVehicle) {
+                        if (gameVehicle) {
                             const updatedState: PhysicsState = {
                                 position: new Vector3(vehicle.positionX, vehicle.positionY, vehicle.positionZ),
                                 quaternion: new Quaternion(vehicle.quaternionX, vehicle.quaternionY, vehicle.quaternionZ, vehicle.quaternionW),
@@ -192,27 +192,8 @@ export class Game {
         });
     }
 
-    public sendMovementUpdate(vehicle: any): void {
-        if (!this.room || !vehicle || !vehicle.mesh || !vehicle.physics) return;
-        
-        // Only send updates for local player
-        if (vehicle.isLocalPlayer) {
-            const input: PhysicsInput = {
-                forward: vehicle.input.forward,
-                backward: vehicle.input.backward,
-                left: vehicle.input.left,
-                right: vehicle.input.right,
-                up: vehicle.input.up,
-                down: vehicle.input.down,
-                pitchUp: vehicle.input.pitchUp,
-                pitchDown: vehicle.input.pitchDown,
-                yawLeft: vehicle.input.yawLeft,
-                yawRight: vehicle.input.yawRight,
-                rollLeft: vehicle.input.rollLeft,
-                rollRight: vehicle.input.rollRight,
-                mouseDelta: vehicle.input.mouseDelta
-            };
-            this.room.send('movement', input);
-        }
+    public sendMovementUpdate(input: PhysicsInput): void {
+        if (!this.room) return;
+        this.room.send('movement', input);
     }
 }

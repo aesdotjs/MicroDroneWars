@@ -117,8 +117,8 @@ export class GameScene {
         console.log('Adding vehicle:', sessionId);
         this.vehicles.set(sessionId, vehicle);
         
-        // Initialize vehicle with physics world
-        vehicle.initialize(this.scene, this.physicsWorld);
+        // Initialize vehicle with physics world and input manager
+        vehicle.initialize(this.scene, this.physicsWorld, this.inputManager);
         
         // Set up local player
         if (vehicle.isLocalPlayer) {
@@ -130,7 +130,8 @@ export class GameScene {
             type: vehicle.type,
             team: vehicle.team,
             isLocalPlayer: vehicle.isLocalPlayer,
-            vehicleCount: this.vehicles.size
+            vehicleCount: this.vehicles.size,
+            hasInputManager: !!vehicle.inputManager
         });
     }
 
@@ -187,32 +188,23 @@ export class GameScene {
         const deltaTime = (currentTime - this.lastTime) / 1000;
         this.lastTime = currentTime;
         
-        // Update physics world
-        this.physicsWorld.update(deltaTime, {
-            forward: false,
-            backward: false,
-            left: false,
-            right: false,
-            up: false,
-            down: false,
-            pitchUp: false,
-            pitchDown: false,
-            yawLeft: false,
-            yawRight: false,
-            rollLeft: false,
-            rollRight: false,
-            mouseDelta: { x: 0, y: 0 }
-        });
+        // Get input from the scene's input manager
+        const input = this.inputManager.getInput();
         
         // Update all vehicles
         this.vehicles.forEach(vehicle => {
             vehicle.update(deltaTime);
-            
-            // Update server with local player movement
-            if (vehicle.isLocalPlayer && this.game) {
-                this.game.sendMovementUpdate(vehicle);
-            }
         });
+
+        // Only update physics world if there's active input
+        if (Object.values(input).some(value => 
+            value === true || 
+            (typeof value === 'object' && value.x !== 0 && value.y !== 0)
+        )) {
+            // console.log('GameScene Update - Updating physics world with input:', input);
+            this.physicsWorld.update(deltaTime, input);
+            this.game.sendMovementUpdate(input);
+        }
         
         // Update camera to follow local player
         if (this.localPlayer && this.localPlayer.mesh && this.camera) {
@@ -237,7 +229,7 @@ export class GameScene {
                     rotation: quaternion,
                     hasPhysics: !!this.localPlayer.physics,
                     physicsState: this.localPlayer.physics?.getState(),
-                    input: this.localPlayer.input,
+                    input: input,
                     isLocalPlayer: this.localPlayer.isLocalPlayer,
                     groundSize: { width: 460, height: 460 }
                 });

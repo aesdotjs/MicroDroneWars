@@ -1,7 +1,7 @@
 import { Vector3, Quaternion, ArcRotateCamera, Mesh, Scene, StandardMaterial, Color3 } from 'babylonjs';
 import { PhysicsController } from './controllers/PhysicsController';
 import { InputManager } from './InputManager';
-import { PhysicsState } from '@shared/physics/types';
+import { PhysicsState, PhysicsInput } from '@shared/physics/types';
 import { ClientPhysicsWorld } from './physics/ClientPhysicsWorld';
 
 export class Vehicle {
@@ -13,7 +13,21 @@ export class Vehicle {
     public isLocalPlayer: boolean;
     public type: string;
     public team: number;
-    public input: any = {}; // Property needed for sendMovementUpdate
+    public input: PhysicsInput = {
+        forward: false,
+        backward: false,
+        left: false,
+        right: false,
+        up: false,
+        down: false,
+        pitchUp: false,
+        pitchDown: false,
+        yawLeft: false,
+        yawRight: false,
+        rollLeft: false,
+        rollRight: false,
+        mouseDelta: { x: 0, y: 0 }
+    };
     public collisionSphere!: { position: Vector3; radius: number };
     public health: number = 100;
     public maxHealth: number = 100;
@@ -23,15 +37,16 @@ export class Vehicle {
         this.type = type;
         this.team = team;
         this.isLocalPlayer = isLocalPlayer;
-        
-        if (isLocalPlayer) {
-            this.inputManager = new InputManager(canvas);
-        }
     }
 
-    public initialize(scene: Scene, physicsWorld: ClientPhysicsWorld): void {
+    public initialize(scene: Scene, physicsWorld: ClientPhysicsWorld, inputManager?: InputManager): void {
         // Initialize physics
         this.physics = new PhysicsController(this, physicsWorld);
+
+        // Set input manager if provided
+        if (inputManager) {
+            this.inputManager = inputManager;
+        }
 
         // Initialize collision sphere
         this.collisionSphere = {
@@ -55,10 +70,29 @@ export class Vehicle {
     public update(deltaTime: number): void {
         if (this.inputManager) {
             this.input = this.inputManager.getInput();
+            // Log only if there's any active input
+            // if (Object.values(this.input).some(value => 
+            //     value === true || 
+            //     (typeof value === 'object' && value.x !== 0 && value.y !== 0)
+            // )) {
+            //     console.log('Vehicle Update - Input received:', {
+            //         id: this.id,
+            //         type: this.type,
+            //         isLocalPlayer: this.isLocalPlayer,
+            //         input: this.input,
+            //         hasPhysics: !!this.physics,
+            //         hasMesh: !!this.mesh
+            //     });
+            // }
         }
         
         if (this.physics) {
             this.physics.update(deltaTime, this.input);
+        } else {
+            console.warn('Vehicle Update - No physics controller available:', {
+                id: this.id,
+                type: this.type
+            });
         }
     }
 
