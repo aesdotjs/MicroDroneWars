@@ -32,24 +32,24 @@ export class InputManager {
         this.canvas = canvas;
         this.keys = {
             // Movement
-            forward: new KeyBinding('w'),
-            backward: new KeyBinding('s'),
-            left: new KeyBinding('a'),
-            right: new KeyBinding('d'),
-            up: new KeyBinding(' '),
-            down: new KeyBinding('shift'),
+            forward: new KeyBinding('KeyW'),
+            backward: new KeyBinding('KeyS'),
+            left: new KeyBinding('KeyA'),
+            right: new KeyBinding('KeyD'),
+            up: new KeyBinding('Space'),
+            down: new KeyBinding('ShiftLeft'),
             
             // Rotation
-            pitchUp: new KeyBinding('arrowup'),
-            pitchDown: new KeyBinding('arrowdown'),
-            yawLeft: new KeyBinding('arrowleft'),
-            yawRight: new KeyBinding('arrowright'),
-            rollLeft: new KeyBinding('q'),
-            rollRight: new KeyBinding('e'),
+            pitchUp: new KeyBinding('ArrowUp'),
+            pitchDown: new KeyBinding('ArrowDown'),
+            yawLeft: new KeyBinding('ArrowLeft'),
+            yawRight: new KeyBinding('ArrowRight'),
+            rollLeft: new KeyBinding('KeyQ'),
+            rollRight: new KeyBinding('KeyE'),
             
             // Other controls
-            fire: new KeyBinding(' '),
-            zoom: new KeyBinding('r')
+            fire: new KeyBinding('MouseLeft'),
+            zoom: new KeyBinding('MouseRight')
         };
         this.mouseDelta = { x: 0, y: 0 };
         this.hasFocus = false;
@@ -80,31 +80,14 @@ export class InputManager {
         this.canvas.addEventListener('mousedown', this.handleMouseDown);
         this.canvas.addEventListener('mouseup', this.handleMouseUp);
 
-        // Prevent default browser shortcuts when canvas is focused
-        this.canvas.addEventListener('keydown', (e) => {
-            if (this.hasFocus) {
-                e.preventDefault();
-            }
-        });
-
-        // Set up pointer lock
-        this.canvas.addEventListener('click', () => {
-            if (!this.isPointerLocked) {
-                const promise = (this.canvas as any).requestPointerLock();
-                if (promise) {
-                    promise.then(() => {
-                        console.log('Pointer lock acquired');
-                    }).catch((err: Error) => {
-                        console.warn('Pointer lock request failed:', err);
-                    });
-                }
-            }
-        });
-
+        // Set up pointer lock change handler
         document.addEventListener('pointerlockchange', () => {
             this.isPointerLocked = document.pointerLockElement === (this.canvas as unknown as Element);
             if (this.isPointerLocked) {
                 this.hasFocus = true;
+                console.log('Pointer lock acquired');
+            } else {
+                console.log('Pointer lock lost');
             }
         });
 
@@ -116,35 +99,50 @@ export class InputManager {
     }
 
     private handleKeyDown(event: KeyboardEvent): void {
-        if (!this.hasFocus) {
+        // Check both hasFocus and isPointerLocked since we want to accept input when either is true
+        if (!this.hasFocus && !this.isPointerLocked) {
             console.log('Key pressed but canvas not focused');
             return;
         }
 
-        const key = event.key.toLowerCase();
+        // Prevent default browser shortcuts when canvas is focused
+        if (this.hasFocus || this.isPointerLocked) {
+            event.preventDefault();
+        }
+
+        // Use event.code for more reliable key detection
+        const code = event.code;
         Object.values(this.keys).forEach(binding => {
-            if (binding.getKey() === key) {
+            if (binding.getKey() === code) {
                 binding.setPressed(true);
             }
         });
     }
 
     private handleKeyUp(event: KeyboardEvent): void {
-        if (!this.hasFocus) return;
+        // Check both hasFocus and isPointerLocked since we want to accept input when either is true
+        if (!this.hasFocus && !this.isPointerLocked) {
+            return;
+        }
 
-        const key = event.key.toLowerCase();
+        // Use event.code for more reliable key detection
+        const code = event.code;
         Object.values(this.keys).forEach(binding => {
-            if (binding.getKey() === key) {
+            if (binding.getKey() === code) {
                 binding.setPressed(false);
             }
         });
     }
 
     private handleMouseMove(event: MouseEvent): void {
-        if (this.isPointerLocked) {
-            this.mouseDelta.x = event.movementX;
-            this.mouseDelta.y = event.movementY;
+        // Check both hasFocus and isPointerLocked since we want to accept input when either is true
+        if (!this.hasFocus || !this.isPointerLocked) {
+            return;
         }
+
+        // Accumulate mouse movement
+        this.mouseDelta.x += event.movementX;
+        this.mouseDelta.y += event.movementY;
     }
 
     private handleFocus(): void {
@@ -154,22 +152,17 @@ export class InputManager {
 
     private handleBlur(): void {
         this.hasFocus = false;
-        // Reset all keys when focus is lost
-        Object.values(this.keys).forEach(binding => {
-            binding.setPressed(false);
-        });
         console.log('Canvas blurred');
     }
 
     private handleClick(): void {
         console.log('Canvas clicked');
-        this.canvas.focus();
-        this.hasFocus = true;
         if (!this.isPointerLocked) {
             const promise = (this.canvas as any).requestPointerLock();
             if (promise) {
                 promise.then(() => {
                     console.log('Pointer lock acquired');
+                    this.hasFocus = true;
                 }).catch((err: Error) => {
                     console.warn('Pointer lock request failed:', err);
                 });
@@ -196,6 +189,10 @@ export class InputManager {
             binding.update();
         });
 
+        // Get current mouse delta and reset it
+        const currentMouseDelta = { ...this.mouseDelta };
+        this.resetMouseDelta();
+
         const input = {
             forward: this.keys.forward.getIsPressed(),
             backward: this.keys.backward.getIsPressed(),
@@ -209,16 +206,8 @@ export class InputManager {
             yawRight: this.keys.yawRight.getIsPressed(),
             rollLeft: this.keys.rollLeft.getIsPressed(),
             rollRight: this.keys.rollRight.getIsPressed(),
-            mouseDelta: { ...this.mouseDelta }
+            mouseDelta: currentMouseDelta
         };
-
-        // // Log only if there's any active input
-        // if (Object.values(input).some(value => 
-        //     value === true || 
-        //     (typeof value === 'object' && value.x !== 0 && value.y !== 0)
-        // )) {
-        //     console.log('InputManager - Current Input:', input);
-        // }
 
         return input;
     }

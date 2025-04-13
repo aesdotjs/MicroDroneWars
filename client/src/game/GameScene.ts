@@ -100,8 +100,9 @@ export class GameScene {
             this.camera.inertia = 0.9;
             this.camera.fov = 1.2;
             
-            // Remove default inputs
+            // Remove default inputs and disable camera controls
             this.camera.inputs.clear();
+            this.camera.detachControl();
             
             console.log('Camera setup complete:', {
                 position: this.camera.position,
@@ -168,6 +169,7 @@ export class GameScene {
             this.camera.position = new Vector3(position.x, position.y + 5, position.z + 10);
             this.camera.setTarget(position);
             
+            // We don't attach camera controls here anymore
             console.log('Initial camera setup for local player:', {
                 cameraPosition: this.camera.position,
                 cameraTarget: this.camera.target
@@ -196,13 +198,16 @@ export class GameScene {
             vehicle.update(deltaTime);
         });
 
+        
+        // Update physics world with input
+        this.physicsWorld.update(deltaTime, input);
+
         // Only update physics world if there's active input
         if (Object.values(input).some(value => 
             value === true || 
             (typeof value === 'object' && value.x !== 0 && value.y !== 0)
         )) {
             // console.log('GameScene Update - Updating physics world with input:', input);
-            this.physicsWorld.update(deltaTime, input);
             this.game.sendMovementUpdate(input);
         }
         

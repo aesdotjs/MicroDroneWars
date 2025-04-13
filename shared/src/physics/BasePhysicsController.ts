@@ -33,7 +33,7 @@ export abstract class BasePhysicsController {
             collisionFilterGroup: vehicleGroup,
             collisionFilterMask: vehicleMask,
             fixedRotation: false,
-            linearDamping: 0.5,
+            linearDamping: config.vehicleType === 'drone' ? 0.1 : 0.5, // Lower damping for drones
             angularDamping: 0.5,
             type: CANNON.Body.DYNAMIC
         });
@@ -41,7 +41,7 @@ export abstract class BasePhysicsController {
         // Add collision shape based on vehicle type
         if (config.vehicleType === 'drone') {
             // Drone shape - box with dimensions matching the drone mesh
-            this.body.addShape(new CANNON.Box(new CANNON.Vec3(0.5, 0.15, 0.5)));
+            this.body.addShape(new CANNON.Box(new CANNON.Vec3(0.5, 0.25, 0.5))); // Increased height for better stability
         } else {
             // Plane shape - box with dimensions matching the plane mesh
             this.body.addShape(new CANNON.Box(new CANNON.Vec3(1.5, 0.3, 0.5)));
@@ -132,15 +132,18 @@ export abstract class BasePhysicsController {
     }
 
     protected updateEnginePower(input: PhysicsInput): void {
-        if (!input) {
-            this.enginePower = 0;
-            return;
-        }
+        // Only update engine power for planes, not drones
+        if (this.config.vehicleType === 'plane') {
+            if (!input) {
+                this.enginePower = 0;
+                return;
+            }
 
-        if (input.up) {
-            this.enginePower = Math.min(this.enginePower + this.enginePowerChangeRate, this.maxEnginePower);
-        } else if (input.down) {
-            this.enginePower = Math.max(this.enginePower - this.enginePowerChangeRate, 0);
+            if (input.up) {
+                this.enginePower = Math.min(this.enginePower + this.enginePowerChangeRate, this.maxEnginePower);
+            } else if (input.down) {
+                this.enginePower = Math.max(this.enginePower - this.enginePowerChangeRate, 0);
+            }
         }
     }
 

@@ -5,130 +5,155 @@ import { BasePhysicsController } from './BasePhysicsController';
 
 export class DronePhysicsController extends BasePhysicsController {
     protected config: VehiclePhysicsConfig;
-    private motorPositions: { [key: string]: Vector3 };
-    private motorThrust: { [key: string]: number };
-    private motorSpeed: { [key: string]: number };
-    private hoverForce: number = 9.81;
+    private momentumDamping: number = 0.99;
+    private moveSpeed: number = 0.1;
+    private rotationSpeed: number = 0.02; // Reduced from 0.1 for less sensitive keyboard controls
+    private mouseSensitivity: number = 0.002; // Reduced sensitivity for smoother movement
+    private integralError: number = 0;
+    private targetAltitude: number = 0;
 
     constructor(world: CANNON.World, config: VehiclePhysicsConfig) {
         super(world, config);
+        this.targetAltitude = this.body.position.y;
         this.config = config;
-
-        // Initialize motor properties
-        this.motorPositions = {
-            frontLeft: new Vector3(-1.2, 0, 1.2),
-            frontRight: new Vector3(1.2, 0, 1.2),
-            backLeft: new Vector3(-1.2, 0, -1.2),
-            backRight: new Vector3(1.2, 0, -1.2)
-        };
-
-        this.motorThrust = {
-            frontLeft: 0,
-            frontRight: 0,
-            backLeft: 0,
-            backRight: 0
-        };
-
-        this.motorSpeed = {
-            frontLeft: this.hoverForce,
-            frontRight: this.hoverForce,
-            backLeft: this.hoverForce,
-            backRight: this.hoverForce
-        };
     }
 
     public update(deltaTime: number, input: PhysicsInput): void {
-        // // Log only if there's any active input
-        // if (Object.values(input).some(value => 
-        //     value === true || 
-        //     (typeof value === 'object' && value.x !== 0 && value.y !== 0)
-        // )) {
-        //     console.log('DronePhysicsController Update - Input:', {
-        //         input,
-        //         currentPosition: this.body.position,
-        //         currentVelocity: this.body.velocity
-        //     });
-        // }
-
-        this.updateEnginePower(input);
         const { right, up, forward } = this.getOrientationVectors();
 
         // Calculate velocity and speed
         const velocity = new Vector3(this.body.velocity.x, this.body.velocity.y, this.body.velocity.z);
-        const speed = velocity.length();
+        const currentSpeed = velocity.length();
 
-        // Vertical stabilization with gravity compensation
+        // Strong upward thrust to counteract gravity
         const gravity = this.world.gravity;
-        let gravityCompensation = new Vector3(-gravity.x, -gravity.y, -gravity.z).normalize();
-        gravityCompensation.scaleInPlace(deltaTime);
-        gravityCompensation.scaleInPlace(0.98);
+        const gravityForce = new Vector3(-gravity.x, -gravity.y, -gravity.z);
         
-        // Calculate dot product for gravity compensation
-        const globalUp = new Vector3(0, 1, 0);
-        const dot = Vector3.Dot(globalUp, up);
-        gravityCompensation.scaleInPlace(Math.sqrt(Math.max(0, Math.min(dot, 1))));
-
-        // Vertical damping
-        const vertDamping = new Vector3(0, this.body.velocity.y, 0).scale(-0.01);
-        const vertStab = up.clone();
-        vertStab.scaleInPlace(gravityCompensation.length());
-        vertStab.addInPlace(vertDamping);
-        vertStab.scaleInPlace(this.enginePower);
-
-        this.body.velocity.x += vertStab.x;
-        this.body.velocity.y += vertStab.y;
-        this.body.velocity.z += vertStab.z;
-
-        // Positional damping
-        this.body.velocity.x *= 0.995;
-        this.body.velocity.z *= 0.995;
-
-        // Apply main thrust
+        // Dynamic target altitude - maintain current height when not actively moving
         if (input.up) {
-            this.body.velocity.x += up.x * 0.15 * this.enginePower;
-            this.body.velocity.y += up.y * 0.15 * this.enginePower;
-            this.body.velocity.z += up.z * 0.15 * this.enginePower;
-        } else if (input.down) {
-            this.body.velocity.x -= up.x * 0.15 * this.enginePower;
-            this.body.velocity.y -= up.y * 0.15 * this.enginePower;
-            this.body.velocity.z -= up.z * 0.15 * this.enginePower;
+            // When actively moving up/down, update target altitude
+            this.targetAltitude = this.body.position.y + this.body.velocity.y * deltaTime;
+        }
+        if (input.down) {
+            // When actively moving up/down, update target altitude
+            this.targetAltitude = this.body.position.y - this.body.velocity.y * deltaTime;
+        }
+        
+        // Calculate altitude error
+        const currentAltitude = this.body.position.y;
+        const altitudeError = this.targetAltitude - currentAltitude;
+        
+        // PID controller for altitude stabilization with stronger gains
+        const kP = 2.0;  // Increased proportional gain for faster response
+        const kI = 0.5;  // Increased integral gain for better steady-state error
+        const kD = 0.5;  // Increased derivative gain for better damping
+        
+        // Calculate altitude control forces
+        const proportionalForce = altitudeError * kP;
+        const derivativeForce = -this.body.velocity.y * kD;
+        const integralForce = this.integralError * kI;
+        
+        // Update integral error with anti-windup
+        this.integralError += altitudeError * deltaTime;
+        this.integralError = Math.max(-20, Math.min(20, this.integralError)); // Increased limits
+        
+        // Combine forces with stronger base thrust
+        const baseThrust = 25.0; // Increased base thrust for stronger gravity counteraction
+        const altitudeControlForce = proportionalForce + derivativeForce + integralForce;
+        
+        // Apply thrust and stabilization
+        const thrust = new Vector3(0, 1, 0);
+        thrust.scaleInPlace(baseThrust + altitudeControlForce);
+        
+        // Apply thrust in the up direction
+        this.body.velocity.x += thrust.x * deltaTime;
+        this.body.velocity.y += thrust.y * deltaTime;
+        this.body.velocity.z += thrust.z * deltaTime;
+
+        // Get forward direction ignoring pitch and roll (only yaw)
+        const forwardDirection = new Vector3(forward.x, 0, forward.z).normalize();
+        const rightDirection = new Vector3(right.x, 0, right.z).normalize();
+
+        // Movement controls relative to vehicle orientation
+        const moveSpeed = this.moveSpeed;
+        
+        // Forward/backward movement (relative to vehicle's yaw)
+        if (input.forward) {
+            this.body.velocity.x += forwardDirection.x * moveSpeed * 0.5;
+            this.body.velocity.z += forwardDirection.z * moveSpeed * 0.5;
+        }
+        if (input.backward) {
+            this.body.velocity.x -= forwardDirection.x * moveSpeed * 0.5;
+            this.body.velocity.z -= forwardDirection.z * moveSpeed * 0.5;
         }
 
-        // Apply pitch control
-        if (input.pitchUp) {
-            this.body.angularVelocity.x += right.x * 0.07 * this.enginePower;
-            this.body.angularVelocity.y += right.y * 0.07 * this.enginePower;
-            this.body.angularVelocity.z += right.z * 0.07 * this.enginePower;
-        } else if (input.pitchDown) {
-            this.body.angularVelocity.x -= right.x * 0.07 * this.enginePower;
-            this.body.angularVelocity.y -= right.y * 0.07 * this.enginePower;
-            this.body.angularVelocity.z -= right.z * 0.07 * this.enginePower;
-        }
-
-        // Apply roll control
-        if (input.rollLeft) {
-            this.body.angularVelocity.x += forward.x * 0.07 * this.enginePower;
-            this.body.angularVelocity.y += forward.y * 0.07 * this.enginePower;
-            this.body.angularVelocity.z += forward.z * 0.07 * this.enginePower;
-        } else if (input.rollRight) {
-            this.body.angularVelocity.x -= forward.x * 0.07 * this.enginePower;
-            this.body.angularVelocity.y -= forward.y * 0.07 * this.enginePower;
-            this.body.angularVelocity.z -= forward.z * 0.07 * this.enginePower;
-        }
-
-        // Apply yaw control
+        // Left/right strafing (relative to vehicle's yaw)
         if (input.left) {
-            this.body.angularVelocity.x -= up.x * 0.07 * this.enginePower;
-            this.body.angularVelocity.y -= up.y * 0.07 * this.enginePower;
-            this.body.angularVelocity.z -= up.z * 0.07 * this.enginePower;
-        } else if (input.right) {
-            this.body.angularVelocity.x += up.x * 0.07 * this.enginePower;
-            this.body.angularVelocity.y += up.y * 0.07 * this.enginePower;
-            this.body.angularVelocity.z += up.z * 0.07 * this.enginePower;
+            this.body.velocity.x -= rightDirection.x * moveSpeed * 0.5;
+            this.body.velocity.z -= rightDirection.z * moveSpeed * 0.5;
+        }
+        if (input.right) {
+            this.body.velocity.x += rightDirection.x * moveSpeed * 0.5;
+            this.body.velocity.z += rightDirection.z * moveSpeed * 0.5;
         }
 
-        // Apply mouse control
-        this.applyMouseControl(input, right, up);
+        // Vertical movement (using global up direction)
+        if (input.up) {
+            this.body.velocity.y += moveSpeed;
+        }
+        if (input.down) {
+            this.body.velocity.y -= moveSpeed;
+        }
+
+        // Apply pitch control (keyboard only) - reduced sensitivity
+        if (input.pitchUp) {
+            this.body.angularVelocity.x -= right.x * this.rotationSpeed * 0.5;
+            this.body.angularVelocity.y -= right.y * this.rotationSpeed * 0.5;
+            this.body.angularVelocity.z -= right.z * this.rotationSpeed * 0.5;
+        }
+        if (input.pitchDown) {
+            this.body.angularVelocity.x += right.x * this.rotationSpeed * 0.5;
+            this.body.angularVelocity.y += right.y * this.rotationSpeed * 0.5;
+            this.body.angularVelocity.z += right.z * this.rotationSpeed * 0.5;
+        }
+
+        // Apply yaw control (keyboard only) - fixed to not affect Z movement
+        if (input.yawLeft) {
+            const yawAmount = -this.rotationSpeed * 0.5;
+            const yawQuat = new CANNON.Quaternion();
+            yawQuat.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), yawAmount);
+            this.body.quaternion.mult(yawQuat, this.body.quaternion);
+        }
+        if (input.yawRight) {
+            const yawAmount = this.rotationSpeed * 0.5;
+            const yawQuat = new CANNON.Quaternion();
+            yawQuat.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), yawAmount);
+            this.body.quaternion.mult(yawQuat, this.body.quaternion);
+        }
+
+        // Apply mouse control (direct rotation)
+        if (input.mouseDelta) {
+            // Yaw (horizontal mouse movement)
+            if (input.mouseDelta.x !== 0) {
+                const yawAmount = input.mouseDelta.x * this.mouseSensitivity;
+                const yawQuat = new CANNON.Quaternion();
+                yawQuat.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), yawAmount);
+                this.body.quaternion.mult(yawQuat, this.body.quaternion);
+            }
+
+            // Pitch (vertical mouse movement)
+            if (input.mouseDelta.y !== 0) {
+                const pitchAmount = input.mouseDelta.y * this.mouseSensitivity;
+                const pitchQuat = new CANNON.Quaternion();
+                pitchQuat.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), pitchAmount);
+                this.body.quaternion.mult(pitchQuat, this.body.quaternion);
+            }
+        }
+
+        // Apply momentum damping
+        this.body.velocity.x *= this.momentumDamping;
+        this.body.velocity.y *= this.momentumDamping;
+        this.body.velocity.z *= this.momentumDamping;
 
         // Apply angular damping
         this.applyAngularDamping();
