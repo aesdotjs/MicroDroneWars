@@ -5,7 +5,8 @@ export interface PhysicsState {
     quaternion: Quaternion;
     linearVelocity: Vector3;
     angularVelocity: Vector3;
-    timestamp?: number;
+    timestamp: number;
+    tick: number;
 }
 
 export interface PhysicsConfig {
@@ -22,6 +23,8 @@ export interface PhysicsConfig {
     lift: number;
     torque: number;
     gravity: number;
+    fixedTimeStep: number;
+    maxSubSteps: number;
 }
 
 export interface VehiclePhysicsConfig extends PhysicsConfig {
@@ -47,7 +50,9 @@ export interface PhysicsInput {
     rollLeft: boolean;
     rollRight: boolean;
     mouseDelta?: { x: number; y: number };
-} 
+    tick: number;
+    timestamp: number;
+}
 
 export interface CollisionEvent {
     bodyA: CANNON.Body;
@@ -67,4 +72,16 @@ export interface VehicleCollisionEvent {
         ri: CANNON.Vec3;
         rj: CANNON.Vec3;
     };
+}
+
+export interface StateBuffer {
+    states: PhysicsState[];
+    lastProcessedTick: number;
+    lastProcessedTimestamp: number;
+}
+
+export interface InterpolationConfig {
+    delay: number;
+    maxBufferSize: number;
+    interpolationFactor: number;
 }

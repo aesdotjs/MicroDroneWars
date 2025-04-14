@@ -1,5 +1,5 @@
 import { Vector3, Quaternion, Engine, Scene } from 'babylonjs';
-import { PhysicsState, PhysicsInput, VehiclePhysicsConfig } from '@shared/physics/types';
+import { PhysicsState, PhysicsInput, VehiclePhysicsConfig, StateBuffer, InterpolationConfig, PhysicsConfig } from '@shared/physics/types';
 import { BasePhysicsController } from '@shared/physics/BasePhysicsController';
 import { DronePhysicsController } from '@shared/physics/DronePhysicsController';
 import { PlanePhysicsController } from '@shared/physics/PlanePhysicsController';
@@ -10,21 +10,47 @@ export class ClientPhysicsWorld {
     private engine: Engine;
     private scene: Scene;
     private physicsWorld: PhysicsWorld;
-    private controllers: Map<string, BasePhysicsController>;
-    private stateBuffer: Map<string, PhysicsState[]>;
-    private interpolationDelay: number;
+    public controllers: Map<string, BasePhysicsController>;
+    private stateBuffers: Map<string, StateBuffer>;
+    private inputQueue: Map<string, PhysicsInput[]>;
+    private interpolationConfig: InterpolationConfig;
     private localPlayerId: string = '';
+    private lastProcessedTick: number = 0;
+    private fixedTimeStep: number = 1/60;
+    private accumulator: number = 0;
+    private lastUpdateTime: number = 0;
 
     constructor(engine: Engine, scene: Scene) {
         this.engine = engine;
         this.scene = scene;
-        this.physicsWorld = new PhysicsWorld(this.engine, this.scene);
+        this.physicsWorld = new PhysicsWorld(this.engine, this.scene, {
+            fixedTimeStep: 1/60,
+            mass: 1,
+            drag: 0.1,
+            angularDrag: 0.1,
+            maxSpeed: 100,
+            maxAngularSpeed: 10,
+            maxAngularAcceleration: 0.05,
+            angularDamping: 0.1,
+            forceMultiplier: 0.005,
+            gravity: 9.81,
+            vehicleType: 'drone',
+            thrust: 20,
+            lift: 10,
+            torque: 5,
+            maxSubSteps: 3
+        });
         this.controllers = new Map();
-        this.stateBuffer = new Map();
-        this.interpolationDelay = 100; // ms
+        this.stateBuffers = new Map();
+        this.inputQueue = new Map();
+        this.interpolationConfig = {
+            delay: 100, // ms
+            maxBufferSize: 10,
+            interpolationFactor: 0.2
+        };
     }
 
-    createVehicle(id: string, type: 'drone' | 'plane', config: VehiclePhysicsConfig, initialPosition: Vector3): BasePhysicsController {
+    createVehicle(id: string, type: 'drone' | 'plane', config: VehiclePhysicsConfig, initialPosition: Vector3, initialState?: PhysicsState): BasePhysicsController {
         console.log('Creating vehicle:', { id, type, initialPosition });
         let controller: BasePhysicsController;
 
@@ -34,28 +60,31 @@ export class ClientPhysicsWorld {
             controller = new PlanePhysicsController(this.physicsWorld.getWorld(), config);
         }
 
-        // Ensure initial position is above ground
-        const spawnPosition = new Vector3(
-            initialPosition.x,
-            Math.max(initialPosition.y, 10), // Ensure at least 10 units above ground
-            initialPosition.z
-        );
-
-        // Set initial state
-        controller.setState({
-            position: spawnPosition,
+        // Use provided initial state or create default one
+        const state = initialState || {
+            position: initialPosition,
             quaternion: new Quaternion(0, 0, 0, 1),
             linearVelocity: new Vector3(0, 0, 0),
-            angularVelocity: new Vector3(0, 0, 0)
-        });
+            angularVelocity: new Vector3(0, 0, 0),
+            timestamp: performance.now(),
+            tick: this.lastProcessedTick
+        };
+
+        // Set initial state
+        controller.setState(state);
 
         this.controllers.set(id, controller);
-        this.stateBuffer.set(id, []);
+        this.stateBuffers.set(id, {
+            states: [],
+            lastProcessedTick: 0,
+            lastProcessedTimestamp: 0
+        });
+        this.inputQueue.set(id, []);
         
         console.log('Vehicle created successfully:', { 
             id, 
             type, 
-            initialPosition: spawnPosition,
+            initialPosition: state.position,
             controller 
         });
         return controller;
@@ -66,83 +95,130 @@ export class ClientPhysicsWorld {
         if (controller) {
             controller.cleanup();
             this.controllers.delete(id);
-            this.stateBuffer.delete(id);
+            this.stateBuffers.delete(id);
+            this.inputQueue.delete(id);
         }
     }
 
-    update(deltaTime: number, input: PhysicsInput): void {
-        // Step physics world
-        this.physicsWorld.update(deltaTime);
+    public update(deltaTime: number, input: PhysicsInput): void {
+        const currentTime = performance.now();
+        const frameTime = currentTime - this.lastUpdateTime;
+        this.lastUpdateTime = currentTime;
 
-        // Update all vehicle controllers with appropriate input
-        this.controllers.forEach((controller, id) => {
-            // Use provided input for local player, default input for others
-            const controllerInput = id === this.localPlayerId ? input : {
-                forward: false,
-                backward: false,
-                left: false,
-                right: false,
-                up: false,
-                down: false,
-                pitchUp: false,
-                pitchDown: false,
-                yawLeft: false,
-                yawRight: false,
-                rollLeft: false,
-                rollRight: false,
-                mouseDelta: { x: 0, y: 0 }
-            };
-            controller.update(deltaTime, controllerInput);
-        });
-        
+        // Add frame time to accumulator (convert to seconds)
+        this.accumulator += frameTime / 1000;
+
+        // Process fixed timestep updates with a maximum of 3 steps per frame
+        let steps = 0;
+        while (this.accumulator >= this.fixedTimeStep && steps < 3) {
+            this.processFixedUpdate(input);
+            this.accumulator -= this.fixedTimeStep;
+            steps++;
+        }
+
+        // If we have leftover time, carry it over to next frame
+        if (this.accumulator > this.fixedTimeStep * 3) {
+            this.accumulator = this.fixedTimeStep * 3;
+        }
+
         // Interpolate states
         this.interpolateStates();
     }
 
-    addState(id: string, state: PhysicsState): void {
-        const buffer = this.stateBuffer.get(id);
-        if (buffer) {
-            buffer.push({
-                ...state,
-                timestamp: performance.now()
-            });
+    private processFixedUpdate(input: PhysicsInput): void {
+        // Step physics world
+        this.physicsWorld.update(this.fixedTimeStep);
 
-            // Keep buffer size reasonable
-            if (buffer.length > 10) {
-                buffer.shift();
+        // Update all vehicle controllers
+        this.controllers.forEach((controller, id) => {
+            if (id === this.localPlayerId) {
+                // For local player, use current input directly for immediate response
+                controller.update(this.fixedTimeStep, input);
+                
+                // Add input to queue for prediction
+                this.addInput(id, input);
+            } else {
+                // Remote players - use default input
+                const defaultInput: PhysicsInput = {
+                    forward: false,
+                    backward: false,
+                    left: false,
+                    right: false,
+                    up: false,
+                    down: false,
+                    pitchUp: false,
+                    pitchDown: false,
+                    yawLeft: false,
+                    yawRight: false,
+                    rollLeft: false,
+                    rollRight: false,
+                    mouseDelta: { x: 0, y: 0 },
+                    tick: this.lastProcessedTick,
+                    timestamp: performance.now()
+                };
+                controller.update(this.fixedTimeStep, defaultInput);
+            }
+        });
+
+        this.lastProcessedTick++;
+    }
+
+    private getNextInput(id: string): PhysicsInput | null {
+        const queue = this.inputQueue.get(id);
+        if (!queue || queue.length === 0) return null;
+        return queue.shift() || null;
+    }
+
+    public addInput(id: string, input: PhysicsInput): void {
+        const queue = this.inputQueue.get(id);
+        if (queue) {
+            // Add input to queue
+            queue.push(input);
+            
+            // Keep queue size reasonable (about 1 second of inputs at 60fps)
+            const maxQueueSize = 60;
+            if (queue.length > maxQueueSize) {
+                queue.splice(0, queue.length - maxQueueSize);
             }
         }
     }
 
-    getState(id: string): PhysicsState | null {
-        const controller = this.controllers.get(id);
-        if (!controller) return null;
-
-        return controller.getState();
+    public addState(id: string, state: PhysicsState): void {
+        const buffer = this.stateBuffers.get(id);
+        if (buffer) {
+            buffer.states.push(state);
+            // Keep buffer size reasonable
+            if (buffer.states.length > this.interpolationConfig.maxBufferSize) {
+                buffer.states.shift();
+            }
+        }
     }
 
     private interpolateStates(): void {
         const currentTime = performance.now();
-        const targetTime = currentTime - this.interpolationDelay;
+        const targetTime = currentTime - this.interpolationConfig.delay;
 
-        this.stateBuffer.forEach((buffer, id) => {
-            if (buffer.length < 2) return;
+        this.stateBuffers.forEach((buffer, id) => {
+            if (id === this.localPlayerId) return; // Skip local player
+
+            const states = buffer.states;
+            if (states.length < 2) return;
 
             // Find the two states to interpolate between
-            let state1 = buffer[0];
-            let state2 = buffer[1];
+            let state1 = states[0];
+            let state2 = states[1];
             let i = 1;
 
-            while (i < buffer.length - 1 && buffer[i]?.timestamp && (buffer[i].timestamp || 0) < targetTime) {
-                state1 = buffer[i];
-                state2 = buffer[i + 1];
+            while (i < states.length - 1 && states[i].timestamp < targetTime) {
+                state1 = states[i];
+                state2 = states[i + 1];
                 i++;
             }
 
             // Remove old states
-            buffer.splice(0, i - 1);
+            states.splice(0, i - 1);
 
-            if (!state1?.timestamp || !state2?.timestamp) return;
+            if (!state1 || !state2) return;
 
             // Calculate interpolation factor
             const t = (targetTime - state1.timestamp) / (state2.timestamp - state1.timestamp);
@@ -180,10 +256,59 @@ export class ClientPhysicsWorld {
                     position,
                     quaternion,
                     linearVelocity,
-                    angularVelocity
+                    angularVelocity,
+                    timestamp: currentTime,
+                    tick: state2.tick
                 });
             }
         });
+    }
+
+    public reconcileState(id: string, serverState: PhysicsState): void {
+        if (id !== this.localPlayerId) return;
+
+        const controller = this.controllers.get(id);
+        if (!controller) return;
+
+        // Calculate position error
+        const currentState = controller.getState();
+        if (!currentState) return;
+
+        const positionError = Vector3.Distance(currentState.position, serverState.position);
+        const rotationError = this.calculateQuaternionAngle(
+            new Quaternion(currentState.quaternion.x, currentState.quaternion.y, currentState.quaternion.z, currentState.quaternion.w),
+            new Quaternion(serverState.quaternion.x, serverState.quaternion.y, serverState.quaternion.z, serverState.quaternion.w)
+        );
+
+        // Only reconcile if error is significant
+        if (positionError > 2.0 || rotationError > 1.0) {
+            console.log('Reconciling state due to large error:', {
+                positionError,
+                rotationError,
+                currentPosition: currentState.position,
+                serverPosition: serverState.position
+            });
+            
+            // Smoothly correct the state with a stronger correction factor
+            const correctedState: PhysicsState = {
+                position: Vector3.Lerp(currentState.position, serverState.position, 0.5),
+                quaternion: Quaternion.Slerp(
+                    new Quaternion(currentState.quaternion.x, currentState.quaternion.y, currentState.quaternion.z, currentState.quaternion.w),
+                    new Quaternion(serverState.quaternion.x, serverState.quaternion.y, serverState.quaternion.z, serverState.quaternion.w),
+                    0.5
+                ),
+                linearVelocity: Vector3.Lerp(currentState.linearVelocity, serverState.linearVelocity, 0.5),
+                angularVelocity: Vector3.Lerp(currentState.angularVelocity, serverState.angularVelocity, 0.5),
+                timestamp: performance.now(),
+                tick: serverState.tick
+            };
+            controller.setState(correctedState);
+        }
+    }
+
+    private calculateQuaternionAngle(q1: Quaternion, q2: Quaternion): number {
+        const dot = q1.x * q2.x + q1.y * q2.y + q1.z * q2.z + q1.w * q2.w;
+        return Math.acos(2 * dot * dot - 1);
     }
 
     cleanup(): void {
@@ -191,7 +316,8 @@ export class ClientPhysicsWorld {
             controller.cleanup();
         });
         this.controllers.clear();
-        this.stateBuffer.clear();
+        this.stateBuffers.clear();
+        this.inputQueue.clear();
     }
 
     public getGroundBody(): CANNON.Body | null {
@@ -216,5 +342,9 @@ export class ClientPhysicsWorld {
 
     getLocalPlayerId(): string {
         return this.localPlayerId;
+    }
+
+    public getCurrentTick(): number {
+        return this.lastProcessedTick;
     }
 } 

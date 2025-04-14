@@ -10,6 +10,11 @@ export class MicroDroneRoom extends Room<State> {
         this.setState(new State());
         console.log("MicroDrone room created");
 
+        // Set room options for faster connection
+        this.patchRate = 1000 / 60; // 60 updates per second
+        this.autoDispose = false; // Keep room alive even when empty
+        this.maxClients = 20; // Set a reasonable max clients
+
         // Initialize physics world
         this.physicsWorld = new ServerPhysicsWorld();
 
@@ -37,13 +42,13 @@ export class MicroDroneRoom extends Room<State> {
             this.onLeave(client);
         });
 
-        this.patchRate = 1000 / 60;
-
         // Set update interval (60fps)
         this.setSimulationInterval(() => this.update(), 1000 / 60);
     }
 
     onJoin(client: Client, options: { vehicleType: "drone" | "plane", team: number }) {
+        console.log(`Client ${client.sessionId} joining with options:`, options);
+        
         // Create vehicle based on type
         let vehicle;
         if (options.vehicleType === "drone") {
@@ -73,12 +78,20 @@ export class MicroDroneRoom extends Room<State> {
             forceMultiplier: 0.005,
             thrust: options.vehicleType === "drone" ? 20 : 30,
             lift: options.vehicleType === "drone" ? 15 : 12,
-            torque: options.vehicleType === "drone" ? 1 : 2
+            torque: options.vehicleType === "drone" ? 1 : 2,
+            fixedTimeStep: 1/60,
+            maxSubSteps: 3
         };
+        
+        // Create vehicle and add to state
         this.physicsWorld.createVehicle(client.sessionId, config);
-
         this.state.vehicles.set(client.sessionId, vehicle);
-        console.log(`Vehicle joined: ${client.sessionId} (${options.vehicleType}, team ${options.team})`);
+        
+        console.log(`Vehicle created for ${client.sessionId}:`, {
+            type: options.vehicleType,
+            team: options.team,
+            position: { x: vehicle.positionX, y: vehicle.positionY, z: vehicle.positionZ }
+        });
     }
 
     onLeave(client: Client) {
@@ -119,6 +132,9 @@ export class MicroDroneRoom extends Room<State> {
                 vehicle.linearVelocityX = state.linearVelocity.x;
                 vehicle.linearVelocityY = state.linearVelocity.y;
                 vehicle.linearVelocityZ = state.linearVelocity.z;
+                vehicle.angularVelocityX = state.angularVelocity.x;
+                vehicle.angularVelocityY = state.angularVelocity.y;
+                vehicle.angularVelocityZ = state.angularVelocity.z;
             }
         });
 

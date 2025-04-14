@@ -13,6 +13,7 @@ export class PlanePhysicsController extends BasePhysicsController {
     }
 
     public update(deltaTime: number, input: PhysicsInput): void {
+        this.currentTick++;
         this.updateEnginePower(input);
         const { right, up, forward } = this.getOrientationVectors();
         
@@ -28,6 +29,9 @@ export class PlanePhysicsController extends BasePhysicsController {
         let lowerMassInfluence = currentSpeed / 10;
         lowerMassInfluence = Math.min(Math.max(lowerMassInfluence, 0), 1);
         this.body.mass = this.config.mass * (1 - (lowerMassInfluence * 0.6));
+
+        // Scale control inputs by deltaTime and 60fps for consistent behavior
+        const controlScale = deltaTime * 60;
 
         // Rotation stabilization
         let lookVelocity = velocity.clone();
@@ -73,35 +77,35 @@ export class PlanePhysicsController extends BasePhysicsController {
 
         // Apply pitch control
         if (input.pitchUp) {
-            this.body.angularVelocity.x -= right.x * 0.04 * flightModeInfluence * this.enginePower;
-            this.body.angularVelocity.y -= right.y * 0.04 * flightModeInfluence * this.enginePower;
-            this.body.angularVelocity.z -= right.z * 0.04 * flightModeInfluence * this.enginePower;
+            this.body.angularVelocity.x -= right.x * 0.04 * flightModeInfluence * this.enginePower * controlScale;
+            this.body.angularVelocity.y -= right.y * 0.04 * flightModeInfluence * this.enginePower * controlScale;
+            this.body.angularVelocity.z -= right.z * 0.04 * flightModeInfluence * this.enginePower * controlScale;
         } else if (input.pitchDown) {
-            this.body.angularVelocity.x += right.x * 0.04 * flightModeInfluence * this.enginePower;
-            this.body.angularVelocity.y += right.y * 0.04 * flightModeInfluence * this.enginePower;
-            this.body.angularVelocity.z += right.z * 0.04 * flightModeInfluence * this.enginePower;
+            this.body.angularVelocity.x += right.x * 0.04 * flightModeInfluence * this.enginePower * controlScale;
+            this.body.angularVelocity.y += right.y * 0.04 * flightModeInfluence * this.enginePower * controlScale;
+            this.body.angularVelocity.z += right.z * 0.04 * flightModeInfluence * this.enginePower * controlScale;
         }
 
         // Apply yaw control
         if (input.left) {
-            this.body.angularVelocity.x -= up.x * 0.02 * flightModeInfluence * this.enginePower;
-            this.body.angularVelocity.y -= up.y * 0.02 * flightModeInfluence * this.enginePower;
-            this.body.angularVelocity.z -= up.z * 0.02 * flightModeInfluence * this.enginePower;
+            this.body.angularVelocity.x -= up.x * 0.02 * flightModeInfluence * this.enginePower * controlScale;
+            this.body.angularVelocity.y -= up.y * 0.02 * flightModeInfluence * this.enginePower * controlScale;
+            this.body.angularVelocity.z -= up.z * 0.02 * flightModeInfluence * this.enginePower * controlScale;
         } else if (input.right) {
-            this.body.angularVelocity.x += up.x * 0.02 * flightModeInfluence * this.enginePower;
-            this.body.angularVelocity.y += up.y * 0.02 * flightModeInfluence * this.enginePower;
-            this.body.angularVelocity.z += up.z * 0.02 * flightModeInfluence * this.enginePower;
+            this.body.angularVelocity.x += up.x * 0.02 * flightModeInfluence * this.enginePower * controlScale;
+            this.body.angularVelocity.y += up.y * 0.02 * flightModeInfluence * this.enginePower * controlScale;
+            this.body.angularVelocity.z += up.z * 0.02 * flightModeInfluence * this.enginePower * controlScale;
         }
 
         // Apply roll control
         if (input.rollLeft) {
-            this.body.angularVelocity.x += forward.x * 0.055 * flightModeInfluence * this.enginePower;
-            this.body.angularVelocity.y += forward.y * 0.055 * flightModeInfluence * this.enginePower;
-            this.body.angularVelocity.z += forward.z * 0.055 * flightModeInfluence * this.enginePower;
+            this.body.angularVelocity.x += forward.x * 0.055 * flightModeInfluence * this.enginePower * controlScale;
+            this.body.angularVelocity.y += forward.y * 0.055 * flightModeInfluence * this.enginePower * controlScale;
+            this.body.angularVelocity.z += forward.z * 0.055 * flightModeInfluence * this.enginePower * controlScale;
         } else if (input.rollRight) {
-            this.body.angularVelocity.x -= forward.x * 0.055 * flightModeInfluence * this.enginePower;
-            this.body.angularVelocity.y -= forward.y * 0.055 * flightModeInfluence * this.enginePower;
-            this.body.angularVelocity.z -= forward.z * 0.055 * flightModeInfluence * this.enginePower;
+            this.body.angularVelocity.x -= forward.x * 0.055 * flightModeInfluence * this.enginePower * controlScale;
+            this.body.angularVelocity.y -= forward.y * 0.055 * flightModeInfluence * this.enginePower * controlScale;
+            this.body.angularVelocity.z -= forward.z * 0.055 * flightModeInfluence * this.enginePower * controlScale;
         }
 
         // Apply mouse control
@@ -115,9 +119,11 @@ export class PlanePhysicsController extends BasePhysicsController {
             speedModifier = -0.05;
         }
 
-        this.body.velocity.x += (velLength * this.lastDrag + speedModifier) * forward.x * this.enginePower;
-        this.body.velocity.y += (velLength * this.lastDrag + speedModifier) * forward.y * this.enginePower;
-        this.body.velocity.z += (velLength * this.lastDrag + speedModifier) * forward.z * this.enginePower;
+        // Scale thrust by deltaTime
+        const thrustScale = deltaTime * 60;
+        this.body.velocity.x += (velLength * this.lastDrag + speedModifier) * forward.x * this.enginePower * thrustScale;
+        this.body.velocity.y += (velLength * this.lastDrag + speedModifier) * forward.y * this.enginePower * thrustScale;
+        this.body.velocity.z += (velLength * this.lastDrag + speedModifier) * forward.z * this.enginePower * thrustScale;
 
         // Drag
         const drag = Math.pow(velLength, 1) * 0.003 * this.enginePower;
@@ -129,9 +135,9 @@ export class PlanePhysicsController extends BasePhysicsController {
         // Lift
         let lift = Math.pow(velLength, 1) * 0.005 * this.enginePower;
         lift = Math.min(Math.max(lift, 0), 0.05);
-        this.body.velocity.x += up.x * lift;
-        this.body.velocity.y += up.y * lift;
-        this.body.velocity.z += up.z * lift;
+        this.body.velocity.x += up.x * lift * thrustScale;
+        this.body.velocity.y += up.y * lift * thrustScale;
+        this.body.velocity.z += up.z * lift * thrustScale;
 
         // Apply angular damping with flight mode influence
         this.applyAngularDamping(1 - 0.02 * flightModeInfluence);

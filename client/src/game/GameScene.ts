@@ -137,6 +137,16 @@ export class GameScene {
         console.log('Adding vehicle:', sessionId);
         this.vehicles.set(sessionId, vehicle);
         
+        // Create initial state from vehicle mesh
+        const initialState = {
+            position: vehicle.mesh?.position || new Vector3(0, 10, 0),
+            quaternion: vehicle.mesh?.rotationQuaternion || new Quaternion(0, 0, 0, 1),
+            linearVelocity: new Vector3(0, 0, 0),
+            angularVelocity: new Vector3(0, 0, 0),
+            timestamp: performance.now(),
+            tick: this.physicsWorld.getCurrentTick()
+        };
+        
         // Create physics controller for the vehicle
         const controller = this.physicsWorld.createVehicle(
             vehicle.id,
@@ -155,9 +165,12 @@ export class GameScene {
                 thrust: vehicle.type === 'drone' ? 20 : 30,
                 lift: vehicle.type === 'drone' ? 15 : 12,
                 torque: vehicle.type === 'drone' ? 1 : 2,
-                gravity: 9.81
+                gravity: 9.81,
+                fixedTimeStep: 1/60,
+                maxSubSteps: 3
             },
-            vehicle.mesh?.position || new Vector3(0, 10, 0)
+            vehicle.mesh?.position || new Vector3(0, 10, 0),
+            initialState
         );
 
         // Connect physics controller to vehicle
@@ -245,22 +258,30 @@ export class GameScene {
         // Get input from the scene's input manager
         const input = this.inputManager.getInput();
         
+        // Add timestamp and tick to input
+        input.timestamp = currentTime;
+        input.tick = this.physicsWorld.getCurrentTick();
+        
         // Update physics world with input
         this.physicsWorld.update(deltaTime, input);
         
-        // Only send input to server if there's active input
-        if (this.localPlayer?.id && Object.values(input).some(value => 
-            value === true || 
-            (typeof value === 'object' && value.x !== 0 && value.y !== 0)
-        )) {
+        // Always send input to server for local player to maintain consistent updates
+        if (this.localPlayer?.id) {
+            // Add input to physics world queue for prediction
+            this.physicsWorld.addInput(this.localPlayer.id, input);
+            
+            // Send to server
             this.game.sendMovementUpdate(input);
         }
         
         // Update all vehicles' meshes with their physics states
         this.vehicles.forEach(vehicle => {
-            const state = this.physicsWorld.getState(vehicle.id);
-            if (state) {
-                vehicle.updateState(state);
+            const controller = this.physicsWorld.controllers.get(vehicle.id);
+            if (controller) {
+                const state = controller.getState();
+                if (state) {
+                    vehicle.updateState(state);
+                }
             }
         });
         

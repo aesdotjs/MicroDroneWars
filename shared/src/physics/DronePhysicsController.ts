@@ -6,7 +6,7 @@ import { BasePhysicsController } from './BasePhysicsController';
 export class DronePhysicsController extends BasePhysicsController {
     protected config: VehiclePhysicsConfig;
     private momentumDamping: number = 0.99;
-    private moveSpeed: number = 0.05;
+    private moveSpeed: number = 0.5;
     private rotationSpeed: number = 0.005; // Reduced from 0.1 for less sensitive keyboard controls
     private mouseSensitivity: number = 0.002; // Reduced sensitivity for smoother movement
     private integralError: number = 0;
@@ -59,7 +59,9 @@ export class DronePhysicsController extends BasePhysicsController {
     }
 
     public update(deltaTime: number, input: PhysicsInput): void {
+        this.currentTick++;
         const { right, up, forward } = this.getOrientationVectors();
+        
         // Apply stabilization first
         this.applyStabilization(deltaTime);
 
@@ -76,9 +78,9 @@ export class DronePhysicsController extends BasePhysicsController {
         const altitudeError = this.targetAltitude - currentAltitude;
         
         // PID controller for altitude stabilization with stronger gains
-        const kP = 2.0;  // Increased proportional gain for faster response
-        const kI = 0.5;  // Increased integral gain for better steady-state error
-        const kD = 0.5;  // Increased derivative gain for better damping
+        const kP = 2.0;
+        const kI = 0.5;
+        const kD = 0.5;
         
         // Calculate altitude control forces
         const proportionalForce = altitudeError * kP;
@@ -87,10 +89,10 @@ export class DronePhysicsController extends BasePhysicsController {
         
         // Update integral error with anti-windup
         this.integralError += altitudeError * deltaTime;
-        this.integralError = Math.max(-20, Math.min(20, this.integralError)); // Increased limits
+        this.integralError = Math.max(-20, Math.min(20, this.integralError));
         
         // Combine forces with stronger base thrust
-        const baseThrust = 25.0; // Increased base thrust for stronger gravity counteraction
+        const baseThrust = 25.0;
         const altitudeControlForce = proportionalForce + derivativeForce + integralForce;
         
         // Apply thrust and stabilization
@@ -107,7 +109,7 @@ export class DronePhysicsController extends BasePhysicsController {
         const rightDirection = new Vector3(right.x, 0, right.z).normalize();
 
         // Movement controls relative to vehicle orientation
-        const moveSpeed = this.moveSpeed;
+        const moveSpeed = this.moveSpeed * deltaTime * 60; // Scale by deltaTime and 60fps for consistent speed
         
         // Forward/backward movement (relative to vehicle's yaw)
         if (input.forward) {
@@ -128,6 +130,7 @@ export class DronePhysicsController extends BasePhysicsController {
             this.body.velocity.x += rightDirection.x * moveSpeed;
             this.body.velocity.z += rightDirection.z * moveSpeed;
         }
+
         // Vertical movement (using global up direction)
         if (input.up) {
             this.body.velocity.y += moveSpeed;

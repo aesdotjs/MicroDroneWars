@@ -9,13 +9,33 @@ export class ServerPhysicsWorld {
     private controllers: Map<string, any> = new Map();
     private updateInterval: NodeJS.Timeout | null = null;
     private updateRate: number = 60; // Updates per second
+    private lastInputTime: Map<string, number> = new Map();
+    private accumulator: number = 0;
+    private lastUpdateTime: number = 0;
+    private fixedTimeStep: number = 1/60;
 
     constructor() {
         // Create NullEngine for server-side physics
         this.engine = new NullEngine();
 
         this.scene = new Scene(this.engine);
-        this.physicsWorld = new PhysicsWorld(this.engine, this.scene);
+        this.physicsWorld = new PhysicsWorld(this.engine, this.scene, {
+            fixedTimeStep: this.fixedTimeStep,
+            maxSubSteps: 3,
+            gravity: 9.81,
+            mass: 50,
+            drag: 0.8,
+            angularDrag: 0.8,
+            maxSpeed: 20,
+            maxAngularSpeed: 0.2,
+            maxAngularAcceleration: 0.05,
+            angularDamping: 0.9,
+            forceMultiplier: 0.005,
+            vehicleType: 'drone', // Default type, will be overridden by vehicle config
+            thrust: 20,
+            lift: 15,
+            torque: 1
+        });
 
         // Start the physics update loop
         this.startUpdateLoop();
@@ -24,7 +44,25 @@ export class ServerPhysicsWorld {
     private startUpdateLoop(): void {
         const updateInterval = 1000 / this.updateRate;
         this.updateInterval = setInterval(() => {
-            this.update(1 / this.updateRate);
+            const currentTime = performance.now();
+            const frameTime = currentTime - this.lastUpdateTime;
+            this.lastUpdateTime = currentTime;
+
+            // Add frame time to accumulator (convert to seconds)
+            this.accumulator += frameTime / 1000;
+
+            // Process fixed timestep updates with a maximum of 3 steps per frame
+            let steps = 0;
+            while (this.accumulator >= this.fixedTimeStep && steps < 3) {
+                this.update(this.fixedTimeStep);
+                this.accumulator -= this.fixedTimeStep;
+                steps++;
+            }
+
+            // If we have leftover time, carry it over to next frame
+            if (this.accumulator > this.fixedTimeStep * 3) {
+                this.accumulator = this.fixedTimeStep * 3;
+            }
         }, updateInterval);
     }
 
@@ -46,7 +84,7 @@ export class ServerPhysicsWorld {
         // Update the physics world
         this.physicsWorld.update(deltaTime);
 
-        // Update all vehicle controllers with default input
+        // Only update controllers that haven't received input this frame
         const defaultInput: PhysicsInput = {
             forward: false,
             backward: false,
@@ -60,19 +98,36 @@ export class ServerPhysicsWorld {
             yawRight: false,
             rollLeft: false,
             rollRight: false,
-            mouseDelta: { x: 0, y: 0 }
+            mouseDelta: { x: 0, y: 0 },
+            tick: this.physicsWorld.getCurrentTick(),
+            timestamp: performance.now()
         };
 
-        // Update all vehicle controllers without logging
-        this.controllers.forEach((controller) => {
-            controller.update(deltaTime, defaultInput);
+        // Update all vehicle controllers
+        this.controllers.forEach((controller, id) => {
+            // Only apply default input if no specific input was received
+            if (!this.lastInputTime.has(id) || 
+                performance.now() - this.lastInputTime.get(id)! > deltaTime * 1000) {
+                controller.update(deltaTime, defaultInput);
+            }
         });
     }
 
     public applyInput(id: string, input: PhysicsInput): void {
         const controller = this.controllers.get(id);
         if (controller) {
-            controller.update(1 / this.updateRate, input);
+            // Add current tick and timestamp to the input
+            const updatedInput: PhysicsInput = {
+                ...input,
+                tick: this.physicsWorld.getCurrentTick(),
+                timestamp: performance.now()
+            };
+            
+            // Update the controller with the input
+            controller.update(this.fixedTimeStep, updatedInput);
+            
+            // Record when this input was applied
+            this.lastInputTime.set(id, performance.now());
         }
     }
 

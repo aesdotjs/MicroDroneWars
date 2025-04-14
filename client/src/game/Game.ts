@@ -48,7 +48,6 @@ export class Game {
 
         // Connect to the server
         this.client = new Colyseus.Client('ws://localhost:2567');
-
         // Join the game room
         this.joinRoom();
 
@@ -139,7 +138,9 @@ export class Game {
                         position: new Vector3(vehicle.positionX, vehicle.positionY, vehicle.positionZ),
                         quaternion: new Quaternion(vehicle.quaternionX, vehicle.quaternionY, vehicle.quaternionZ, vehicle.quaternionW),
                         linearVelocity: new Vector3(vehicle.linearVelocityX, vehicle.linearVelocityY, vehicle.linearVelocityZ),
-                        angularVelocity: new Vector3(vehicle.angularVelocityX, vehicle.angularVelocityY, vehicle.angularVelocityZ)
+                        angularVelocity: new Vector3(vehicle.angularVelocityX, vehicle.angularVelocityY, vehicle.angularVelocityZ),
+                        timestamp: performance.now(),
+                        tick: this.gameScene.getPhysicsWorld().getCurrentTick()
                     };
                     gameVehicle.updateState(physicsState);
 
@@ -150,7 +151,9 @@ export class Game {
                                 position: new Vector3(vehicle.positionX, vehicle.positionY, vehicle.positionZ),
                                 quaternion: new Quaternion(vehicle.quaternionX, vehicle.quaternionY, vehicle.quaternionZ, vehicle.quaternionW),
                                 linearVelocity: new Vector3(vehicle.linearVelocityX, vehicle.linearVelocityY, vehicle.linearVelocityZ),
-                                angularVelocity: new Vector3(vehicle.angularVelocityX, vehicle.angularVelocityY, vehicle.angularVelocityZ)
+                                angularVelocity: new Vector3(vehicle.angularVelocityX, vehicle.angularVelocityY, vehicle.angularVelocityZ),
+                                timestamp: performance.now(),
+                                tick: this.gameScene.getPhysicsWorld().getCurrentTick()
                             };
                             // Use vehicle.id instead of sessionId for state management
                             this.gameScene.getPhysicsWorld().addState(gameVehicle.id, updatedState);

@@ -1,7 +1,7 @@
 import { Engine, Scene, Vector3, Mesh, Quaternion, CannonJSPlugin, MeshBuilder, StandardMaterial, Color3 } from 'babylonjs';
 import * as CANNON from 'cannon';
 import { CollisionGroups, collisionMasks } from './CollisionGroups';
-import { CollisionEvent, VehicleCollisionEvent, PhysicsState } from './types';
+import { CollisionEvent, VehicleCollisionEvent, PhysicsState, PhysicsConfig } from './types';
 import { PhysicsImpostor } from 'babylonjs';
 
 export class PhysicsWorld {
@@ -12,17 +12,24 @@ export class PhysicsWorld {
     private groundBody!: CANNON.Body;
     private groundMesh!: Mesh;
     private collisionCallbacks: Map<string, (event: CollisionEvent) => void> = new Map();
+    private fixedTimeStep: number;
+    private maxSubSteps: number;
+    private currentTick: number = 0;
+    private lastUpdateTime: number = 0;
+    private accumulator: number = 0;
 
-    constructor(engine: Engine, scene: Scene) {
+    constructor(engine: Engine, scene: Scene, config: PhysicsConfig) {
         this.engine = engine;
         this.scene = scene;
+        this.fixedTimeStep = config.fixedTimeStep;
+        this.maxSubSteps = config.maxSubSteps;
         
         // Initialize physics engine
         this.initializePhysics();
         
         // Configure physics world
         this.world = new CANNON.World();
-        this.world.gravity.set(0, -9.81, 0);
+        this.world.gravity.set(0, -config.gravity, 0);
         this.world.broadphase = new CANNON.NaiveBroadphase();
         this.world.solver.iterations = 10;
         
@@ -46,40 +53,7 @@ export class PhysicsWorld {
         
         // Add collision event listeners
         this.world.addEventListener('beginContact', (event: CollisionEvent) => {
-            const isGroundCollision = event.bodyA === this.groundBody || event.bodyB === this.groundBody;
-            if (isGroundCollision) {
-                const vehicleBody = event.bodyA === this.groundBody ? event.bodyB : event.bodyA;
-                const impactVelocity = event.contact.getImpactVelocityAlongNormal();
-                
-                console.log('Ground collision:', {
-                    vehicleId: vehicleBody.id,
-                    impactVelocity,
-                    vehiclePosition: vehicleBody.position,
-                    groundPosition: this.groundBody.position,
-                    vehicleVelocity: vehicleBody.velocity,
-                    contactPoint: event.contact.ri
-                });
-
-                // Calculate collision normal from contact points
-                const normal = new CANNON.Vec3();
-                normal.copy(event.contact.ri);
-                normal.normalize();
-                
-                // Calculate reflection vector
-                const dot = vehicleBody.velocity.dot(normal);
-                const reflection = vehicleBody.velocity.vsub(normal.scale(2 * dot));
-                
-                // Apply collision response with damping
-                vehicleBody.velocity.copy(reflection.scale(0.5));
-                
-                // Add some random torque for visual effect
-                const randomTorque = new CANNON.Vec3(
-                    (Math.random() - 0.5) * impactVelocity,
-                    (Math.random() - 0.5) * impactVelocity,
-                    (Math.random() - 0.5) * impactVelocity
-                );
-                vehicleBody.angularVelocity.vadd(randomTorque, vehicleBody.angularVelocity);
-            }
+            this.handleCollision(event);
         });
     }
 
@@ -221,13 +195,55 @@ export class PhysicsWorld {
         return this.world;
     }
 
-    public update(deltaTime: number) {
-        // Use fixed time step for better stability
-        const fixedTimeStep = 1/60;
-        const maxSubSteps = 3; // Maximum number of substeps to prevent spiral of death
-        
-        // Step the physics world
-        this.world.step(fixedTimeStep, deltaTime, maxSubSteps);
+    public update(deltaTime: number): void {
+        const currentTime = performance.now();
+        const frameTime = currentTime - this.lastUpdateTime;
+        this.lastUpdateTime = currentTime;
+
+        // Add frame time to accumulator
+        this.accumulator += frameTime;
+
+        // Perform fixed timestep updates with a maximum of 3 steps per frame
+        let steps = 0;
+        while (this.accumulator >= this.fixedTimeStep && steps < 3) {
+            this.world.step(this.fixedTimeStep);
+            this.currentTick++;
+            this.accumulator -= this.fixedTimeStep;
+            steps++;
+        }
+
+        // If we have leftover time, carry it over to next frame
+        if (this.accumulator > this.fixedTimeStep * 3) {
+            this.accumulator = this.fixedTimeStep * 3;
+        }
+    }
+
+    public getCurrentTick(): number {
+        return this.currentTick;
+    }
+
+    public getState(id: string): PhysicsState | null {
+        const body = this.bodies.get(id);
+        if (!body) return null;
+
+        return {
+            position: new Vector3(body.position.x, body.position.y, body.position.z),
+            quaternion: new Quaternion(body.quaternion.x, body.quaternion.y, body.quaternion.z, body.quaternion.w),
+            linearVelocity: new Vector3(body.velocity.x, body.velocity.y, body.velocity.z),
+            angularVelocity: new Vector3(body.angularVelocity.x, body.angularVelocity.y, body.angularVelocity.z),
+            timestamp: performance.now(),
+            tick: this.currentTick
+        };
+    }
+
+    public setState(id: string, state: PhysicsState): void {
+        const body = this.bodies.get(id);
+        if (!body) return;
+
+        body.position.set(state.position.x, state.position.y, state.position.z);
+        body.quaternion.set(state.quaternion.x, state.quaternion.y, state.quaternion.z, state.quaternion.w);
+        body.velocity.set(state.linearVelocity.x, state.linearVelocity.y, state.linearVelocity.z);
+        body.angularVelocity.set(state.angularVelocity.x, state.angularVelocity.y, state.angularVelocity.z);
     }
 
     public createVehicle(id: string, config: any): CANNON.Body {
@@ -334,7 +350,9 @@ export class PhysicsWorld {
             position: new Vector3(body.position.x, body.position.y, body.position.z),
             quaternion: new Quaternion(body.quaternion.x, body.quaternion.y, body.quaternion.z, body.quaternion.w),
             linearVelocity: new Vector3(body.velocity.x, body.velocity.y, body.velocity.z),
-            angularVelocity: new Vector3(body.angularVelocity.x, body.angularVelocity.y, body.angularVelocity.z)
+            angularVelocity: new Vector3(body.angularVelocity.x, body.angularVelocity.y, body.angularVelocity.z),
+            timestamp: performance.now(),
+            tick: this.currentTick
         };
     }
 

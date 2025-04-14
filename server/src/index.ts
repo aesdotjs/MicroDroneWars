@@ -3,6 +3,7 @@ import express from "express";
 import http from "http";
 import path from "path";
 import { MicroDroneRoom } from "./rooms/MicroDroneRoom";
+import { WebSocket } from "ws";
 
 // Setup server
 const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 2567;
@@ -17,10 +18,23 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 const server = http.createServer(app);
-const gameServer = new Server({ server });
+const gameServer = new Server({ 
+  server,
+  // Development settings
+  pingInterval: 0, // Disable ping interval during development
+  pingMaxRetries: 3,
+  verifyClient: (info: { req: http.IncomingMessage; secure: boolean }, next: (result: boolean) => void) => {
+    // Accept all connections during development
+    next(true);
+  }
+});
 
 // Register room handlers
-gameServer.define('microdrone_room', MicroDroneRoom);
+gameServer.define('microdrone_room', MicroDroneRoom, {
+  // Room options
+  maxClients: 20,
+  autoDispose: false
+});
 
 // Start server
 gameServer.listen(port)

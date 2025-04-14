@@ -17,6 +17,7 @@ export abstract class BasePhysicsController {
     protected maxEnginePower: number = 1.0;
     protected enginePowerChangeRate: number = 0.2;
     protected lastDrag: number = 0;
+    protected currentTick: number = 0;
 
     constructor(world: CANNON.World, config: PhysicsConfig) {
         this.world = world;
@@ -92,7 +93,9 @@ export abstract class BasePhysicsController {
                 this.body.angularVelocity.x,
                 this.body.angularVelocity.y,
                 this.body.angularVelocity.z
-            )
+            ),
+            timestamp: performance.now(),
+            tick: this.currentTick
         };
     }
 
