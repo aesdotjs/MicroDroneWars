@@ -1,6 +1,4 @@
 import { State } from './schemas/State';
-import { Drone as DroneSchema } from './schemas/Drone';
-import { Plane as PlaneSchema } from './schemas/Plane';
 import { Flag as FlagSchema } from './schemas/Flag';
 import { Vehicle as VehicleSchema } from './schemas/Vehicle';
 import { PhysicsState } from '@shared/physics/types';
@@ -8,8 +6,8 @@ import * as Colyseus from 'colyseus.js';
 import { Engine, Vector3, Quaternion } from 'babylonjs';
 import { GameScene } from './GameScene';
 import { PhysicsInput } from '@shared/physics/types';
-import { Drone } from './Drone';
-import { Plane } from './Plane';
+import { Drone } from './vehicles/Drone';
+import { Plane } from './vehicles/Plane';
 import { Flag } from './Flag';
 
 
@@ -101,12 +99,24 @@ export class Game {
             try {
                 if (vehicle.vehicleType === 'drone') {
                     console.log('Creating drone vehicle...');
-                    gameVehicle = new Drone(this.gameScene.getScene(), 'drone', vehicle.team, this.canvas, isLocalPlayer);
-                    gameVehicle.initialize(this.gameScene.getScene(), this.gameScene.getPhysicsWorld());
+                    gameVehicle = new Drone(
+                        this.gameScene.getScene(), 
+                        'drone', 
+                        vehicle.team, 
+                        this.canvas, 
+                        isLocalPlayer ? this.gameScene.getInputManager() : undefined,
+                        isLocalPlayer
+                    );
                 } else if (vehicle.vehicleType === 'plane') {
                     console.log('Creating plane vehicle...');
-                    gameVehicle = new Plane(this.gameScene.getScene(), 'plane', vehicle.team, this.canvas, isLocalPlayer);
-                    gameVehicle.initialize(this.gameScene.getScene(), this.gameScene.getPhysicsWorld());
+                    gameVehicle = new Plane(
+                        this.gameScene.getScene(), 
+                        'plane', 
+                        vehicle.team, 
+                        this.canvas, 
+                        isLocalPlayer ? this.gameScene.getInputManager() : undefined,
+                        isLocalPlayer
+                    );
                 } else {
                     console.error('Unknown vehicle type:', vehicle.vehicleType);
                     return;
@@ -119,8 +129,7 @@ export class Game {
                         team: gameVehicle.team,
                         isLocalPlayer,
                         hasMesh: !!gameVehicle.mesh,
-                        meshPosition: gameVehicle.mesh?.position,
-                        hasPhysics: !!gameVehicle.physics
+                        meshPosition: gameVehicle.mesh?.position
                     });
 
                     this.gameScene.addVehicle(sessionId, gameVehicle);
@@ -143,7 +152,8 @@ export class Game {
                                 linearVelocity: new Vector3(vehicle.linearVelocityX, vehicle.linearVelocityY, vehicle.linearVelocityZ),
                                 angularVelocity: new Vector3(vehicle.angularVelocityX, vehicle.angularVelocityY, vehicle.angularVelocityZ)
                             };
-                            gameVehicle.updateState(updatedState);
+                            // Use vehicle.id instead of sessionId for state management
+                            this.gameScene.getPhysicsWorld().addState(gameVehicle.id, updatedState);
                         }
                     });
 

@@ -1,5 +1,5 @@
 import { Scene, Engine, Vector3, HemisphericLight, UniversalCamera, Color4, Quaternion, MeshBuilder, StandardMaterial, Color3, DirectionalLight, ShadowGenerator } from 'babylonjs';
-import { Vehicle } from './Vehicle';
+import { Vehicle } from './vehicles/Vehicle';
 import { Flag } from './Flag';
 import { InputManager } from './InputManager';
 import { Game } from './Game';
@@ -20,8 +20,6 @@ export class GameScene {
     private inputManager!: InputManager;
     private physicsWorld!: ClientPhysicsWorld;
     private collisionManager!: CollisionManager;
-    private lastDebugTime: number = 0;
-    private debugInterval: number = 500; // 500ms between debug logs
     private shadowGenerator!: ShadowGenerator;
 
     constructor(engine: Engine, game: Game) {
@@ -139,8 +137,31 @@ export class GameScene {
         console.log('Adding vehicle:', sessionId);
         this.vehicles.set(sessionId, vehicle);
         
-        // Initialize vehicle with physics world and input manager
-        vehicle.initialize(this.scene, this.physicsWorld, this.inputManager);
+        // Create physics controller for the vehicle
+        const controller = this.physicsWorld.createVehicle(
+            vehicle.id,
+            vehicle.type === 'drone' ? 'drone' : 'plane',
+            {
+                vehicleType: vehicle.type,
+                mass: vehicle.type === 'drone' ? 10 : 50,
+                team: vehicle.team,
+                drag: 0.8,
+                angularDrag: 0.8,
+                maxSpeed: 20,
+                maxAngularSpeed: 0.2,
+                maxAngularAcceleration: 0.05,
+                angularDamping: 0.9,
+                forceMultiplier: 0.005,
+                thrust: vehicle.type === 'drone' ? 20 : 30,
+                lift: vehicle.type === 'drone' ? 15 : 12,
+                torque: vehicle.type === 'drone' ? 1 : 2,
+                gravity: 9.81
+            },
+            vehicle.mesh?.position || new Vector3(0, 10, 0)
+        );
+
+        // Connect physics controller to vehicle
+        vehicle.setPhysicsController(controller);
         
         // Add vehicle to shadow generator
         if (this.shadowGenerator && vehicle.mesh) {
@@ -153,7 +174,7 @@ export class GameScene {
         
         // Set up local player
         if (vehicle.isLocalPlayer) {
-            this.setAsLocalPlayer(vehicle);
+            this.setLocalPlayer(vehicle);
         }
         
         console.log('Vehicle added successfully:', {
@@ -162,7 +183,7 @@ export class GameScene {
             team: vehicle.team,
             isLocalPlayer: vehicle.isLocalPlayer,
             vehicleCount: this.vehicles.size,
-            hasInputManager: !!vehicle.inputManager
+            hasPhysicsController: !!controller
         });
     }
 
@@ -179,38 +200,39 @@ export class GameScene {
         }
     }
 
-    private setAsLocalPlayer(vehicle: Vehicle): void {
+    public setLocalPlayer(vehicle: Vehicle): void {
         console.log('Setting vehicle as local player:', {
             id: vehicle.id,
             hasMesh: !!vehicle.mesh,
             meshPosition: vehicle.mesh?.position
         });
-        
+
         this.localPlayer = vehicle;
         vehicle.isLocalPlayer = true;
         
-        if (!vehicle.inputManager && this.inputManager) {
-            vehicle.inputManager = this.inputManager;
-        }
-        
-        // Update camera position to follow local player
-        if (this.camera && vehicle.mesh) {
-            const position = vehicle.mesh.position;
-            this.camera.position = new Vector3(position.x, position.y + 5, position.z + 10);
-            this.camera.setTarget(position);
+        // Set up camera for local player
+        if (vehicle.mesh) {
+            const cameraPosition = vehicle.mesh.position.add(new Vector3(0, 5, -10));
+            const cameraTarget = vehicle.mesh.position.add(new Vector3(0, 1, 0));
             
-            // We don't attach camera controls here anymore
             console.log('Initial camera setup for local player:', {
-                cameraPosition: this.camera.position,
-                cameraTarget: this.camera.target
+                cameraPosition,
+                cameraTarget
             });
+            
+            this.camera.position = cameraPosition;
+            this.camera.setTarget(cameraTarget);
+            this.camera.attachControl(this.engine.getRenderingCanvas(), true);
         }
-        
+
+        // Set local player ID in physics world using vehicle.id
+        this.physicsWorld.setLocalPlayerId(vehicle.id);
+
         console.log('Vehicle set as local player:', {
             id: vehicle.id,
             type: vehicle.type,
             team: vehicle.team,
-            hasInputManager: !!vehicle.inputManager,
+            hasInputManager: !!this.inputManager,
             hasCamera: !!this.camera
         });
     }
@@ -223,23 +245,24 @@ export class GameScene {
         // Get input from the scene's input manager
         const input = this.inputManager.getInput();
         
-        // Update all vehicles
-        this.vehicles.forEach(vehicle => {
-            vehicle.update(deltaTime);
-        });
-
-        
         // Update physics world with input
         this.physicsWorld.update(deltaTime, input);
-
-        // Only update physics world if there's active input
-        if (Object.values(input).some(value => 
+        
+        // Only send input to server if there's active input
+        if (this.localPlayer?.id && Object.values(input).some(value => 
             value === true || 
             (typeof value === 'object' && value.x !== 0 && value.y !== 0)
         )) {
-            // console.log('GameScene Update - Updating physics world with input:', input);
             this.game.sendMovementUpdate(input);
         }
+        
+        // Update all vehicles' meshes with their physics states
+        this.vehicles.forEach(vehicle => {
+            const state = this.physicsWorld.getState(vehicle.id);
+            if (state) {
+                vehicle.updateState(state);
+            }
+        });
         
         // Update camera to follow local player
         if (this.localPlayer && this.localPlayer.mesh && this.camera) {
@@ -275,20 +298,6 @@ export class GameScene {
             this.camera.position = cameraPos;
             const targetPos = position.add(new Vector3(0, 2, 0));
             this.camera.setTarget(targetPos);
-
-            // Throttled debug logging
-            if (currentTime - this.lastDebugTime > this.debugInterval) {
-                console.log('Vehicle Debug:', {
-                    position: position,
-                    rotation: quaternion,
-                    hasPhysics: !!this.localPlayer.physics,
-                    physicsState: this.localPlayer.physics?.getState(),
-                    input: input,
-                    isLocalPlayer: this.localPlayer.isLocalPlayer,
-                    groundSize: { width: 460, height: 460 }
-                });
-                this.lastDebugTime = currentTime;
-            }
         }
     }
 
@@ -362,5 +371,9 @@ export class GameScene {
             
             this.collisionManager.addEnvironmentMesh(obstacle);
         }
+    }
+
+    public getInputManager(): InputManager {
+        return this.inputManager;
     }
 } 

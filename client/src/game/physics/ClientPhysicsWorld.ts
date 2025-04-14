@@ -13,7 +13,7 @@ export class ClientPhysicsWorld {
     private controllers: Map<string, BasePhysicsController>;
     private stateBuffer: Map<string, PhysicsState[]>;
     private interpolationDelay: number;
-    private lastUpdateTime: number;
+    private localPlayerId: string = '';
 
     constructor(engine: Engine, scene: Scene) {
         this.engine = engine;
@@ -22,7 +22,6 @@ export class ClientPhysicsWorld {
         this.controllers = new Map();
         this.stateBuffer = new Map();
         this.interpolationDelay = 100; // ms
-        this.lastUpdateTime = performance.now();
     }
 
     createVehicle(id: string, type: 'drone' | 'plane', config: VehiclePhysicsConfig, initialPosition: Vector3): BasePhysicsController {
@@ -75,28 +74,29 @@ export class ClientPhysicsWorld {
         // Step physics world
         this.physicsWorld.update(deltaTime);
 
-        // Update all controllers
+        // Update all vehicle controllers with appropriate input
         this.controllers.forEach((controller, id) => {
-            controller.update(deltaTime, input);
+            // Use provided input for local player, default input for others
+            const controllerInput = id === this.localPlayerId ? input : {
+                forward: false,
+                backward: false,
+                left: false,
+                right: false,
+                up: false,
+                down: false,
+                pitchUp: false,
+                pitchDown: false,
+                yawLeft: false,
+                yawRight: false,
+                rollLeft: false,
+                rollRight: false,
+                mouseDelta: { x: 0, y: 0 }
+            };
+            controller.update(deltaTime, controllerInput);
         });
-
+        
         // Interpolate states
         this.interpolateStates();
-    }
-
-    applyInput(id: string, input: PhysicsInput): void {
-        // Log only if there's any active input
-        if (Object.values(input).some(value => 
-            value === true || 
-            (typeof value === 'object' && value.x !== 0 && value.y !== 0)
-        )) {
-            console.log('ClientPhysicsWorld ApplyInput:', { id, input });
-        }
-
-        const controller = this.controllers.get(id);
-        if (controller) {
-            controller.update(1/60, input);
-        }
     }
 
     addState(id: string, state: PhysicsState): void {
@@ -208,5 +208,13 @@ export class ClientPhysicsWorld {
 
     public unregisterCollisionCallback(id: string): void {
         this.physicsWorld.unregisterCollisionCallback(id);
+    }
+
+    setLocalPlayerId(id: string): void {
+        this.localPlayerId = id;
+    }
+
+    getLocalPlayerId(): string {
+        return this.localPlayerId;
     }
 } 

@@ -98,7 +98,6 @@ export abstract class BasePhysicsController {
 
     setState(state: PhysicsState): void {
         if (!this.body) return;
-        
         this.body.position.set(
             state.position.x,
             state.position.y,

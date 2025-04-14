@@ -61,6 +61,7 @@ export class MicroDroneRoom extends Room<State> {
         // Create physics controller for the vehicle
         const config: VehiclePhysicsConfig = {
             vehicleType: options.vehicleType,
+            team: options.team,
             mass: 50,
             gravity: 9.81,
             drag: 0.8,

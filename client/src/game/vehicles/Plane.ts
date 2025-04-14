@@ -1,8 +1,6 @@
 import { Vehicle } from "./Vehicle";
-import { MeshBuilder, Vector3, StandardMaterial, Color3, MultiMaterial, Color4, Quaternion, Scene, Mesh, ParticleSystem, Texture, Matrix } from 'babylonjs';
-import { PhysicsController } from './controllers/PhysicsController';
-import { ClientPhysicsWorld } from './physics/ClientPhysicsWorld';
-import { PhysicsInput } from '@shared/physics/types';
+import { MeshBuilder, Vector3, StandardMaterial, Color3, MultiMaterial, Color4, Quaternion, Scene, Mesh, ParticleSystem } from 'babylonjs';
+import { InputManager } from '../InputManager';
 
 export class Plane extends Vehicle {
     public maxSpeed: number = 8;
@@ -18,24 +16,19 @@ export class Plane extends Vehicle {
         right: ParticleSystem;
     };
 
-    constructor(scene: Scene, type: string, team: number, canvas: HTMLCanvasElement, isLocalPlayer: boolean = false) {
-        super(scene, type, team, canvas, isLocalPlayer);
+    constructor(scene: Scene, type: 'drone' | 'plane', team: number, canvas: HTMLCanvasElement, inputManager?: InputManager, isLocalPlayer: boolean = false) {
+        super(scene, type, team, canvas, inputManager, isLocalPlayer);
         this.id = `plane_${Math.random().toString(36).substr(2, 9)}`;
         this.maxHealth = 200;
         this.health = 200;
         
         // Create mesh first
         this.createMesh();
-    }
-
-    public initialize(scene: Scene, physicsWorld: ClientPhysicsWorld): void {
-        super.initialize(scene, physicsWorld);
         
         console.log('Plane created:', {
             id: this.id,
             position: this.mesh?.position.toString(),
             rotation: this.mesh?.rotation.toString(),
-            hasPhysics: !!this.physics,
             hasScene: !!this.scene,
             isVisible: this.mesh?.isVisible
         });
@@ -81,25 +74,23 @@ export class Plane extends Vehicle {
         // Create a multi-material
         const multiMaterial = new MultiMaterial("planeMultiMaterial", this.scene);
         multiMaterial.subMaterials = [
-            bodyMaterial,    // Right face
-            bodyMaterial,    // Left face
-            bodyMaterial,    // Top face
-            bodyMaterial,    // Bottom face
-            frontMaterial,   // Front face
-            backMaterial     // Back face
+            bodyMaterial, // Right
+            bodyMaterial, // Left
+            bodyMaterial, // Top
+            bodyMaterial, // Bottom
+            frontMaterial, // Front
+            backMaterial  // Back
         ];
 
-        // Apply the multi-material to the mesh
         this.mesh.material = multiMaterial;
-        
+
         // Create wings
-        const wingMaterial = new StandardMaterial('wingMaterial', this.scene);
+        const wingMaterial = new StandardMaterial("wingMaterial", this.scene);
         wingMaterial.diffuseColor = new Color3(0.5, 0.5, 0.5);
         wingMaterial.emissiveColor = new Color3(0.1, 0.1, 0.1);
-        wingMaterial.backFaceCulling = false;
 
         // Left wing
-        this.leftWing = MeshBuilder.CreateBox('leftWing', {
+        this.leftWing = MeshBuilder.CreateBox("leftWing", {
             width: 0.3,
             height: 0.1,
             depth: 1.5
@@ -110,7 +101,7 @@ export class Plane extends Vehicle {
         this.leftWing.parent = this.mesh;
 
         // Right wing
-        this.rightWing = MeshBuilder.CreateBox('rightWing', {
+        this.rightWing = MeshBuilder.CreateBox("rightWing", {
             width: 0.3,
             height: 0.1,
             depth: 1.5
@@ -121,7 +112,7 @@ export class Plane extends Vehicle {
         this.rightWing.parent = this.mesh;
 
         // Tail
-        this.tail = MeshBuilder.CreateBox('tail', {
+        this.tail = MeshBuilder.CreateBox("tail", {
             width: 0.1,
             height: 0.1,
             depth: 0.5
@@ -151,45 +142,40 @@ export class Plane extends Vehicle {
     }
 
     public update(deltaTime: number = 1/60): void {
-        if (!this.mesh || !this.physics) return;
+        if (!this.mesh) return;
         
-        // Get input from input manager if available, or use default input
-        const defaultInput: PhysicsInput = {
-            forward: false,
-            backward: false,
-            left: false,
-            right: false,
-            up: false,
-            down: false,
-            pitchUp: false,
-            pitchDown: false,
-            yawLeft: false,
-            yawRight: false,
-            rollLeft: false,
-            rollRight: false,
-            mouseDelta: { x: 0, y: 0 }
-        };
-        
-        const input = this.inputManager ? this.inputManager.getInput() : defaultInput;
-        
-        // Update physics
-        this.physics.update(deltaTime, input);
-
-        // Update control surfaces
+        // Update control surfaces based on input
         if (this.leftWing && this.rightWing && this.tail) {
-            const rollAmount = this.physics.getAileronPosition();
-            const pitchAmount = this.physics.getElevatorPosition();
-            const yawAmount = this.physics.getRudderPosition();
+            const input = this.inputManager?.getInput() || {
+                forward: false,
+                backward: false,
+                left: false,
+                right: false,
+                up: false,
+                down: false,
+                pitchUp: false,
+                pitchDown: false,
+                yawLeft: false,
+                yawRight: false,
+                rollLeft: false,
+                rollRight: false,
+                mouseDelta: { x: 0, y: 0 }
+            };
+
+            // Calculate control surface positions based on input
+            const rollAmount = (input.rollLeft ? 1 : 0) - (input.rollRight ? 1 : 0);
+            const pitchAmount = (input.pitchUp ? 1 : 0) - (input.pitchDown ? 1 : 0);
+            const yawAmount = (input.yawLeft ? 1 : 0) - (input.yawRight ? 1 : 0);
 
             // Update wing angles for roll
-            this.leftWing.rotation.z = rollAmount;
-            this.rightWing.rotation.z = -rollAmount;
+            this.leftWing.rotation.z = rollAmount * 0.5;
+            this.rightWing.rotation.z = -rollAmount * 0.5;
             
             // Update tail angle for pitch
-            this.tail.rotation.x = pitchAmount;
+            this.tail.rotation.x = pitchAmount * 0.5;
 
             // Update tail angle for yaw
-            this.tail.rotation.y = yawAmount;
+            this.tail.rotation.y = yawAmount * 0.5;
         }
     }
 

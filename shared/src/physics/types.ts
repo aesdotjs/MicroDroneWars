@@ -30,6 +30,7 @@ export interface VehiclePhysicsConfig extends PhysicsConfig {
     wingArea?: number;
     strafeForce?: number;
     minHeight?: number;
+    team: number;
 }
 
 export interface PhysicsInput {

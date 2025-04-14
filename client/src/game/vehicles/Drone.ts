@@ -1,8 +1,6 @@
 import { Vehicle } from "./Vehicle";
 import { MeshBuilder, Vector3, StandardMaterial, Color3, MultiMaterial, Color4, Quaternion, Scene, Mesh, ParticleSystem, Texture, Matrix } from 'babylonjs';
-import { PhysicsController } from './controllers/PhysicsController';
-import { ClientPhysicsWorld } from './physics/ClientPhysicsWorld';
-import { PhysicsInput } from '@shared/physics/types';
+import { InputManager } from '../InputManager';
 
 export class Drone extends Vehicle {
     public maxSpeed: number = 5;
@@ -18,24 +16,19 @@ export class Drone extends Vehicle {
         backRight: ParticleSystem;
     };
 
-    constructor(scene: Scene, type: string, team: number, canvas: HTMLCanvasElement, isLocalPlayer: boolean = false) {
-        super(scene, type, team, canvas, isLocalPlayer);
+    constructor(scene: Scene, type: 'drone' | 'plane', team: number, canvas: HTMLCanvasElement, inputManager?: InputManager, isLocalPlayer: boolean = false) {
+        super(scene, type, team, canvas, inputManager, isLocalPlayer);
         this.id = `drone_${Math.random().toString(36).substr(2, 9)}`;
         this.maxHealth = 150;
         this.health = 150;
         
         // Create mesh first
         this.createMesh();
-    }
-
-    public initialize(scene: Scene, physicsWorld: ClientPhysicsWorld): void {
-        super.initialize(scene, physicsWorld);
         
         console.log('Drone created:', {
             id: this.id,
             position: this.mesh?.position.toString(),
             rotation: this.mesh?.rotation.toString(),
-            hasPhysics: !!this.physics,
             hasScene: !!this.scene,
             isVisible: this.mesh?.isVisible
         });
@@ -256,51 +249,40 @@ export class Drone extends Vehicle {
                 thruster.start();
             });
 
-            // Adjust emission rate based on thrust
-            if (this.physics) {
-                const state = this.physics.getState();
-                if (state) {
-                    const speed = state.linearVelocity.length();
-                    const normalizedSpeed = Math.min(speed / 20, 1); // Using default max speed of 20
-                    const baseEmitRate = 250;
-                    const maxEmitRate = 500;
-                    const emitRate = baseEmitRate + (maxEmitRate - baseEmitRate) * normalizedSpeed;
-                    
-                    Object.entries(this.rotorThrusters).forEach(([name, thruster]) => {
-                        thruster.emitRate = emitRate;
-                    });
-                }
-            }
+            // Adjust emission rate based on input
+            const input = this.inputManager?.getInput() || {
+                forward: false,
+                backward: false,
+                left: false,
+                right: false,
+                up: false,
+                down: false,
+                pitchUp: false,
+                pitchDown: false,
+                yawLeft: false,
+                yawRight: false,
+                rollLeft: false,
+                rollRight: false,
+                mouseDelta: { x: 0, y: 0 }
+            };
+
+            // Calculate thrust based on input
+            const thrust = (input.forward ? 1 : 0) + (input.up ? 1 : 0);
+            const baseEmitRate = 250;
+            const maxEmitRate = 500;
+            const emitRate = baseEmitRate + (maxEmitRate - baseEmitRate) * thrust;
+            
+            Object.entries(this.rotorThrusters).forEach(([name, thruster]) => {
+                thruster.emitRate = emitRate;
+            });
         } catch (error) {
             console.error('Error updating particles:', error);
         }
     }
 
     public update(deltaTime: number = 1/60): void {
-        if (!this.mesh || !this.physics) return;
+        if (!this.mesh) return;
         
-        // Get input from input manager if available, or use default input
-        const defaultInput: PhysicsInput = {
-            forward: false,
-            backward: false,
-            left: false,
-            right: false,
-            up: false,
-            down: false,
-            pitchUp: false,
-            pitchDown: false,
-            yawLeft: false,
-            yawRight: false,
-            rollLeft: false,
-            rollRight: false,
-            mouseDelta: { x: 0, y: 0 }
-        };
-        
-        const input = this.inputManager ? this.inputManager.getInput() : defaultInput;
-        
-        // Update physics
-        this.physics.update(deltaTime, input);
-
         // Update particle effects
         this.updateParticles();
     }

@@ -60,7 +60,6 @@ export class DronePhysicsController extends BasePhysicsController {
 
     public update(deltaTime: number, input: PhysicsInput): void {
         const { right, up, forward } = this.getOrientationVectors();
-
         // Apply stabilization first
         this.applyStabilization(deltaTime);
 
@@ -71,12 +70,6 @@ export class DronePhysicsController extends BasePhysicsController {
         // Strong upward thrust to counteract gravity
         const gravity = this.world.gravity;
         const gravityForce = new Vector3(-gravity.x, -gravity.y, -gravity.z);
-        
-        // Dynamic target altitude - maintain current height when not actively moving
-        if (input.up || input.down) {
-            // When actively moving up/down, update target altitude
-            this.targetAltitude = this.body.position.y + this.body.velocity.y * deltaTime;
-        }
         
         // Calculate altitude error
         const currentAltitude = this.body.position.y;
@@ -135,13 +128,14 @@ export class DronePhysicsController extends BasePhysicsController {
             this.body.velocity.x += rightDirection.x * moveSpeed;
             this.body.velocity.z += rightDirection.z * moveSpeed;
         }
-
         // Vertical movement (using global up direction)
         if (input.up) {
             this.body.velocity.y += moveSpeed;
+            this.targetAltitude = this.body.position.y + this.body.velocity.y * deltaTime;
         }
         if (input.down) {
             this.body.velocity.y -= moveSpeed;
+            this.targetAltitude = this.body.position.y - this.body.velocity.y * deltaTime;
         }
 
         // Apply pitch control (keyboard only) - using quaternion multiplication
