@@ -9,8 +9,18 @@
     "emitDecoratorMetadata": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "outDir": "lib"
+    "outDir": "lib",
+    "baseUrl": ".",
+    "rootDirs": [
+      "./src",
+      "../shared/src"
+    ],
+    "paths": {
+      "@shared/*": ["../shared/src/*"]
+    },
+    "moduleResolution": "node",
+    "resolveJsonModule": true
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "../shared/src/**/*"],
   "exclude": ["node_modules", "**/*.spec.ts"]
 } 
