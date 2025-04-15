@@ -78,11 +78,3 @@ Current Focus Areas:
    - Add obstacles and cover
 
 Next Immediate Tasks:
-
-1. Fix ground collision and prevent vehicles from falling through // DONE
-2. Implement proper vehicle roll mechanics with mouse control
-3. Add zoom functionality for first-person view
-4. Implement basic weapon system
-5. Create team spawn points and game boundaries
-
-This updated roadmap reflects our current progress and the specific changes we've made to the control scheme and vehicle movement system. The focus is now on refining the core gameplay mechanics and ensuring proper multiplayer synchronization.
