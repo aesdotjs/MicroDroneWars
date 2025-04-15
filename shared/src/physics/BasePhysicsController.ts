@@ -1,13 +1,13 @@
 import * as CANNON from 'cannon';
 import { Vector3, Quaternion, Matrix } from 'babylonjs';
-import { PhysicsState, PhysicsConfig, PhysicsInput } from './types';
+import { PhysicsState, VehiclePhysicsConfig, PhysicsInput } from './types';
 import { SpringSimulator } from '../utils/SpringSimulator';
 import { CollisionGroups, collisionMasks } from './CollisionGroups';
 
 export abstract class BasePhysicsController {
     protected body: CANNON.Body;
     protected world: CANNON.World;
-    protected config: PhysicsConfig;
+    protected config: VehiclePhysicsConfig;
     protected springSimulator: SpringSimulator;
     protected aileronSimulator: SpringSimulator;
     protected elevatorSimulator: SpringSimulator;
@@ -19,7 +19,7 @@ export abstract class BasePhysicsController {
     protected lastDrag: number = 0;
     protected currentTick: number = 0;
 
-    constructor(world: CANNON.World, config: PhysicsConfig) {
+    constructor(world: CANNON.World, config: VehiclePhysicsConfig) {
         this.world = world;
         this.config = config;
         
@@ -95,7 +95,6 @@ export abstract class BasePhysicsController {
                 this.body.angularVelocity.z
             ),
             timestamp: performance.now(),
-            tick: this.currentTick
         };
     }
 

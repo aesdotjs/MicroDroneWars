@@ -51,4 +51,5 @@ export class Flag extends Schema {
 export class State extends Schema {
     @type({ map: Vehicle }) vehicles = new MapSchema<Vehicle>();
     @type({ map: Flag }) flags = new MapSchema<Flag>();
+    @type("number") serverTick = 0;
 }

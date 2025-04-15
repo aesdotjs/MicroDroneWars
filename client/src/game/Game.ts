@@ -10,7 +10,6 @@ import { Drone } from './vehicles/Drone';
 import { Plane } from './vehicles/Plane';
 import { Flag } from './Flag';
 
-
 export class Game {
     private canvas!: HTMLCanvasElement;
     private engine!: Engine;
@@ -80,10 +79,41 @@ export class Game {
 
     private setupRoomHandlers(): void {
         if (!this.room) return;
+        const $ = Colyseus.getStateCallbacks(this.room);
+        this.gameScene.getPhysicsWorld().initializeTick(this.room.state.serverTick);
+        // Update server tick when state changes
+        $(this.room.state).onChange(() => {
+            if (this.room?.state.serverTick) {
+                this.gameScene.getPhysicsWorld().updateServerTick(this.room.state.serverTick);
+            }
+        });
+
+        // Add latency measurement with smoothing
+        let smoothedLatency = 0;
+        const smoothingFactor = 0.1;
+        const minLatency = 5;
+
+        this.room.onMessage("pong", (timestamp) => {
+            const rtt = performance.now() - timestamp;
+            const oneWayLatency = Math.max(minLatency, rtt / 2);
+            
+            smoothedLatency = smoothedLatency === 0 
+                ? oneWayLatency 
+                : smoothingFactor * oneWayLatency + (1 - smoothingFactor) * smoothedLatency;
+
+            this.gameScene.getPhysicsWorld().updateNetworkLatency(smoothedLatency);
+        });
+        this.room.send("ping", performance.now());
+        // Send ping every second
+        setInterval(() => {
+            if (this.room) {
+                this.room.send("ping", performance.now());
+            }
+        }, 1000);
 
         // Handle vehicle updates
-        this.room.state.vehicles.onAdd((vehicle: VehicleSchema, sessionId: string) => {
-            console.log('Vehicle added to room:', { sessionId, vehicleType: vehicle.vehicleType, team: vehicle.team });
+        $(this.room.state).vehicles.onAdd((vehicle: VehicleSchema, sessionId: string) => {
+            console.log('Vehicle added to room:', { vehicle,sessionId, vehicleType: vehicle.vehicleType, team: vehicle.team });
             
             // Validate vehicle type
             if (!vehicle.vehicleType) {
@@ -101,7 +131,7 @@ export class Game {
                     gameVehicle = new Drone(
                         this.gameScene.getScene(), 
                         'drone', 
-                        vehicle.team, 
+                        vehicle, 
                         this.canvas, 
                         isLocalPlayer ? this.gameScene.getInputManager() : undefined,
                         isLocalPlayer
@@ -111,7 +141,7 @@ export class Game {
                     gameVehicle = new Plane(
                         this.gameScene.getScene(), 
                         'plane', 
-                        vehicle.team, 
+                        vehicle, 
                         this.canvas, 
                         isLocalPlayer ? this.gameScene.getInputManager() : undefined,
                         isLocalPlayer
@@ -140,12 +170,11 @@ export class Game {
                         linearVelocity: new Vector3(vehicle.linearVelocityX, vehicle.linearVelocityY, vehicle.linearVelocityZ),
                         angularVelocity: new Vector3(vehicle.angularVelocityX, vehicle.angularVelocityY, vehicle.angularVelocityZ),
                         timestamp: performance.now(),
-                        tick: this.gameScene.getPhysicsWorld().getCurrentTick()
                     };
                     gameVehicle.updateState(physicsState);
 
                     // Listen for vehicle updates
-                    vehicle.onChange(() => {
+                    $(vehicle).onChange(() => {
                         if (gameVehicle) {
                             const updatedState: PhysicsState = {
                                 position: new Vector3(vehicle.positionX, vehicle.positionY, vehicle.positionZ),
@@ -153,16 +182,10 @@ export class Game {
                                 linearVelocity: new Vector3(vehicle.linearVelocityX, vehicle.linearVelocityY, vehicle.linearVelocityZ),
                                 angularVelocity: new Vector3(vehicle.angularVelocityX, vehicle.angularVelocityY, vehicle.angularVelocityZ),
                                 timestamp: performance.now(),
-                                tick: this.gameScene.getPhysicsWorld().getCurrentTick()
                             };
                             // Use vehicle.id instead of sessionId for state management
                             this.gameScene.getPhysicsWorld().addState(gameVehicle.id, updatedState);
                         }
-                    });
-
-                    vehicle.onRemove(() => {
-                        console.log('Vehicle removed:', sessionId);
-                        this.gameScene.removeVehicle(sessionId);
                     });
                 }
             } catch (error) {
@@ -170,8 +193,13 @@ export class Game {
             }
         });
 
+        $(this.room.state).vehicles.onRemove((_vehicle: VehicleSchema, sessionId: string) => {
+            console.log('Vehicle removed:', sessionId);
+            this.gameScene.removeVehicle(sessionId);
+        });
+
         // Handle flag updates
-        this.room.state.flags.onAdd((flag: FlagSchema, flagId: string) => {
+        $(this.room.state).flags.onAdd((flag: FlagSchema, flagId: string) => {
             console.log('Flag added:', flagId);
             const gameFlag = new Flag(this.gameScene.getScene(), flag.team);
             gameFlag.setPosition(new Vector3(flag.x, flag.y, flag.z));
@@ -179,7 +207,7 @@ export class Game {
             gameFlag.atBase = flag.atBase;
             this.gameScene.addFlag(flag.team, gameFlag);
             
-            flag.onChange(() => {
+            $(flag).onChange(() => {
                 const existingFlag = this.gameScene.getFlag(flag.team);
                 if (existingFlag) {
                     existingFlag.setPosition(new Vector3(flag.x, flag.y, flag.z));
@@ -187,21 +215,11 @@ export class Game {
                     existingFlag.atBase = flag.atBase;
                 }
             });
-
-            flag.onRemove(() => {
-                console.log('Flag removed:', flagId);
-                this.gameScene.removeFlag(flag.team);
-            });
         });
 
-        // Handle initial flags
-        this.room.state.flags.forEach((flag: FlagSchema, flagId: string) => {
-            console.log('Initial flag state:', flagId);
-            const gameFlag = new Flag(this.gameScene.getScene(), flag.team);
-            gameFlag.setPosition(new Vector3(flag.x, flag.y, flag.z));
-            gameFlag.carriedBy = flag.carriedBy;
-            gameFlag.atBase = flag.atBase;
-            this.gameScene.addFlag(flag.team, gameFlag);
+        $(this.room.state).flags.onRemove((flag: FlagSchema, flagId: string) => {
+            console.log('Flag removed:', flagId);
+            this.gameScene.removeFlag(flag.team);
         });
     }
 

@@ -139,8 +139,8 @@ export class GameScene {
         
         // Create initial state from vehicle mesh
         const initialState = {
-            position: vehicle.mesh?.position || new Vector3(0, 10, 0),
-            quaternion: vehicle.mesh?.rotationQuaternion || new Quaternion(0, 0, 0, 1),
+            position: new Vector3(0, 10, 0), // This will be overridden by server state
+            quaternion: new Quaternion(0, 0, 0, 1),
             linearVelocity: new Vector3(0, 0, 0),
             angularVelocity: new Vector3(0, 0, 0),
             timestamp: performance.now(),
@@ -150,26 +150,7 @@ export class GameScene {
         // Create physics controller for the vehicle
         const controller = this.physicsWorld.createVehicle(
             vehicle.id,
-            vehicle.type === 'drone' ? 'drone' : 'plane',
-            {
-                vehicleType: vehicle.type,
-                mass: vehicle.type === 'drone' ? 10 : 50,
-                team: vehicle.team,
-                drag: 0.8,
-                angularDrag: 0.8,
-                maxSpeed: 20,
-                maxAngularSpeed: 0.2,
-                maxAngularAcceleration: 0.05,
-                angularDamping: 0.9,
-                forceMultiplier: 0.005,
-                thrust: vehicle.type === 'drone' ? 20 : 30,
-                lift: vehicle.type === 'drone' ? 15 : 12,
-                torque: vehicle.type === 'drone' ? 1 : 2,
-                gravity: 9.81,
-                fixedTimeStep: 1/60,
-                maxSubSteps: 3
-            },
-            vehicle.mesh?.position || new Vector3(0, 10, 0),
+            vehicle.type,
             initialState
         );
 
@@ -252,7 +233,7 @@ export class GameScene {
 
     private update(): void {
         const currentTime = performance.now();
-        const deltaTime = (currentTime - this.lastTime) / 1000;
+        const deltaTime = (currentTime - this.lastTime);
         this.lastTime = currentTime;
         
         // Get input from the scene's input manager
@@ -261,9 +242,8 @@ export class GameScene {
         // Add timestamp and tick to input
         input.timestamp = currentTime;
         input.tick = this.physicsWorld.getCurrentTick();
-        
         // Update physics world with input
-        this.physicsWorld.update(currentTime, deltaTime, input);
+        this.physicsWorld.update(deltaTime, input);
         
         // Always send input to server for local player to maintain consistent updates
         if (this.localPlayer?.id) {            

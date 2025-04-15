@@ -208,7 +208,6 @@ export class PhysicsWorld {
             linearVelocity: new Vector3(body.velocity.x, body.velocity.y, body.velocity.z),
             angularVelocity: new Vector3(body.angularVelocity.x, body.angularVelocity.y, body.angularVelocity.z),
             timestamp: performance.now(),
-            tick: this.currentTick
         };
     }
 
@@ -223,8 +222,6 @@ export class PhysicsWorld {
     }
 
     public createVehicle(id: string, config: any): CANNON.Body {
-        // Get spawn point based on team
-        const spawnPoint = this.getTeamSpawnPoint(config.team);
         
         // Create vehicle body with proper collision filters
         const vehicleGroup = config.vehicleType === 'drone' ? CollisionGroups.Drones : CollisionGroups.Planes;
@@ -235,12 +232,12 @@ export class PhysicsWorld {
             type: config.vehicleType,
             collisionGroup: vehicleGroup,
             collisionMask: vehicleMask,
-            spawnPoint
+            spawnPoint: { x: 0, y: 10, z: 0 }
         });
 
         const body = new CANNON.Body({
             mass: config.mass || 50,
-            position: new CANNON.Vec3(spawnPoint.x, spawnPoint.y, spawnPoint.z),
+            position: new CANNON.Vec3(0, 10, 0),
             shape: new CANNON.Box(new CANNON.Vec3(0.5, 0.15, 0.5)),
             material: new CANNON.Material('vehicleMaterial'),
             collisionFilterGroup: vehicleGroup,
@@ -301,12 +298,6 @@ export class PhysicsWorld {
         return body;
     }
 
-    private getTeamSpawnPoint(team: number): { x: number, y: number, z: number } {
-        return team === 0 
-            ? { x: -20, y: 10, z: 0 }  // Team A spawn, higher up
-            : { x: 20, y: 10, z: 0 };  // Team B spawn, higher up
-    }
-
     private handleVehicleCollision(id: string, event: VehicleCollisionEvent): void {
         const body = this.bodies.get(id);
         if (!body) return;
@@ -328,7 +319,6 @@ export class PhysicsWorld {
             linearVelocity: new Vector3(body.velocity.x, body.velocity.y, body.velocity.z),
             angularVelocity: new Vector3(body.angularVelocity.x, body.angularVelocity.y, body.angularVelocity.z),
             timestamp: performance.now(),
-            tick: this.currentTick
         };
     }
 

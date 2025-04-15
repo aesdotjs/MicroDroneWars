@@ -2,7 +2,7 @@ import { Vector3, Quaternion, Mesh, Scene } from 'babylonjs';
 import { InputManager } from '../InputManager';
 import { PhysicsState, PhysicsInput } from '@shared/physics/types';
 import { BasePhysicsController } from '@shared/physics/BasePhysicsController';
-
+import { Vehicle as VehicleSchema } from '../schemas/Vehicle';
 export abstract class Vehicle {
     public id: string;
     public type: 'drone' | 'plane';
@@ -34,10 +34,10 @@ export abstract class Vehicle {
     public health: number = 100;
     public maxHealth: number = 100;
 
-    constructor(scene: Scene, type: 'drone' | 'plane', team: number, canvas: HTMLCanvasElement, inputManager?: InputManager, isLocalPlayer: boolean = false) {
+    constructor(scene: Scene, type: 'drone' | 'plane', vehicle: VehicleSchema, canvas: HTMLCanvasElement, inputManager?: InputManager, isLocalPlayer: boolean = false) {
         this.scene = scene;
         this.type = type;
-        this.team = team;
+        this.team = vehicle.team;
         this.canvas = canvas;
         this.inputManager = inputManager;
         this.isLocalPlayer = isLocalPlayer;
@@ -60,7 +60,6 @@ export abstract class Vehicle {
                 linearVelocity: new Vector3(0, 0, 0),
                 angularVelocity: new Vector3(0, 0, 0),
                 timestamp: performance.now(),
-                tick: 0
             });
         }
     }

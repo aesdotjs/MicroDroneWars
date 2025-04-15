@@ -1,7 +1,7 @@
 import { Vehicle } from "./Vehicle";
 import { MeshBuilder, Vector3, StandardMaterial, Color3, MultiMaterial, Color4, Quaternion, Scene, Mesh, ParticleSystem } from 'babylonjs';
 import { InputManager } from '../InputManager';
-
+import { Vehicle as VehicleSchema } from '../schemas/Vehicle';
 export class Plane extends Vehicle {
     public maxSpeed: number = 8;
     public acceleration: number = 0.15;
@@ -16,8 +16,8 @@ export class Plane extends Vehicle {
         right: ParticleSystem;
     };
 
-    constructor(scene: Scene, type: 'drone' | 'plane', team: number, canvas: HTMLCanvasElement, inputManager?: InputManager, isLocalPlayer: boolean = false) {
-        super(scene, type, team, canvas, inputManager, isLocalPlayer);
+    constructor(scene: Scene, type: 'drone' | 'plane', vehicle: VehicleSchema, canvas: HTMLCanvasElement, inputManager?: InputManager, isLocalPlayer: boolean = false) {
+        super(scene, type, vehicle, canvas, inputManager, isLocalPlayer);
         this.id = `plane_${Math.random().toString(36).substr(2, 9)}`;
         this.maxHealth = 200;
         this.health = 200;

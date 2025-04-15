@@ -7,7 +7,7 @@ export class MicroDroneRoom extends Room<State> {
     private physicsWorld!: ServerPhysicsWorld;
 
     onCreate(options: Record<string, any>) {
-        this.setState(new State());
+        this.state = new State();
         console.log("MicroDrone room created");
 
         // Set room options for faster connection
@@ -35,8 +35,20 @@ export class MicroDroneRoom extends Room<State> {
         this.onMessage("movement", (client, data: PhysicsInput) => {
             const vehicle = this.state.vehicles.get(client.sessionId);
             if (vehicle) {
+                // Add input to queue with current server tick
+                data.tick = this.physicsWorld.getCurrentTick();
                 vehicle.inputQueue.push(data);
+                
+                // Keep queue size reasonable (about 1 second of inputs)
+                if (vehicle.inputQueue.length > 60) {
+                    vehicle.inputQueue.shift();
+                }
             }
+        });
+
+        // Add ping/pong handlers
+        this.onMessage("ping", (client, timestamp) => {
+            client.send("pong", timestamp);
         });
 
         // Handle player leaving
@@ -44,12 +56,13 @@ export class MicroDroneRoom extends Room<State> {
             console.log(`Player ${client.sessionId} left the game`);
             this.onLeave(client);
         });
-
-        // Set update interval (60fps)
-        let elapsedTime = 0;
+        this.state.serverTick = this.physicsWorld.getCurrentTick();
+        // Set up fixed tick rate simulation
         this.setSimulationInterval((deltaTime) => {
-            elapsedTime += deltaTime;
-            this.update(elapsedTime, deltaTime);
+            // Convert deltaTime to seconds and update physics
+            this.physicsWorld.update(deltaTime / 1000, this.state);
+            // Update server tick in state
+            this.state.serverTick = this.physicsWorld.getCurrentTick();
         });
     }
 
@@ -66,16 +79,16 @@ export class MicroDroneRoom extends Room<State> {
 
         // Set initial position based on team
         vehicle.team = options.team;
-        vehicle.positionX = options.team === 0 ? -15 : 15;
+        // Use team-based spawn points
+        vehicle.positionX = 0;
+        vehicle.positionY = 10;
         vehicle.positionZ = 0;
         vehicle.vehicleType = options.vehicleType;
 
         // Create physics controller for the vehicle
         const config: VehiclePhysicsConfig = {
             vehicleType: options.vehicleType,
-            team: options.team,
             mass: 50,
-            gravity: 9.81,
             drag: 0.8,
             angularDrag: 0.8,
             maxSpeed: 20,
@@ -86,12 +99,10 @@ export class MicroDroneRoom extends Room<State> {
             thrust: options.vehicleType === "drone" ? 20 : 30,
             lift: options.vehicleType === "drone" ? 15 : 12,
             torque: options.vehicleType === "drone" ? 1 : 2,
-            fixedTimeStep: 1/60,
-            maxSubSteps: 3
         };
         
         // Create vehicle and add to state
-        this.physicsWorld.createVehicle(client.sessionId, config);
+        this.physicsWorld.createVehicle(client.sessionId, vehicle);
         this.state.vehicles.set(client.sessionId, vehicle);
         
         console.log(`Vehicle created for ${client.sessionId}:`, {
@@ -119,43 +130,6 @@ export class MicroDroneRoom extends Room<State> {
 
         this.state.vehicles.delete(client.sessionId);
         console.log(`Vehicle left: ${client.sessionId}`);
-    }
-
-    update(elapsedTime: number, deltaTime: number) {
-        // Update physics world
-        this.physicsWorld.update(elapsedTime, deltaTime, this.state);
-
-        // Update vehicle states from physics
-        this.state.vehicles.forEach((vehicle, sessionId) => {
-            const state = this.physicsWorld.getVehicleState(sessionId);
-            if (state) {
-                vehicle.positionX = state.position.x;
-                vehicle.positionY = state.position.y;
-                vehicle.positionZ = state.position.z;
-                vehicle.quaternionX = state.quaternion.x;
-                vehicle.quaternionY = state.quaternion.y;
-                vehicle.quaternionZ = state.quaternion.z;
-                vehicle.quaternionW = state.quaternion.w;
-                vehicle.linearVelocityX = state.linearVelocity.x;
-                vehicle.linearVelocityY = state.linearVelocity.y;
-                vehicle.linearVelocityZ = state.linearVelocity.z;
-                vehicle.angularVelocityX = state.angularVelocity.x;
-                vehicle.angularVelocityY = state.angularVelocity.y;
-                vehicle.angularVelocityZ = state.angularVelocity.z;
-            }
-        });
-
-        // Update flag positions if carried
-        this.state.flags.forEach(flag => {
-            if (flag.carriedBy) {
-                const carrier = this.state.vehicles.get(flag.carriedBy);
-                if (carrier) {
-                    flag.x = carrier.positionX;
-                    flag.y = carrier.positionY;
-                    flag.z = carrier.positionZ;
-                }
-            }
-        });
     }
 
     onDispose() {

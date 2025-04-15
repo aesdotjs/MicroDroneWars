@@ -12,4 +12,5 @@ import { Flag } from './Flag'
 export class State extends Schema {
     @type({ map: Vehicle }) public vehicles: MapSchema<Vehicle> = new MapSchema<Vehicle>();
     @type({ map: Flag }) public flags: MapSchema<Flag> = new MapSchema<Flag>();
+    @type("number") public serverTick: number = 0;
 }

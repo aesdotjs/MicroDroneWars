@@ -1,7 +1,7 @@
 import { Vehicle } from "./Vehicle";
 import { MeshBuilder, Vector3, StandardMaterial, Color3, MultiMaterial, Color4, Quaternion, Scene, Mesh, ParticleSystem, Texture, Matrix } from 'babylonjs';
 import { InputManager } from '../InputManager';
-
+import { Vehicle as VehicleSchema } from '../schemas/Vehicle';
 export class Drone extends Vehicle {
     public maxSpeed: number = 5;
     public acceleration: number = 0.2;
@@ -16,8 +16,8 @@ export class Drone extends Vehicle {
         backRight: ParticleSystem;
     };
 
-    constructor(scene: Scene, type: 'drone' | 'plane', team: number, canvas: HTMLCanvasElement, inputManager?: InputManager, isLocalPlayer: boolean = false) {
-        super(scene, type, team, canvas, inputManager, isLocalPlayer);
+    constructor(scene: Scene, type: 'drone' | 'plane', vehicle: VehicleSchema, canvas: HTMLCanvasElement, inputManager?: InputManager, isLocalPlayer: boolean = false) {
+        super(scene, type, vehicle, canvas, inputManager, isLocalPlayer);
         this.id = `drone_${Math.random().toString(36).substr(2, 9)}`;
         this.maxHealth = 150;
         this.health = 150;
@@ -141,7 +141,7 @@ export class Drone extends Vehicle {
         arrow.parent = this.mesh;
 
         // Set initial position and make sure it's visible
-        this.mesh.position = new Vector3(0, 5, 0);
+        this.mesh.position = new Vector3(0, 10, 0);
         this.mesh.isVisible = true;
         this.mesh.checkCollisions = true;
         this.mesh.receiveShadows = true;
@@ -153,8 +153,6 @@ export class Drone extends Vehicle {
 
         // Initialize rotation quaternion
         this.mesh.rotationQuaternion = new Quaternion();
-        // Rotate the mesh 180 degrees around Y axis so the front faces the camera
-        this.mesh.rotationQuaternion = Quaternion.RotationAxis(new Vector3(0, 1, 0), Math.PI);
     }
 
     private setupThrusterParticles(scene: Scene): void {

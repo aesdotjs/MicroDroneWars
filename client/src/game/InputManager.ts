@@ -140,9 +140,8 @@ export class InputManager {
             return;
         }
 
-        // Accumulate mouse movement
-        this.mouseDelta.x += event.movementX;
-        this.mouseDelta.y += event.movementY;
+        this.mouseDelta.x = event.movementX;
+        this.mouseDelta.y = event.movementY;
     }
 
     private handleFocus(): void {
@@ -206,7 +205,9 @@ export class InputManager {
             yawRight: this.keys.yawRight.getIsPressed(),
             rollLeft: this.keys.rollLeft.getIsPressed(),
             rollRight: this.keys.rollRight.getIsPressed(),
-            mouseDelta: currentMouseDelta
+            mouseDelta: currentMouseDelta,
+            timestamp: performance.now(),
+            tick: 0,
         };
 
         return input;

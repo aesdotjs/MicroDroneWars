@@ -5,6 +5,7 @@ import { DronePhysicsController } from '@shared/physics/DronePhysicsController';
 import { PlanePhysicsController } from '@shared/physics/PlanePhysicsController';
 import { PhysicsWorld } from '@shared/physics/PhysicsWorld';
 import { CollisionEvent } from '@shared/physics/types';
+import { DroneSettings, PlaneSettings } from '@shared/physics/VehicleSettings';
 
 export class ClientPhysicsWorld {
     private engine: Engine;
@@ -17,50 +18,37 @@ export class ClientPhysicsWorld {
     private lastProcessedTick: number = 0;
     private fixedTimeStep: number = 1/60;
     private accumulator: number = 0;
-    private lastUpdateTime: number = 0;
+    private networkLatency: number = 0;
+    private serverTick: number = 0;
 
     constructor(engine: Engine, scene: Scene) {
         this.engine = engine;
         this.scene = scene;
         this.physicsWorld = new PhysicsWorld(this.engine, this.scene, {
-            fixedTimeStep: 1/60,
-            mass: 1,
-            drag: 0.1,
-            angularDrag: 0.1,
-            maxSpeed: 100,
-            maxAngularSpeed: 10,
-            maxAngularAcceleration: 0.05,
-            angularDamping: 0.1,
-            forceMultiplier: 0.005,
             gravity: 9.81,
-            vehicleType: 'drone',
-            thrust: 20,
-            lift: 10,
-            torque: 5,
-            maxSubSteps: 3
         });
         this.controllers = new Map();
         this.stateBuffers = new Map();
         this.interpolationConfig = {
-            delay: 100, // ms
+            delay: 100, // ms - for other players' interpolation
             maxBufferSize: 10,
             interpolationFactor: 0.2
         };
     }
 
-    createVehicle(id: string, type: 'drone' | 'plane', config: VehiclePhysicsConfig, initialPosition: Vector3, initialState?: PhysicsState): BasePhysicsController {
-        console.log('Creating vehicle:', { id, type, initialPosition });
+    createVehicle(id: string, type: 'drone' | 'plane', initialState?: PhysicsState): BasePhysicsController {
+        console.log('Creating vehicle:', { id, initialState});
         let controller: BasePhysicsController;
 
         if (type === 'drone') {
-            controller = new DronePhysicsController(this.physicsWorld.getWorld(), config);
+            controller = new DronePhysicsController(this.physicsWorld.getWorld(), DroneSettings);
         } else {
-            controller = new PlanePhysicsController(this.physicsWorld.getWorld(), config);
+            controller = new PlanePhysicsController(this.physicsWorld.getWorld(), PlaneSettings);
         }
 
         // Use provided initial state or create default one
         const state = initialState || {
-            position: initialPosition,
+            position: new Vector3(0, 10, 0), // This will be overridden by server state
             quaternion: new Quaternion(0, 0, 0, 1),
             linearVelocity: new Vector3(0, 0, 0),
             angularVelocity: new Vector3(0, 0, 0),
@@ -80,8 +68,6 @@ export class ClientPhysicsWorld {
         
         console.log('Vehicle created successfully:', { 
             id, 
-            type, 
-            initialPosition: state.position,
             controller 
         });
         return controller;
@@ -96,15 +82,15 @@ export class ClientPhysicsWorld {
         }
     }
 
-    public update(time: number, deltaTime: number, input: PhysicsInput): void {
-        this.lastUpdateTime = time;
-
+    public update(deltaTime: number, input: PhysicsInput): void {
         // Add frame time to accumulator (convert to seconds)
-        this.accumulator += deltaTime;
+        this.accumulator += deltaTime / 1000;
 
         // Process fixed timestep updates with a maximum of 3 steps per frame
         let steps = 0;
         while (this.accumulator >= this.fixedTimeStep && steps < 3) {
+            // Set input tick to match current physics tick
+            input.tick = this.lastProcessedTick;
             this.processFixedUpdate(input);
             this.accumulator -= this.fixedTimeStep;
             steps++;
@@ -113,6 +99,11 @@ export class ClientPhysicsWorld {
         // If we have leftover time, carry it over to next frame
         if (this.accumulator > this.fixedTimeStep * 3) {
             this.accumulator = this.fixedTimeStep * 3;
+        }
+
+        // Reset accumulator if it gets too small to prevent drift
+        if (this.accumulator < 0.0001) {
+            this.accumulator = 0;
         }
 
         // Interpolate states
@@ -157,10 +148,69 @@ export class ClientPhysicsWorld {
     public addState(id: string, state: PhysicsState): void {
         const buffer = this.stateBuffers.get(id);
         if (buffer) {
-            buffer.states.push(state);
-            // Keep buffer size reasonable
-            if (buffer.states.length > this.interpolationConfig.maxBufferSize) {
-                buffer.states.shift();
+            // If this is the local player, reconcile the state
+            if (id === this.localPlayerId) {
+                // Calculate the tick we should be comparing against based on actual network latency
+                const latencyTicks = Math.ceil(this.networkLatency / (this.fixedTimeStep * 1000));
+                const targetTick = this.serverTick - latencyTicks;
+
+                // If we're too far ahead of the server, slow down
+                if (this.lastProcessedTick > this.serverTick + 5) {
+                    // Skip a few ticks to let the server catch up
+                    this.lastProcessedTick = this.serverTick + 5;
+                    if (this.lastProcessedTick % 60 === 0) {
+                        console.log('Slowing down client to let server catch up:', {
+                            oldTick: this.lastProcessedTick + 5,
+                            newTick: this.lastProcessedTick,
+                            serverTick: this.serverTick
+                        });
+                    }
+                }
+
+                // If we're too far behind the server, speed up
+                if (this.lastProcessedTick < this.serverTick - latencyTicks - 5) {
+                    // Jump ahead a few ticks to catch up
+                    this.lastProcessedTick = this.serverTick - latencyTicks;
+                    if (this.lastProcessedTick % 60 === 0) {
+                        console.log('Speeding up client to catch up to server:', {
+                            oldTick: this.lastProcessedTick - latencyTicks,
+                            newTick: this.lastProcessedTick,
+                            serverTick: this.serverTick
+                        });
+                    }
+                }
+
+                // Always reconcile if we have a large error, regardless of tick mismatch
+                const currentState = this.controllers.get(id)?.getState();
+                if (currentState) {
+                    const positionError = Vector3.Distance(currentState.position, state.position);
+
+                    // Adjust error thresholds based on network latency
+                    const positionThreshold = Math.max(1.0, this.networkLatency * 0.01);
+
+                    // If error is significant, reconcile regardless of tick
+                    if (positionError > positionThreshold) {
+                        this.reconcileState(id, state, targetTick);
+                    } else if (Math.abs(this.lastProcessedTick - targetTick) <= 5) {
+                        // If error is small and ticks are close, reconcile
+                        this.reconcileState(id, state, targetTick);
+                    } else {
+                        console.log('Skipping reconciliation - tick mismatch:', {
+                            currentTick: this.lastProcessedTick,
+                            targetTick,
+                            serverTick: this.serverTick,
+                            networkLatency: this.networkLatency,
+                            positionError
+                        });
+                    }
+                }
+            } else {
+                // For remote players, add to buffer for interpolation
+                buffer.states.push(state);
+                // Keep buffer size reasonable
+                if (buffer.states.length > this.interpolationConfig.maxBufferSize) {
+                    buffer.states.shift();
+                }
             }
         }
     }
@@ -229,13 +279,12 @@ export class ClientPhysicsWorld {
                     linearVelocity,
                     angularVelocity,
                     timestamp: currentTime,
-                    tick: state2.tick
                 });
             }
         });
     }
 
-    public reconcileState(id: string, serverState: PhysicsState): void {
+    private reconcileState(id: string, serverState: PhysicsState, targetTick: number): void {
         if (id !== this.localPlayerId) return;
 
         const controller = this.controllers.get(id);
@@ -246,40 +295,41 @@ export class ClientPhysicsWorld {
         if (!currentState) return;
 
         const positionError = Vector3.Distance(currentState.position, serverState.position);
-        const rotationError = this.calculateQuaternionAngle(
-            new Quaternion(currentState.quaternion.x, currentState.quaternion.y, currentState.quaternion.z, currentState.quaternion.w),
-            new Quaternion(serverState.quaternion.x, serverState.quaternion.y, serverState.quaternion.z, serverState.quaternion.w)
-        );
 
-        // Only reconcile if error is significant
-        if (positionError > 2.0 || rotationError > 1.0) {
-            console.log('Reconciling state due to large error:', {
-                positionError,
-                rotationError,
-                currentPosition: currentState.position,
-                serverPosition: serverState.position
-            });
+        // Adjust error thresholds based on network latency and add minimum error requirements
+        const minPositionError = 1.0;
+        const positionThreshold = Math.max(3.0, this.networkLatency * 0.03);
+
+        // Only check position error for triggering reconciliation
+        if (positionError > positionThreshold && positionError > minPositionError) {
             
-            // Smoothly correct the state with a stronger correction factor
+            console.log('Reconciling state due to position error:', JSON.stringify({
+                positionError,
+                positionThreshold,
+                minPositionError,
+                currentState: currentState.position,
+                serverState: serverState.position,
+                currentTick: this.lastProcessedTick,
+                serverTick: this.serverTick,
+                targetTick,
+                networkLatency: this.networkLatency
+            }));
+        
+            // Calculate interpolation factors
+            const positionFactor = Math.min(0.2, (positionError / positionThreshold) * 0.03);
+            const velocityFactor = Math.min(0.15, 0.15 * (this.networkLatency / 200));
+            const rotationFactor = 0.2; // Fixed rotation correction factor
+            
+            // Smoothly correct all state properties
             const correctedState: PhysicsState = {
-                position: Vector3.Lerp(currentState.position, serverState.position, 0.5),
-                quaternion: Quaternion.Slerp(
-                    new Quaternion(currentState.quaternion.x, currentState.quaternion.y, currentState.quaternion.z, currentState.quaternion.w),
-                    new Quaternion(serverState.quaternion.x, serverState.quaternion.y, serverState.quaternion.z, serverState.quaternion.w),
-                    0.5
-                ),
-                linearVelocity: Vector3.Lerp(currentState.linearVelocity, serverState.linearVelocity, 0.5),
-                angularVelocity: Vector3.Lerp(currentState.angularVelocity, serverState.angularVelocity, 0.5),
-                timestamp: performance.now(),
-                tick: serverState.tick
+                position: Vector3.Lerp(currentState.position, serverState.position, positionFactor),
+                quaternion: Quaternion.Slerp(currentState.quaternion, serverState.quaternion, rotationFactor),
+                linearVelocity: Vector3.Lerp(currentState.linearVelocity, serverState.linearVelocity, velocityFactor),
+                angularVelocity: Vector3.Lerp(currentState.angularVelocity, serverState.angularVelocity, velocityFactor),
+                timestamp: performance.now()
             };
             controller.setState(correctedState);
         }
-    }
-
-    private calculateQuaternionAngle(q1: Quaternion, q2: Quaternion): number {
-        const dot = q1.x * q2.x + q1.y * q2.y + q1.z * q2.z + q1.w * q2.w;
-        return Math.acos(2 * dot * dot - 1);
     }
 
     cleanup(): void {
@@ -316,5 +366,24 @@ export class ClientPhysicsWorld {
 
     public getCurrentTick(): number {
         return this.lastProcessedTick;
+    }
+
+    // Add method to update network latency
+    public updateNetworkLatency(latency: number): void {
+        this.networkLatency = latency;
+    }
+
+    public initializeTick(serverTick: number): void {
+        if (this.lastProcessedTick === 0) {
+            this.lastProcessedTick = serverTick;
+            console.log('Initialized client tick with server tick:', {
+                serverTick,
+                lastProcessedTick: this.lastProcessedTick
+            });
+        }
+    }
+
+    public updateServerTick(serverTick: number): void {
+        this.serverTick = serverTick;
     }
 } 

@@ -6,9 +6,9 @@ import { BasePhysicsController } from './BasePhysicsController';
 export class DronePhysicsController extends BasePhysicsController {
     protected config: VehiclePhysicsConfig;
     private momentumDamping: number = 0.99;
-    private moveSpeed: number = 0.5;
-    private rotationSpeed: number = 0.005; // Reduced from 0.1 for less sensitive keyboard controls
-    private mouseSensitivity: number = 0.002; // Reduced sensitivity for smoother movement
+    private moveSpeed: number = 0.2;
+    private rotationSpeed: number = 0.02; // Reduced from 0.1 for less sensitive keyboard controls
+    private mouseSensitivity: number = 0.01; // Reduced sensitivity for smoother movement
     private integralError: number = 0;
     private targetAltitude: number = 10;
     private rollStabilizationStrength: number = 5.0; // Strength of auto-stabilization
@@ -129,7 +129,6 @@ export class DronePhysicsController extends BasePhysicsController {
         // Get forward direction ignoring pitch and roll (only yaw)
         const forwardDirection = new Vector3(forward.x, 0, forward.z).normalize();
         const rightDirection = new Vector3(right.x, 0, right.z).normalize();
-
         // Movement controls relative to vehicle orientation
         const moveSpeed = this.moveSpeed * deltaTime * 60; // Scale by deltaTime and 60fps for consistent speed
         

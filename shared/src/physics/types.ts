@@ -6,10 +6,13 @@ export interface PhysicsState {
     linearVelocity: Vector3;
     angularVelocity: Vector3;
     timestamp: number;
-    tick: number;
 }
 
 export interface PhysicsConfig {
+    gravity: number;
+}
+
+export interface VehiclePhysicsConfig {
     mass: number;
     drag: number;
     angularDrag: number;
@@ -22,18 +25,11 @@ export interface PhysicsConfig {
     thrust: number;
     lift: number;
     torque: number;
-    gravity: number;
-    fixedTimeStep: number;
-    maxSubSteps: number;
-}
-
-export interface VehiclePhysicsConfig extends PhysicsConfig {
     minSpeed?: number;
     bankAngle?: number;
     wingArea?: number;
     strafeForce?: number;
     minHeight?: number;
-    team: number;
 }
 
 export interface PhysicsInput {

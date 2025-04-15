@@ -13,10 +13,10 @@
   "license": "ISC",
   "dependencies": {
     "@babylonjs/core": "^6.35.0",
-    "@colyseus/schema": "^2.0.0",
+    "@colyseus/schema": "^3.0.0",
     "babylonjs": "^8.1.1",
     "cannon": "^0.6.2",
-    "colyseus.js": "^0.15.0",
+    "colyseus.js": "^0.16.0",
     "vue": "^3.4.15"
   },
   "devDependencies": {
