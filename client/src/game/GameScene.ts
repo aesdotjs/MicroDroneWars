@@ -8,20 +8,42 @@ import * as CANNON from 'cannon';
 import { CollisionManager } from './CollisionManager';
 window.CANNON = CANNON;
 
+/**
+ * Manages the game scene, including rendering, physics, and game objects.
+ * Handles vehicle and flag management, camera control, and environment setup.
+ */
 export class GameScene {
+    /** The Babylon.js scene */
     private scene: Scene;
+    /** The Babylon.js engine */
     private engine: Engine;
+    /** The main camera */
     private camera!: UniversalCamera;
+    /** Map of vehicles in the scene */
     private vehicles: Map<string, Vehicle> = new Map();
+    /** Map of flags in the scene */
     private flags: Map<number, Flag> = new Map();
+    /** Reference to the main game instance */
     private game: Game;
+    /** The local player's vehicle */
     private localPlayer: Vehicle | null = null;
+    /** Timestamp of the last update */
     private lastTime: number = performance.now();
+    /** Input manager for handling user input */
     private inputManager!: InputManager;
+    /** Physics world for simulation */
     private physicsWorld!: ClientPhysicsWorld;
+    /** Collision manager for handling collisions */
     private collisionManager!: CollisionManager;
+    /** Shadow generator for rendering shadows */
     private shadowGenerator!: ShadowGenerator;
 
+    /**
+     * Creates a new GameScene instance.
+     * Initializes the scene, physics, and environment.
+     * @param engine - The Babylon.js engine
+     * @param game - The main game instance
+     */
     constructor(engine: Engine, game: Game) {
         console.log('GameScene constructor started');
         this.engine = engine;
@@ -50,6 +72,9 @@ export class GameScene {
         console.log('GameScene initialization complete');
     }
 
+    /**
+     * Sets up the input manager for handling user input.
+     */
     private setupInputManager(): void {
         const canvas = this.engine.getRenderingCanvas();
         if (!canvas) {
@@ -63,12 +88,18 @@ export class GameScene {
         });
     }
 
+    /**
+     * Sets up the physics world for simulation.
+     */
     private setupPhysicsWorld(): void {
         console.log('Setting up physics world...');
         this.physicsWorld = new ClientPhysicsWorld(this.engine, this.scene);
         console.log('Physics world created:', this.physicsWorld);
     }
 
+    /**
+     * Sets up the collision manager for handling collisions.
+     */
     private setupCollisionManager(): void {
         this.collisionManager = new CollisionManager(this.scene);
         console.log('CollisionManager initialized:', {
@@ -77,6 +108,10 @@ export class GameScene {
         });
     }
 
+    /**
+     * Sets up the lighting for the scene.
+     * Creates ambient and directional lights with shadows.
+     */
     private setupLights(): void {
         // Main hemispheric light for ambient lighting
         const hemiLight = new HemisphericLight(
@@ -106,6 +141,10 @@ export class GameScene {
         this.shadowGenerator = shadowGenerator;
     }
 
+    /**
+     * Sets up the camera for the scene.
+     * Creates a third-person camera with initial position and settings.
+     */
     private setupCamera(): void {
         try {
             console.log('Setting up camera...');
@@ -133,6 +172,11 @@ export class GameScene {
         }
     }
 
+    /**
+     * Adds a vehicle to the scene.
+     * @param sessionId - The session ID of the vehicle's owner
+     * @param vehicle - The vehicle to add
+     */
     public addVehicle(sessionId: string, vehicle: Vehicle): void {
         console.log('Adding vehicle:', sessionId);
         this.vehicles.set(sessionId, vehicle);
@@ -181,6 +225,10 @@ export class GameScene {
         });
     }
 
+    /**
+     * Removes a vehicle from the scene.
+     * @param id - The session ID of the vehicle to remove
+     */
     public removeVehicle(id: string): void {
         const vehicle = this.vehicles.get(id);
         if (vehicle) {
@@ -194,6 +242,11 @@ export class GameScene {
         }
     }
 
+    /**
+     * Sets a vehicle as the local player.
+     * Configures camera and input for the local player.
+     * @param vehicle - The vehicle to set as local player
+     */
     public setLocalPlayer(vehicle: Vehicle): void {
         console.log('Setting vehicle as local player:', {
             id: vehicle.id,
@@ -231,6 +284,10 @@ export class GameScene {
         });
     }
 
+    /**
+     * Updates the scene state.
+     * Handles physics updates, input processing, and camera movement.
+     */
     private update(): void {
         const currentTime = performance.now();
         const deltaTime = (currentTime - this.lastTime);
@@ -299,10 +356,19 @@ export class GameScene {
         }
     }
 
+    /**
+     * Adds a flag to the scene.
+     * @param team - The team number of the flag
+     * @param flag - The flag to add
+     */
     public addFlag(team: number, flag: Flag): void {
         this.flags.set(team, flag);
     }
 
+    /**
+     * Removes a flag from the scene.
+     * @param team - The team number of the flag to remove
+     */
     public removeFlag(team: number): void {
         const flag = this.flags.get(team);
         if (flag) {
@@ -310,27 +376,50 @@ export class GameScene {
         }
     }
 
+    /**
+     * Gets a flag by team number.
+     * @param team - The team number of the flag
+     * @returns The flag for the specified team, or undefined if not found
+     */
     public getFlag(team: number): Flag | undefined {
         return this.flags.get(team);
     }
 
+    /**
+     * Renders the scene.
+     */
     public render(): void {
             this.scene.render();
     }
 
+    /**
+     * Disposes of scene resources.
+     */
     public dispose(): void {
         this.physicsWorld.cleanup();
         this.scene.dispose();
     }
 
+    /**
+     * Gets the Babylon.js scene.
+     * @returns The scene
+     */
     public getScene(): Scene {
         return this.scene;
     }
 
+    /**
+     * Gets the physics world.
+     * @returns The physics world
+     */
     public getPhysicsWorld(): ClientPhysicsWorld {
         return this.physicsWorld;
     }
 
+    /**
+     * Sets up the game environment.
+     * Creates ground and obstacles.
+     */
     private setupEnvironment(): void {
         // Get ground mesh from physics world
         const groundMesh = this.physicsWorld.getGroundMesh();
@@ -371,6 +460,10 @@ export class GameScene {
         }
     }
 
+    /**
+     * Gets the input manager.
+     * @returns The input manager
+     */
     public getInputManager(): InputManager {
         return this.inputManager;
     }

@@ -2,20 +2,44 @@ import { Vehicle } from "./Vehicle";
 import { MeshBuilder, Vector3, StandardMaterial, Color3, MultiMaterial, Color4, Quaternion, Scene, Mesh, ParticleSystem } from 'babylonjs';
 import { InputManager } from '../InputManager';
 import { Vehicle as VehicleSchema } from '../schemas/Vehicle';
+
+/**
+ * Represents a plane vehicle in the game.
+ * Handles plane-specific physics, rendering, and control surface animations.
+ * Extends the base Vehicle class with plane-specific functionality.
+ */
 export class Plane extends Vehicle {
+    /** Maximum speed of the plane in m/s */
     public maxSpeed: number = 8;
+    /** Acceleration rate of the plane in m/s² */
     public acceleration: number = 0.15;
+    /** Turn rate of the plane in rad/s */
     public turnRate: number = 0.03;
+    /** Maximum health points of the plane */
     public maxHealth: number = 200;
+    /** Type identifier for the vehicle */
     public vehicleType: string = "plane";
+    /** Left wing mesh */
     private leftWing!: Mesh;
+    /** Right wing mesh */
     private rightWing!: Mesh;
+    /** Tail mesh */
     private tail!: Mesh;
+    /** Particle systems for engine thruster effects */
     private engineThrusters!: {
         left: ParticleSystem;
         right: ParticleSystem;
     };
 
+    /**
+     * Creates a new Plane instance.
+     * @param scene - The Babylon.js scene to add the plane to
+     * @param type - The type of vehicle ('drone' or 'plane')
+     * @param vehicle - The vehicle schema containing initial state
+     * @param canvas - The HTML canvas element
+     * @param inputManager - Optional input manager for controlling the plane
+     * @param isLocalPlayer - Whether this plane is controlled by the local player
+     */
     constructor(scene: Scene, type: 'drone' | 'plane', vehicle: VehicleSchema, canvas: HTMLCanvasElement, inputManager?: InputManager, isLocalPlayer: boolean = false) {
         super(scene, type, vehicle, canvas, inputManager, isLocalPlayer);
         this.id = `plane_${Math.random().toString(36).substr(2, 9)}`;
@@ -34,6 +58,11 @@ export class Plane extends Vehicle {
         });
     }
 
+    /**
+     * Creates the 3D mesh for the plane.
+     * Sets up the main fuselage, wings, tail, and materials.
+     * @throws Error if scene is not available
+     */
     private createMesh(): void {
         if (!this.scene) {
             console.error('Cannot create plane mesh: scene is null');
@@ -141,6 +170,11 @@ export class Plane extends Vehicle {
         this.mesh.rotationQuaternion = new Quaternion();
     }
 
+    /**
+     * Updates the plane's state.
+     * Handles control surface animations based on input.
+     * @param deltaTime - Time elapsed since last update in seconds
+     */
     public update(deltaTime: number = 1/60): void {
         if (!this.mesh) return;
         
@@ -179,6 +213,10 @@ export class Plane extends Vehicle {
         }
     }
 
+    /**
+     * Cleans up resources when the plane is destroyed or removed.
+     * Disposes of control surfaces and other meshes.
+     */
     public override dispose(): void {
         // Clean up control surfaces
         if (this.leftWing) {

@@ -3,9 +3,19 @@ import { State, Drone, Plane, Flag } from "../schemas";
 import { ServerPhysicsWorld } from "../physics/ServerPhysicsWorld";
 import { VehiclePhysicsConfig, PhysicsInput } from "@shared/physics/types";
 
+/**
+ * Represents a game room for MicroDroneWars multiplayer matches.
+ * Handles player connections, game state, and physics simulation.
+ * @extends Room<State>
+ */
 export class MicroDroneRoom extends Room<State> {
     private physicsWorld!: ServerPhysicsWorld;
 
+    /**
+     * Initializes the game room when it's created.
+     * Sets up room options, physics world, flags, and message handlers.
+     * @param options - Room creation options
+     */
     onCreate(options: Record<string, any>) {
         this.state = new State();
         console.log("MicroDrone room created");
@@ -66,6 +76,12 @@ export class MicroDroneRoom extends Room<State> {
         });
     }
 
+    /**
+     * Handles a new player joining the room.
+     * Creates a vehicle based on the player's chosen type and team.
+     * @param client - The client joining the room
+     * @param options - Player options including vehicle type and team
+     */
     onJoin(client: Client, options: { vehicleType: "drone" | "plane", team: number }) {
         console.log(`Client ${client.sessionId} joining with options:`, options);
         
@@ -112,6 +128,11 @@ export class MicroDroneRoom extends Room<State> {
         });
     }
 
+    /**
+     * Handles a player leaving the room.
+     * Returns any carried flag to base and cleans up the player's vehicle.
+     * @param client - The client leaving the room
+     */
     onLeave(client: Client) {
         // If vehicle was carrying a flag, return it to base
         const vehicle = this.state.vehicles.get(client.sessionId);
@@ -132,6 +153,10 @@ export class MicroDroneRoom extends Room<State> {
         console.log(`Vehicle left: ${client.sessionId}`);
     }
 
+    /**
+     * Cleans up resources when the room is disposed.
+     * Currently handles physics world cleanup.
+     */
     onDispose() {
         // Clean up physics world
         this.physicsWorld.dispose();

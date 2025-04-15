@@ -3,6 +3,10 @@ import { Vector3, Quaternion } from 'babylonjs';
 import { VehiclePhysicsConfig, PhysicsInput } from './types';
 import { BasePhysicsController } from './BasePhysicsController';
 
+/**
+ * Physics controller for drone vehicles.
+ * Implements drone-specific physics including stabilization, altitude control, and movement.
+ */
 export class DronePhysicsController extends BasePhysicsController {
     protected config: VehiclePhysicsConfig;
     private momentumDamping: number = 0.99;
@@ -15,12 +19,22 @@ export class DronePhysicsController extends BasePhysicsController {
     private maxRollAngle: number = Math.PI / 4; // Maximum allowed roll angle (45 degrees)
     private maxPitchAngle: number = Math.PI / 2.5; // Maximum pitch angle (about 72 degrees)
 
+    /**
+     * Creates a new DronePhysicsController instance.
+     * @param world - The CANNON.js physics world
+     * @param config - Configuration for the drone physics
+     */
     constructor(world: CANNON.World, config: VehiclePhysicsConfig) {
         super(world, config);
         this.targetAltitude = this.body.position.y;
         this.config = config;
     }
 
+    /**
+     * Applies stabilization forces to keep the drone level.
+     * Handles roll and pitch stabilization with angle limits.
+     * @param deltaTime - Time elapsed since last update in seconds
+     */
     private applyStabilization(deltaTime: number): void {
         const { right, up, forward } = this.getOrientationVectors();
         
@@ -58,6 +72,11 @@ export class DronePhysicsController extends BasePhysicsController {
         this.body.angularVelocity.scale(0.95, this.body.angularVelocity);
     }
 
+    /**
+     * Gets the orientation vectors of the drone in world space.
+     * Overrides the base class method to use Babylon.js quaternion rotation.
+     * @returns Object containing right, up, and forward vectors
+     */
     protected getOrientationVectors(): { right: Vector3; up: Vector3; forward: Vector3 } {
         // Get the quaternion from the physics body
         const quat = this.body.quaternion;
@@ -78,6 +97,12 @@ export class DronePhysicsController extends BasePhysicsController {
         return { right, up, forward };
     }
 
+    /**
+     * Updates the drone physics based on input.
+     * Handles movement, rotation, stabilization, and altitude control.
+     * @param deltaTime - Time elapsed since last update in seconds
+     * @param input - Physics input from the player
+     */
     public update(deltaTime: number, input: PhysicsInput): void {
         this.currentTick++;
         

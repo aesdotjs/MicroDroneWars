@@ -4,6 +4,10 @@ import { CollisionGroups, collisionMasks } from './CollisionGroups';
 import { CollisionEvent, VehicleCollisionEvent, PhysicsState, PhysicsConfig } from './types';
 import { PhysicsImpostor } from 'babylonjs';
 
+/**
+ * Manages the physics simulation world for the game.
+ * Handles vehicle physics, collisions, and state synchronization between client and server.
+ */
 export class PhysicsWorld {
     private engine: Engine;
     private scene: Scene;
@@ -14,6 +18,12 @@ export class PhysicsWorld {
     private collisionCallbacks: Map<string, (event: CollisionEvent) => void> = new Map();
     private currentTick: number = 0;
 
+    /**
+     * Creates a new PhysicsWorld instance.
+     * @param engine - The Babylon.js engine instance
+     * @param scene - The Babylon.js scene instance
+     * @param config - Physics configuration including gravity and other settings
+     */
     constructor(engine: Engine, scene: Scene, config: PhysicsConfig) {
         this.engine = engine;
         this.scene = scene;
@@ -51,6 +61,10 @@ export class PhysicsWorld {
         });
     }
 
+    /**
+     * Initializes the physics engine and enables physics in the scene.
+     * Sets up gravity and collision detection.
+     */
     private initializePhysics(): void {
         // Enable physics in the scene
         this.scene.gravity = new Vector3(0, -9.81, 0);
@@ -67,6 +81,11 @@ export class PhysicsWorld {
         });
     }
 
+    /**
+     * Creates the ground plane for the physics world.
+     * Sets up both the physics body and visual mesh.
+     * @param groundMaterial - The physics material for the ground
+     */
     private createGround(groundMaterial: CANNON.Material): void {
         // Create ground plane
         const groundShape = new CANNON.Plane();
@@ -130,6 +149,11 @@ export class PhysicsWorld {
         }
     }
 
+    /**
+     * Handles collision events between physics bodies.
+     * Processes ground collisions and vehicle-vehicle collisions.
+     * @param event - The collision event data
+     */
     private handleCollision(event: CollisionEvent): void {
         const bodyA = event.bodyA;
         const bodyB = event.bodyB;
@@ -177,27 +201,53 @@ export class PhysicsWorld {
         }
     }
 
+    /**
+     * Registers a callback function for collision events for a specific body.
+     * @param id - The ID of the body to register the callback for
+     * @param callback - The function to call when a collision occurs
+     */
     public registerCollisionCallback(id: string, callback: (event: CollisionEvent) => void): void {
         this.collisionCallbacks.set(id, callback);
     }
 
+    /**
+     * Removes a collision callback for a specific body.
+     * @param id - The ID of the body to remove the callback for
+     */
     public unregisterCollisionCallback(id: string): void {
         this.collisionCallbacks.delete(id);
     }
 
+    /**
+     * Gets the underlying CANNON.js physics world instance.
+     * @returns The CANNON.js world instance
+     */
     public getWorld(): CANNON.World {
         return this.world;
     }
 
+    /**
+     * Updates the physics simulation by one step.
+     * @param deltaTime - The time step in seconds
+     */
     public update(deltaTime: number): void {
         this.world.step(deltaTime);
         this.currentTick++;
     }
 
+    /**
+     * Gets the current simulation tick number.
+     * @returns The current tick number
+     */
     public getCurrentTick(): number {
         return this.currentTick;
     }
 
+    /**
+     * Gets the current physics state of a body.
+     * @param id - The ID of the body to get the state for
+     * @returns The current physics state or null if the body doesn't exist
+     */
     public getState(id: string): PhysicsState | null {
         const body = this.bodies.get(id);
         if (!body) return null;
@@ -211,6 +261,11 @@ export class PhysicsWorld {
         };
     }
 
+    /**
+     * Sets the physics state of a body.
+     * @param id - The ID of the body to set the state for
+     * @param state - The new physics state to apply
+     */
     public setState(id: string, state: PhysicsState): void {
         const body = this.bodies.get(id);
         if (!body) return;
@@ -221,6 +276,12 @@ export class PhysicsWorld {
         body.angularVelocity.set(state.angularVelocity.x, state.angularVelocity.y, state.angularVelocity.z);
     }
 
+    /**
+     * Creates a new vehicle physics body.
+     * @param id - The unique identifier for the vehicle
+     * @param config - Configuration for the vehicle including type and physics properties
+     * @returns The created CANNON.js body
+     */
     public createVehicle(id: string, config: any): CANNON.Body {
         
         // Create vehicle body with proper collision filters
@@ -298,6 +359,11 @@ export class PhysicsWorld {
         return body;
     }
 
+    /**
+     * Handles vehicle-specific collision events.
+     * @param id - The ID of the vehicle involved in the collision
+     * @param event - The collision event data
+     */
     private handleVehicleCollision(id: string, event: VehicleCollisionEvent): void {
         const body = this.bodies.get(id);
         if (!body) return;
@@ -309,6 +375,11 @@ export class PhysicsWorld {
         }
     }
 
+    /**
+     * Gets the current physics state of a vehicle.
+     * @param id - The ID of the vehicle to get the state for
+     * @returns The current physics state or null if the vehicle doesn't exist
+     */
     public getVehicleState(id: string): PhysicsState | null {
         const body = this.bodies.get(id);
         if (!body) return null;
@@ -322,6 +393,9 @@ export class PhysicsWorld {
         };
     }
 
+    /**
+     * Cleans up physics resources and removes all bodies.
+     */
     public cleanup(): void {
         // Remove all bodies
         this.bodies.forEach(body => {
@@ -338,10 +412,18 @@ export class PhysicsWorld {
         }
     }
 
+    /**
+     * Gets the ground physics body.
+     * @returns The ground CANNON.js body
+     */
     public getGroundBody(): CANNON.Body {
         return this.groundBody;
     }
 
+    /**
+     * Gets the ground visual mesh.
+     * @returns The ground Babylon.js mesh
+     */
     public getGroundMesh(): any {
         return this.groundMesh;
     }

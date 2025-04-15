@@ -2,13 +2,26 @@ import { Vehicle } from "./Vehicle";
 import { MeshBuilder, Vector3, StandardMaterial, Color3, MultiMaterial, Color4, Quaternion, Scene, Mesh, ParticleSystem, Texture, Matrix } from 'babylonjs';
 import { InputManager } from '../InputManager';
 import { Vehicle as VehicleSchema } from '../schemas/Vehicle';
+
+/**
+ * Represents a drone vehicle in the game.
+ * Handles drone-specific physics, rendering, and particle effects.
+ * Extends the base Vehicle class with drone-specific functionality.
+ */
 export class Drone extends Vehicle {
+    /** Maximum speed of the drone in m/s */
     public maxSpeed: number = 5;
+    /** Acceleration rate of the drone in m/s² */
     public acceleration: number = 0.2;
+    /** Turn rate of the drone in rad/s */
     public turnRate: number = 0.05;
+    /** Maximum health points of the drone */
     public maxHealth: number = 150;
+    /** Type identifier for the vehicle */
     public vehicleType: string = "drone";
+    /** Array of propeller meshes */
     private propellers: Mesh[] = [];
+    /** Particle systems for thruster effects */
     private rotorThrusters!: {
         frontLeft: ParticleSystem;
         frontRight: ParticleSystem;
@@ -16,6 +29,15 @@ export class Drone extends Vehicle {
         backRight: ParticleSystem;
     };
 
+    /**
+     * Creates a new Drone instance.
+     * @param scene - The Babylon.js scene to add the drone to
+     * @param type - The type of vehicle ('drone' or 'plane')
+     * @param vehicle - The vehicle schema containing initial state
+     * @param canvas - The HTML canvas element
+     * @param inputManager - Optional input manager for controlling the drone
+     * @param isLocalPlayer - Whether this drone is controlled by the local player
+     */
     constructor(scene: Scene, type: 'drone' | 'plane', vehicle: VehicleSchema, canvas: HTMLCanvasElement, inputManager?: InputManager, isLocalPlayer: boolean = false) {
         super(scene, type, vehicle, canvas, inputManager, isLocalPlayer);
         this.id = `drone_${Math.random().toString(36).substr(2, 9)}`;
@@ -34,6 +56,11 @@ export class Drone extends Vehicle {
         });
     }
 
+    /**
+     * Creates the 3D mesh for the drone.
+     * Sets up the main body, propellers, and materials.
+     * @throws Error if scene is not available
+     */
     private createMesh(): void {
         if (!this.scene) {
             console.error('Cannot create drone mesh: scene is null');
@@ -155,6 +182,12 @@ export class Drone extends Vehicle {
         this.mesh.rotationQuaternion = new Quaternion();
     }
 
+    /**
+     * Sets up particle systems for thruster effects.
+     * Creates particle emitters for each propeller.
+     * @param scene - The Babylon.js scene to add the particles to
+     * @throws Error if mesh is not available
+     */
     private setupThrusterParticles(scene: Scene): void {
         if (!this.mesh) {
             console.error('Cannot setup particles: mesh is null');
@@ -226,6 +259,10 @@ export class Drone extends Vehicle {
         });
     }
 
+    /**
+     * Updates particle effects based on vehicle movement.
+     * Adjusts particle direction and emission rate based on input.
+     */
     private updateParticles(): void {
         if (!this.rotorThrusters || !this.mesh) {
             return;
@@ -278,6 +315,11 @@ export class Drone extends Vehicle {
         }
     }
 
+    /**
+     * Updates the drone's state.
+     * Handles particle effects and physics updates.
+     * @param deltaTime - Time elapsed since last update in seconds
+     */
     public update(deltaTime: number = 1/60): void {
         if (!this.mesh) return;
         
@@ -285,6 +327,10 @@ export class Drone extends Vehicle {
         this.updateParticles();
     }
 
+    /**
+     * Cleans up resources when the drone is destroyed or removed.
+     * Disposes of particle systems, propellers, and other meshes.
+     */
     public override dispose(): void {
         // Clean up particle systems
         if (this.rotorThrusters) {

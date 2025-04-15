@@ -4,21 +4,45 @@ import { PhysicsState, VehiclePhysicsConfig, PhysicsInput } from './types';
 import { SpringSimulator } from '../utils/SpringSimulator';
 import { CollisionGroups, collisionMasks } from './CollisionGroups';
 
+/**
+ * Base class for vehicle physics controllers.
+ * Provides common physics functionality for both drones and planes.
+ * Handles basic physics properties, collision detection, and common movement controls.
+ */
 export abstract class BasePhysicsController {
+    /** The CANNON.js physics body for the vehicle */
     protected body: CANNON.Body;
+    /** The CANNON.js physics world */
     protected world: CANNON.World;
+    /** Configuration for the vehicle physics */
     protected config: VehiclePhysicsConfig;
+    /** Simulator for spring-based movement smoothing */
     protected springSimulator: SpringSimulator;
+    /** Simulator for aileron control surface movement */
     protected aileronSimulator: SpringSimulator;
+    /** Simulator for elevator control surface movement */
     protected elevatorSimulator: SpringSimulator;
+    /** Simulator for rudder control surface movement */
     protected rudderSimulator: SpringSimulator;
+    /** Simulator for steering movement */
     protected steeringSimulator: SpringSimulator;
+    /** Current engine power (0-1) */
     protected enginePower: number = 0;
+    /** Maximum engine power */
     protected maxEnginePower: number = 1.0;
+    /** Rate at which engine power can change */
     protected enginePowerChangeRate: number = 0.2;
+    /** Last calculated drag value */
     protected lastDrag: number = 0;
+    /** Current physics simulation tick */
     protected currentTick: number = 0;
 
+    /**
+     * Creates a new BasePhysicsController instance.
+     * Initializes physics body, collision filters, and spring simulators.
+     * @param world - The CANNON.js physics world
+     * @param config - Configuration for the vehicle physics
+     */
     constructor(world: CANNON.World, config: VehiclePhysicsConfig) {
         this.world = world;
         this.config = config;
@@ -67,8 +91,18 @@ export abstract class BasePhysicsController {
         });
     }
 
+    /**
+     * Updates the vehicle physics based on input.
+     * Must be implemented by derived classes.
+     * @param deltaTime - Time elapsed since last update in seconds
+     * @param input - Physics input from the player
+     */
     abstract update(deltaTime: number, input: PhysicsInput): void;
 
+    /**
+     * Gets the current physics state of the vehicle.
+     * @returns The current physics state or null if the body doesn't exist
+     */
     getState(): PhysicsState | null {
         if (!this.body) return null;
         
@@ -98,6 +132,10 @@ export abstract class BasePhysicsController {
         };
     }
 
+    /**
+     * Sets the physics state of the vehicle.
+     * @param state - The new physics state to apply
+     */
     setState(state: PhysicsState): void {
         if (!this.body) return;
         this.body.position.set(
@@ -126,12 +164,21 @@ export abstract class BasePhysicsController {
         );
     }
 
+    /**
+     * Cleans up physics resources.
+     * Removes the body from the physics world.
+     */
     cleanup(): void {
         if (this.body) {
             this.world.remove(this.body);
         }
     }
 
+    /**
+     * Updates the engine power based on input.
+     * Only applies to planes, not drones.
+     * @param input - Physics input from the player
+     */
     protected updateEnginePower(input: PhysicsInput): void {
         // Only update engine power for planes, not drones
         if (this.config.vehicleType === 'plane') {
@@ -148,6 +195,10 @@ export abstract class BasePhysicsController {
         }
     }
 
+    /**
+     * Gets the orientation vectors of the vehicle in world space.
+     * @returns Object containing forward, right, and up vectors
+     */
     protected getOrientationVectors(): { forward: Vector3; right: Vector3; up: Vector3 } {
         // Initialize vectors in local space
         let forward = new Vector3(0, 0, 1);
@@ -168,6 +219,12 @@ export abstract class BasePhysicsController {
         return { forward, right, up };
     }
 
+    /**
+     * Applies mouse control input to the vehicle's rotation.
+     * @param input - Physics input from the player
+     * @param right - Right vector of the vehicle
+     * @param up - Up vector of the vehicle
+     */
     protected applyMouseControl(input: PhysicsInput, right: Vector3, up: Vector3): void {
         if (input.mouseDelta) {
             if (input.mouseDelta.x !== 0) {
@@ -185,12 +242,20 @@ export abstract class BasePhysicsController {
         }
     }
 
+    /**
+     * Applies angular damping to the vehicle's rotation.
+     * @param damping - Damping factor (default: 0.97)
+     */
     protected applyAngularDamping(damping: number = 0.97): void {
         this.body.angularVelocity.x *= damping;
         this.body.angularVelocity.y *= damping;
         this.body.angularVelocity.z *= damping;
     }
 
+    /**
+     * Gets the CANNON.js physics body of the vehicle.
+     * @returns The physics body
+     */
     getBody(): CANNON.Body {
         return this.body;
     }

@@ -1,8 +1,15 @@
 import { PhysicsInput } from '@shared/physics/types';
 import { KeyBinding } from './KeyBinding';
 
+/**
+ * Manages all game input including keyboard and mouse controls.
+ * Handles key bindings, mouse movement, and pointer lock functionality.
+ * Provides a unified interface for getting input state.
+ */
 export class InputManager {
+    /** The canvas element to capture input from */
     private canvas: HTMLCanvasElement;
+    /** Collection of key bindings for all game controls */
     private keys: {
         // Movement
         forward: KeyBinding;
@@ -24,10 +31,18 @@ export class InputManager {
         fire: KeyBinding;
         zoom: KeyBinding;
     };
+    /** Current mouse movement delta */
     private mouseDelta: { x: number; y: number };
+    /** Whether the canvas has focus */
     private hasFocus: boolean;
+    /** Whether the pointer is locked to the canvas */
     private isPointerLocked: boolean;
 
+    /**
+     * Creates a new InputManager instance.
+     * Sets up key bindings and event listeners for input handling.
+     * @param canvas - The canvas element to capture input from
+     */
     constructor(canvas: HTMLCanvasElement) {
         this.canvas = canvas;
         this.keys = {
@@ -98,6 +113,11 @@ export class InputManager {
         });
     }
 
+    /**
+     * Handles key down events.
+     * Updates key bindings and prevents default browser behavior when canvas is focused.
+     * @param event - The keyboard event
+     */
     private handleKeyDown(event: KeyboardEvent): void {
         // Check both hasFocus and isPointerLocked since we want to accept input when either is true
         if (!this.hasFocus && !this.isPointerLocked) {
@@ -119,6 +139,11 @@ export class InputManager {
         });
     }
 
+    /**
+     * Handles key up events.
+     * Updates key bindings when canvas is focused.
+     * @param event - The keyboard event
+     */
     private handleKeyUp(event: KeyboardEvent): void {
         // Check both hasFocus and isPointerLocked since we want to accept input when either is true
         if (!this.hasFocus && !this.isPointerLocked) {
@@ -134,6 +159,11 @@ export class InputManager {
         });
     }
 
+    /**
+     * Handles mouse movement events.
+     * Updates mouse delta when canvas is focused.
+     * @param event - The mouse event
+     */
     private handleMouseMove(event: MouseEvent): void {
         // Check both hasFocus and isPointerLocked since we want to accept input when either is true
         if (!this.hasFocus || !this.isPointerLocked) {
@@ -144,16 +174,28 @@ export class InputManager {
         this.mouseDelta.y = event.movementY;
     }
 
+    /**
+     * Handles canvas focus events.
+     * Updates focus state and logs the event.
+     */
     private handleFocus(): void {
         this.hasFocus = true;
         console.log('Canvas focused');
     }
 
+    /**
+     * Handles canvas blur events.
+     * Updates focus state and logs the event.
+     */
     private handleBlur(): void {
         this.hasFocus = false;
         console.log('Canvas blurred');
     }
 
+    /**
+     * Handles canvas click events.
+     * Requests pointer lock if not already locked.
+     */
     private handleClick(): void {
         console.log('Canvas clicked');
         if (!this.isPointerLocked) {
@@ -169,6 +211,11 @@ export class InputManager {
         }
     }
 
+    /**
+     * Handles mouse down events.
+     * Handles right click for zoom control.
+     * @param event - The mouse event
+     */
     private handleMouseDown(event: MouseEvent): void {
         this.handleClick();
         if (event.button === 2) { // Right click
@@ -176,12 +223,22 @@ export class InputManager {
         }
     }
 
+    /**
+     * Handles mouse up events.
+     * Handles right click release for zoom control.
+     * @param event - The mouse event
+     */
     private handleMouseUp(event: MouseEvent): void {
         if (event.button === 2) { // Right click
             this.keys.zoom.setPressed(false);
         }
     }
 
+    /**
+     * Gets the current input state.
+     * Updates all key bindings and returns the current input state.
+     * @returns The current physics input state
+     */
     public getInput(): PhysicsInput {
         // Update all key bindings
         Object.values(this.keys).forEach(binding => {
@@ -213,11 +270,18 @@ export class InputManager {
         return input;
     }
 
+    /**
+     * Resets the mouse movement delta.
+     */
     public resetMouseDelta(): void {
         this.mouseDelta.x = 0;
         this.mouseDelta.y = 0;
     }
 
+    /**
+     * Cleans up event listeners and resources.
+     * Removes all event listeners and exits pointer lock if active.
+     */
     public cleanup(): void {
         document.removeEventListener('keydown', this.handleKeyDown);
         document.removeEventListener('keyup', this.handleKeyUp);

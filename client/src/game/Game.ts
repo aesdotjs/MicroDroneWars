@@ -10,15 +10,30 @@ import { Drone } from './vehicles/Drone';
 import { Plane } from './vehicles/Plane';
 import { Flag } from './Flag';
 
+/**
+ * Main game class that manages the game loop, networking, and scene.
+ * Handles connection to the server, vehicle creation, and game state updates.
+ */
 export class Game {
+    /** The canvas element for rendering */
     private canvas!: HTMLCanvasElement;
+    /** The Babylon.js engine */
     private engine!: Engine;
+    /** The game scene */
     private gameScene!: GameScene;
+    /** The Colyseus client for networking */
     private client!: Colyseus.Client;
+    /** The current game room */
     private room: Colyseus.Room<State> | null = null;
+    /** The player's team number */
     private team!: number;
+    /** The player's vehicle type */
     private vehicleType!: 'drone' | 'plane';
 
+    /**
+     * Creates a new Game instance.
+     * Initializes the engine, scene, and connects to the server.
+     */
     constructor() {
         // Get the canvas element
         const canvasElement = document.getElementById('renderCanvas');
@@ -64,6 +79,10 @@ export class Game {
         });
     }
 
+    /**
+     * Joins or creates a game room.
+     * Sets up room handlers after successful connection.
+     */
     private async joinRoom(): Promise<void> {
         try {
             this.room = await this.client.joinOrCreate<State>("microdrone_room", { 
@@ -77,6 +96,10 @@ export class Game {
         }
     }
 
+    /**
+     * Sets up handlers for room events and state changes.
+     * Handles vehicle and flag updates, and network latency measurement.
+     */
     private setupRoomHandlers(): void {
         if (!this.room) return;
         const $ = Colyseus.getStateCallbacks(this.room);
@@ -223,6 +246,10 @@ export class Game {
         });
     }
 
+    /**
+     * Sends movement input to the server.
+     * @param input - The physics input to send
+     */
     public sendMovementUpdate(input: PhysicsInput): void {
         if (!this.room) return;
         this.room.send('movement', input);

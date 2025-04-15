@@ -3,15 +3,42 @@ import { Vector3, Quaternion } from 'babylonjs';
 import { VehiclePhysicsConfig, PhysicsInput } from './types';
 import { BasePhysicsController } from './BasePhysicsController';
 
+/**
+ * Physics controller for plane vehicles.
+ * Implements plane-specific physics including flight dynamics, lift, drag, and control surfaces.
+ * Handles realistic flight behavior with features like:
+ * - Aerodynamic lift and drag
+ * - Flight mode transitions
+ * - Control surface simulation
+ * - Engine power management
+ * - Rotation stabilization
+ */
 export class PlanePhysicsController extends BasePhysicsController {
     protected config: VehiclePhysicsConfig;
     protected enginePower: number = 0;
+    protected lastDrag: number = 0;
 
+    /**
+     * Creates a new PlanePhysicsController instance.
+     * @param world - The CANNON.js physics world
+     * @param config - Configuration for the plane physics
+     */
     constructor(world: CANNON.World, config: VehiclePhysicsConfig) {
         super(world, config);
         this.config = config;
     }
 
+    /**
+     * Updates the plane physics based on input.
+     * Handles flight dynamics including:
+     * - Engine power management
+     * - Flight mode transitions
+     * - Control surface simulation
+     * - Aerodynamic forces (lift, drag)
+     * - Rotation stabilization
+     * @param deltaTime - Time elapsed since last update in seconds
+     * @param input - Physics input from the player
+     */
     public update(deltaTime: number, input: PhysicsInput): void {
         this.currentTick++;
         this.updateEnginePower(input);

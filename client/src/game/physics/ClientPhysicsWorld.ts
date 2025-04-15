@@ -7,20 +7,41 @@ import { PhysicsWorld } from '@shared/physics/PhysicsWorld';
 import { CollisionEvent } from '@shared/physics/types';
 import { DroneSettings, PlaneSettings } from '@shared/physics/VehicleSettings';
 
+/**
+ * Manages physics simulation on the client side.
+ * Handles vehicle physics, state interpolation, and network synchronization.
+ */
 export class ClientPhysicsWorld {
+    /** The Babylon.js engine */
     private engine: Engine;
+    /** The Babylon.js scene */
     private scene: Scene;
+    /** The physics world instance */
     private physicsWorld: PhysicsWorld;
+    /** Map of vehicle IDs to their physics controllers */
     public controllers: Map<string, BasePhysicsController>;
+    /** Map of vehicle IDs to their state buffers for interpolation */
     private stateBuffers: Map<string, StateBuffer>;
+    /** Configuration for state interpolation */
     private interpolationConfig: InterpolationConfig;
+    /** ID of the local player's vehicle */
     private localPlayerId: string = '';
+    /** Last processed physics tick */
     private lastProcessedTick: number = 0;
+    /** Fixed time step for physics updates */
     private fixedTimeStep: number = 1/60;
+    /** Accumulator for fixed time step updates */
     private accumulator: number = 0;
+    /** Current network latency in milliseconds */
     private networkLatency: number = 0;
+    /** Current server tick */
     private serverTick: number = 0;
 
+    /**
+     * Creates a new ClientPhysicsWorld instance.
+     * @param engine - The Babylon.js engine
+     * @param scene - The Babylon.js scene
+     */
     constructor(engine: Engine, scene: Scene) {
         this.engine = engine;
         this.scene = scene;
@@ -36,6 +57,13 @@ export class ClientPhysicsWorld {
         };
     }
 
+    /**
+     * Creates a new vehicle physics controller.
+     * @param id - Unique identifier for the vehicle
+     * @param type - Type of vehicle ('drone' or 'plane')
+     * @param initialState - Optional initial physics state
+     * @returns The created physics controller
+     */
     createVehicle(id: string, type: 'drone' | 'plane', initialState?: PhysicsState): BasePhysicsController {
         console.log('Creating vehicle:', { id, initialState});
         let controller: BasePhysicsController;
@@ -73,6 +101,10 @@ export class ClientPhysicsWorld {
         return controller;
     }
 
+    /**
+     * Removes a vehicle from physics simulation.
+     * @param id - ID of the vehicle to remove
+     */
     removeVehicle(id: string): void {
         const controller = this.controllers.get(id);
         if (controller) {
@@ -82,6 +114,11 @@ export class ClientPhysicsWorld {
         }
     }
 
+    /**
+     * Updates physics simulation and handles state interpolation.
+     * @param deltaTime - Time elapsed since last update in milliseconds
+     * @param input - Current input state
+     */
     public update(deltaTime: number, input: PhysicsInput): void {
         // Add frame time to accumulator (convert to seconds)
         this.accumulator += deltaTime / 1000;
@@ -110,6 +147,10 @@ export class ClientPhysicsWorld {
         this.interpolateStates();
     }
 
+    /**
+     * Processes a fixed timestep physics update.
+     * @param input - Current input state
+     */
     private processFixedUpdate(input: PhysicsInput): void {
         // Step physics world
         this.physicsWorld.update(this.fixedTimeStep);
@@ -145,6 +186,11 @@ export class ClientPhysicsWorld {
         this.lastProcessedTick++;
     }
 
+    /**
+     * Adds a new physics state to the buffer for interpolation.
+     * @param id - ID of the vehicle
+     * @param state - The physics state to add
+     */
     public addState(id: string, state: PhysicsState): void {
         const buffer = this.stateBuffers.get(id);
         if (buffer) {
@@ -215,6 +261,9 @@ export class ClientPhysicsWorld {
         }
     }
 
+    /**
+     * Interpolates between physics states for smooth movement.
+     */
     private interpolateStates(): void {
         const currentTime = performance.now();
         const targetTime = currentTime - this.interpolationConfig.delay;
@@ -284,6 +333,12 @@ export class ClientPhysicsWorld {
         });
     }
 
+    /**
+     * Reconciles local physics state with server state.
+     * @param id - ID of the vehicle
+     * @param serverState - State received from server
+     * @param targetTick - Target tick to reconcile to
+     */
     private reconcileState(id: string, serverState: PhysicsState, targetTick: number): void {
         if (id !== this.localPlayerId) return;
 
@@ -332,6 +387,9 @@ export class ClientPhysicsWorld {
         }
     }
 
+    /**
+     * Cleans up resources when the physics world is disposed.
+     */
     cleanup(): void {
         this.controllers.forEach(controller => {
             controller.cleanup();
@@ -340,39 +398,75 @@ export class ClientPhysicsWorld {
         this.stateBuffers.clear();
     }
 
+    /**
+     * Gets the ground body for collision detection.
+     * @returns The ground physics body
+     */
     public getGroundBody(): CANNON.Body | null {
         return this.physicsWorld.getGroundBody();
     }
 
+    /**
+     * Gets the ground mesh for rendering.
+     * @returns The ground mesh
+     */
     public getGroundMesh(): any {
         return this.physicsWorld.getGroundMesh();
     }
 
+    /**
+     * Registers a callback for collision events.
+     * @param id - ID of the vehicle
+     * @param callback - Function to call on collision
+     */
     public registerCollisionCallback(id: string, callback: (event: CollisionEvent) => void): void {
         this.physicsWorld.registerCollisionCallback(id, callback);
     }
 
+    /**
+     * Unregisters a collision callback.
+     * @param id - ID of the vehicle
+     */
     public unregisterCollisionCallback(id: string): void {
         this.physicsWorld.unregisterCollisionCallback(id);
     }
 
+    /**
+     * Sets the ID of the local player's vehicle.
+     * @param id - ID of the local player's vehicle
+     */
     setLocalPlayerId(id: string): void {
         this.localPlayerId = id;
     }
 
+    /**
+     * Gets the ID of the local player's vehicle.
+     * @returns ID of the local player's vehicle
+     */
     getLocalPlayerId(): string {
         return this.localPlayerId;
     }
 
+    /**
+     * Gets the current physics tick.
+     * @returns Current physics tick
+     */
     public getCurrentTick(): number {
         return this.lastProcessedTick;
     }
 
-    // Add method to update network latency
+    /**
+     * Updates the network latency value.
+     * @param latency - Current network latency in milliseconds
+     */
     public updateNetworkLatency(latency: number): void {
         this.networkLatency = latency;
     }
 
+    /**
+     * Initializes the physics tick with the server's tick.
+     * @param serverTick - Current server tick
+     */
     public initializeTick(serverTick: number): void {
         if (this.lastProcessedTick === 0) {
             this.lastProcessedTick = serverTick;
@@ -383,6 +477,10 @@ export class ClientPhysicsWorld {
         }
     }
 
+    /**
+     * Updates the server tick value.
+     * @param serverTick - Current server tick
+     */
     public updateServerTick(serverTick: number): void {
         this.serverTick = serverTick;
     }

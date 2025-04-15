@@ -5,6 +5,10 @@ import { Engine, Scene, NullEngine, Vector3, Quaternion } from 'babylonjs';
 import { State, Vehicle } from '../schemas';
 import { DroneSettings, PlaneSettings } from '@shared/physics/VehicleSettings';
 
+/**
+ * Handles server-side physics simulation for the game.
+ * Manages vehicle physics controllers and updates game state based on physics calculations.
+ */
 export class ServerPhysicsWorld {
     private engine: Engine;
     private scene: Scene;
@@ -13,6 +17,10 @@ export class ServerPhysicsWorld {
     private accumulator: number = 0;
     private fixedTimeStep: number = 1/60;
 
+    /**
+     * Creates a new ServerPhysicsWorld instance.
+     * Initializes the physics engine and scene.
+     */
     constructor() {
         // Create NullEngine for server-side physics
         this.engine = new NullEngine();
@@ -23,6 +31,11 @@ export class ServerPhysicsWorld {
         });
     }
 
+    /**
+     * Creates a new vehicle in the physics world.
+     * @param id - Unique identifier for the vehicle
+     * @param vehicle - Vehicle data to initialize the physics controller
+     */
     public createVehicle(id: string, vehicle: Vehicle): void {
         const controller = PhysicsControllerFactory.createController(
             this.physicsWorld.getWorld(),
@@ -50,6 +63,12 @@ export class ServerPhysicsWorld {
         });
     }
 
+    /**
+     * Updates the physics simulation.
+     * Processes fixed timestep updates and handles time accumulation.
+     * @param deltaTime - Time elapsed since last update in seconds
+     * @param state - Current game state to update
+     */
     public update(deltaTime: number, state: State): void {
 
         // Add frame time to accumulator (convert to seconds)
@@ -74,6 +93,11 @@ export class ServerPhysicsWorld {
         }
     }
 
+    /**
+     * Processes a single fixed timestep update.
+     * Handles vehicle inputs, physics simulation, and state updates.
+     * @param state - Current game state to update
+     */
     private processFixedUpdate = (state: State) => {
         // Process all vehicles' inputs
         state.vehicles.forEach((vehicle, id) => {
@@ -170,6 +194,11 @@ export class ServerPhysicsWorld {
         });
     }
 
+    /**
+     * Gets the current physics state of a vehicle.
+     * @param id - Unique identifier of the vehicle
+     * @returns Current physics state of the vehicle or null if not found
+     */
     public getVehicleState(id: string): PhysicsState | null {
         const controller = this.controllers.get(id);
         if (controller) {
@@ -178,6 +207,10 @@ export class ServerPhysicsWorld {
         return null;
     }
 
+    /**
+     * Removes a vehicle from the physics world.
+     * @param id - Unique identifier of the vehicle to remove
+     */
     public removeVehicle(id: string): void {
         const controller = this.controllers.get(id);
         if (controller) {
@@ -186,10 +219,18 @@ export class ServerPhysicsWorld {
         }
     }
 
+    /**
+     * Gets the current physics simulation tick.
+     * @returns Current simulation tick number
+     */
     public getCurrentTick(): number {
         return this.physicsWorld.getCurrentTick();
     }
 
+    /**
+     * Cleans up all physics resources.
+     * Disposes of controllers, scene, and engine.
+     */
     public dispose(): void {
 
         // Clean up all controllers
