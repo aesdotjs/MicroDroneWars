@@ -1,5 +1,5 @@
 import * as CANNON from 'cannon';
-import { Vector3 } from 'babylonjs';
+import { Vector3, Quaternion } from 'babylonjs';
 import { VehiclePhysicsConfig, PhysicsInput } from './types';
 import { BasePhysicsController } from './BasePhysicsController';
 
@@ -58,8 +58,30 @@ export class DronePhysicsController extends BasePhysicsController {
         this.body.angularVelocity.scale(0.95, this.body.angularVelocity);
     }
 
+    protected getOrientationVectors(): { right: Vector3; up: Vector3; forward: Vector3 } {
+        // Get the quaternion from the physics body
+        const quat = this.body.quaternion;
+        
+        // Convert CANNON.js quaternion to Babylon.js quaternion
+        const babylonQuat = new Quaternion(quat.x, quat.y, quat.z, quat.w);
+        
+        // Create basis vectors
+        const right = new Vector3(1, 0, 0);
+        const up = new Vector3(0, 1, 0);
+        const forward = new Vector3(0, 0, 1);
+        
+        // Rotate vectors by the quaternion
+        right.rotateByQuaternionAroundPointToRef(babylonQuat, Vector3.Zero(), right);
+        up.rotateByQuaternionAroundPointToRef(babylonQuat, Vector3.Zero(), up);
+        forward.rotateByQuaternionAroundPointToRef(babylonQuat, Vector3.Zero(), forward);
+        
+        return { right, up, forward };
+    }
+
     public update(deltaTime: number, input: PhysicsInput): void {
         this.currentTick++;
+        
+        // Get orientation vectors first
         const { right, up, forward } = this.getOrientationVectors();
         
         // Apply stabilization first

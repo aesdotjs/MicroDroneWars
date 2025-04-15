@@ -12,7 +12,6 @@ export class ClientPhysicsWorld {
     private physicsWorld: PhysicsWorld;
     public controllers: Map<string, BasePhysicsController>;
     private stateBuffers: Map<string, StateBuffer>;
-    private inputQueue: Map<string, PhysicsInput[]>;
     private interpolationConfig: InterpolationConfig;
     private localPlayerId: string = '';
     private lastProcessedTick: number = 0;
@@ -42,7 +41,6 @@ export class ClientPhysicsWorld {
         });
         this.controllers = new Map();
         this.stateBuffers = new Map();
-        this.inputQueue = new Map();
         this.interpolationConfig = {
             delay: 100, // ms
             maxBufferSize: 10,
@@ -79,7 +77,6 @@ export class ClientPhysicsWorld {
             lastProcessedTick: 0,
             lastProcessedTimestamp: 0
         });
-        this.inputQueue.set(id, []);
         
         console.log('Vehicle created successfully:', { 
             id, 
@@ -96,17 +93,14 @@ export class ClientPhysicsWorld {
             controller.cleanup();
             this.controllers.delete(id);
             this.stateBuffers.delete(id);
-            this.inputQueue.delete(id);
         }
     }
 
-    public update(deltaTime: number, input: PhysicsInput): void {
-        const currentTime = performance.now();
-        const frameTime = currentTime - this.lastUpdateTime;
-        this.lastUpdateTime = currentTime;
+    public update(time: number, deltaTime: number, input: PhysicsInput): void {
+        this.lastUpdateTime = time;
 
         // Add frame time to accumulator (convert to seconds)
-        this.accumulator += frameTime / 1000;
+        this.accumulator += deltaTime;
 
         // Process fixed timestep updates with a maximum of 3 steps per frame
         let steps = 0;
@@ -132,11 +126,8 @@ export class ClientPhysicsWorld {
         // Update all vehicle controllers
         this.controllers.forEach((controller, id) => {
             if (id === this.localPlayerId) {
-                // For local player, use current input directly for immediate response
+                // For local player, use current input directly
                 controller.update(this.fixedTimeStep, input);
-                
-                // Add input to queue for prediction
-                this.addInput(id, input);
             } else {
                 // Remote players - use default input
                 const defaultInput: PhysicsInput = {
@@ -161,26 +152,6 @@ export class ClientPhysicsWorld {
         });
 
         this.lastProcessedTick++;
-    }
-
-    private getNextInput(id: string): PhysicsInput | null {
-        const queue = this.inputQueue.get(id);
-        if (!queue || queue.length === 0) return null;
-        return queue.shift() || null;
-    }
-
-    public addInput(id: string, input: PhysicsInput): void {
-        const queue = this.inputQueue.get(id);
-        if (queue) {
-            // Add input to queue
-            queue.push(input);
-            
-            // Keep queue size reasonable (about 1 second of inputs at 60fps)
-            const maxQueueSize = 60;
-            if (queue.length > maxQueueSize) {
-                queue.splice(0, queue.length - maxQueueSize);
-            }
-        }
     }
 
     public addState(id: string, state: PhysicsState): void {
@@ -317,7 +288,6 @@ export class ClientPhysicsWorld {
         });
         this.controllers.clear();
         this.stateBuffers.clear();
-        this.inputQueue.clear();
     }
 
     public getGroundBody(): CANNON.Body | null {

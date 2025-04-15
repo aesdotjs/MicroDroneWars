@@ -33,7 +33,10 @@ export class MicroDroneRoom extends Room<State> {
 
         // Set up message handlers
         this.onMessage("movement", (client, data: PhysicsInput) => {
-            this.physicsWorld.applyInput(client.sessionId, data);
+            const vehicle = this.state.vehicles.get(client.sessionId);
+            if (vehicle) {
+                vehicle.inputQueue.push(data);
+            }
         });
 
         // Handle player leaving
@@ -43,7 +46,11 @@ export class MicroDroneRoom extends Room<State> {
         });
 
         // Set update interval (60fps)
-        this.setSimulationInterval(() => this.update(), 1000 / 60);
+        let elapsedTime = 0;
+        this.setSimulationInterval((deltaTime) => {
+            elapsedTime += deltaTime;
+            this.update(elapsedTime, deltaTime);
+        });
     }
 
     onJoin(client: Client, options: { vehicleType: "drone" | "plane", team: number }) {
@@ -114,9 +121,9 @@ export class MicroDroneRoom extends Room<State> {
         console.log(`Vehicle left: ${client.sessionId}`);
     }
 
-    update() {
+    update(elapsedTime: number, deltaTime: number) {
         // Update physics world
-        this.physicsWorld.update(1/60);
+        this.physicsWorld.update(elapsedTime, deltaTime, this.state);
 
         // Update vehicle states from physics
         this.state.vehicles.forEach((vehicle, sessionId) => {

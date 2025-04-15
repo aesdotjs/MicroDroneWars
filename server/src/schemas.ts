@@ -1,4 +1,5 @@
 import { Schema, MapSchema, type } from "@colyseus/schema";
+import { PhysicsInput } from "@shared/physics/types";
 
 export class PhysicsState extends Schema {
     @type("number") positionX = 0;
@@ -21,6 +22,7 @@ export class Vehicle extends PhysicsState {
     @type("boolean") hasFlag = false;
     @type("number") team = 0;
     @type("string") vehicleType = "";
+    inputQueue: PhysicsInput[] = [];
 }
 
 export class Drone extends Vehicle {

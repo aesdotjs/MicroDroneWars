@@ -263,13 +263,10 @@ export class GameScene {
         input.tick = this.physicsWorld.getCurrentTick();
         
         // Update physics world with input
-        this.physicsWorld.update(deltaTime, input);
+        this.physicsWorld.update(currentTime, deltaTime, input);
         
         // Always send input to server for local player to maintain consistent updates
-        if (this.localPlayer?.id) {
-            // Add input to physics world queue for prediction
-            this.physicsWorld.addInput(this.localPlayer.id, input);
-            
+        if (this.localPlayer?.id) {            
             // Send to server
             this.game.sendMovementUpdate(input);
         }

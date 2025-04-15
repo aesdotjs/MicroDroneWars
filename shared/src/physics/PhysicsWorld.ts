@@ -12,17 +12,11 @@ export class PhysicsWorld {
     private groundBody!: CANNON.Body;
     private groundMesh!: Mesh;
     private collisionCallbacks: Map<string, (event: CollisionEvent) => void> = new Map();
-    private fixedTimeStep: number;
-    private maxSubSteps: number;
     private currentTick: number = 0;
-    private lastUpdateTime: number = 0;
-    private accumulator: number = 0;
 
     constructor(engine: Engine, scene: Scene, config: PhysicsConfig) {
         this.engine = engine;
         this.scene = scene;
-        this.fixedTimeStep = config.fixedTimeStep;
-        this.maxSubSteps = config.maxSubSteps;
         
         // Initialize physics engine
         this.initializePhysics();
@@ -196,26 +190,8 @@ export class PhysicsWorld {
     }
 
     public update(deltaTime: number): void {
-        const currentTime = performance.now();
-        const frameTime = currentTime - this.lastUpdateTime;
-        this.lastUpdateTime = currentTime;
-
-        // Add frame time to accumulator
-        this.accumulator += frameTime;
-
-        // Perform fixed timestep updates with a maximum of 3 steps per frame
-        let steps = 0;
-        while (this.accumulator >= this.fixedTimeStep && steps < 3) {
-            this.world.step(this.fixedTimeStep);
-            this.currentTick++;
-            this.accumulator -= this.fixedTimeStep;
-            steps++;
-        }
-
-        // If we have leftover time, carry it over to next frame
-        if (this.accumulator > this.fixedTimeStep * 3) {
-            this.accumulator = this.fixedTimeStep * 3;
-        }
+        this.world.step(deltaTime);
+        this.currentTick++;
     }
 
     public getCurrentTick(): number {
