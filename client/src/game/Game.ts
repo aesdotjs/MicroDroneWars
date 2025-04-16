@@ -279,7 +279,8 @@ export class Game {
      * Cleans up resources.
      */
     public cleanup(): void {
-        this.stopPing();
         this.room?.leave();
+        this.stopPing();
+        this.gameScene.dispose();
     }
 }

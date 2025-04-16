@@ -293,7 +293,7 @@ export class GameScene {
      */
     private update(): void {
         
-        log('FPS', this.engine.getFps());
+        log('FPS', Math.round(this.engine.getFps()));
         const currentTime = performance.now();
         const deltaTime = (currentTime - this.lastTime);
         this.lastTime = currentTime;

@@ -3,12 +3,15 @@ import { ref, watch, onUnmounted } from 'vue';
 interface DebugValue {
   value: any;
   timestamp: number;
+  type?: 'info' | 'warning' | 'error' | 'performance';
 }
 
 class GameDebug {
   private static instance: GameDebug;
   private debugValues = new Map<string, DebugValue>();
   private subscribers = new Set<(values: Map<string, DebugValue>) => void>();
+  private performanceMetrics = new Map<string, number[]>();
+  private readonly MAX_METRICS_SAMPLES = 60; // 1 second at 60fps
 
   private constructor() {}
 
@@ -19,12 +22,30 @@ class GameDebug {
     return GameDebug.instance;
   }
 
-  public log(label: string, value: any): void {
+  public log(label: string, value: any, type: DebugValue['type'] = 'info'): void {
     this.debugValues.set(label, {
       value,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      type
     });
     this.notifySubscribers();
+  }
+
+  public logPerformance(metric: string, value: number): void {
+    if (!this.performanceMetrics.has(metric)) {
+      this.performanceMetrics.set(metric, []);
+    }
+    
+    const samples = this.performanceMetrics.get(metric)!;
+    samples.push(value);
+    
+    if (samples.length > this.MAX_METRICS_SAMPLES) {
+      samples.shift();
+    }
+    
+    // Calculate average over the last second
+    const avg = samples.reduce((a, b) => a + b, 0) / samples.length;
+    this.log(metric, `${value.toFixed(2)}ms (avg: ${avg.toFixed(2)}ms)`, 'performance');
   }
 
   public getValues(): Map<string, DebugValue> {
@@ -57,6 +78,9 @@ export function useGameDebug() {
 
   return {
     debugValues,
-    log: (label: string, value: any) => debugInstance.log(label, value)
+    log: (label: string, value: any, type?: DebugValue['type']) => 
+      debugInstance.log(label, value, type),
+    logPerformance: (metric: string, value: number) =>
+      debugInstance.logPerformance(metric, value)
   };
 } 

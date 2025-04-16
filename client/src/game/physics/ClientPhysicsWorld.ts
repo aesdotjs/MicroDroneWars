@@ -9,7 +9,7 @@ import { DroneSettings, PlaneSettings } from '@shared/physics/VehicleSettings';
 import { Game } from '../Game';
 import { useGameDebug } from '@/composables/useGameDebug';
 
-const { log } = useGameDebug();
+const { log, logPerformance } = useGameDebug();
 /**
  * Manages physics simulation on the client side.
  * Handles vehicle physics, state interpolation, and network synchronization.
@@ -135,12 +135,16 @@ export class ClientPhysicsWorld {
      * @param input - Current input state
      */
     public update(deltaTime: number): void {
+        const startTime = performance.now();
+        
         // Add frame time to accumulator (convert to seconds)
         this.accumulator += deltaTime / 1000;
 
         // Process fixed timestep updates with a maximum of 3 steps per frame
         let steps = 0;
         while (this.accumulator >= this.fixedTimeStep && steps < 3) {
+            const physicsStartTime = performance.now();
+            
             // Get input from input manager and add to buffer
             const input = this.game.getGameScene().getInputManager().getInput();
             this.addInput(input);
@@ -159,40 +163,52 @@ export class ClientPhysicsWorld {
             currentInput.timestamp = performance.now();
             currentInput.tick = this.lastProcessedTick;
 
-        // Step physics world
-        this.physicsWorld.update(this.fixedTimeStep);
+            // Step physics world
+            this.physicsWorld.update(this.fixedTimeStep);
 
-        // Update all vehicle controllers
-        this.controllers.forEach((controller, id) => {
-            if (id === this.localPlayerId) {
+            // Update all vehicle controllers
+            this.controllers.forEach((controller, id) => {
+                if (id === this.localPlayerId) {
                     controller.update(this.fixedTimeStep, currentInput);
                     this.game.sendMovementUpdate(currentInput);
-            } else {
-                const defaultInput: PhysicsInput = {
-                    forward: false,
-                    backward: false,
-                    left: false,
-                    right: false,
-                    up: false,
-                    down: false,
-                    pitchUp: false,
-                    pitchDown: false,
-                    yawLeft: false,
-                    yawRight: false,
-                    rollLeft: false,
-                    rollRight: false,
-                    mouseDelta: { x: 0, y: 0 },
-                    tick: this.lastProcessedTick,
-                    timestamp: performance.now()
-                };
-                controller.update(this.fixedTimeStep, defaultInput);
-            }
-        });
+                } else {
+                    const defaultInput: PhysicsInput = {
+                        forward: false,
+                        backward: false,
+                        left: false,
+                        right: false,
+                        up: false,
+                        down: false,
+                        pitchUp: false,
+                        pitchDown: false,
+                        yawLeft: false,
+                        yawRight: false,
+                        rollLeft: false,
+                        rollRight: false,
+                        mouseDelta: { x: 0, y: 0 },
+                        tick: this.lastProcessedTick,
+                        timestamp: performance.now()
+                    };
+                    controller.update(this.fixedTimeStep, defaultInput);
+                }
+            });
 
-        this.lastProcessedTick++;
+            this.lastProcessedTick++;
             this.accumulator -= this.fixedTimeStep;
             steps++;
+
+            const physicsEndTime = performance.now();
+            logPerformance('Physics Update', physicsEndTime - physicsStartTime);
         }
+
+        // Log physics state differences
+        this.controllers.forEach((controller, id) => {
+            const state = controller.getState();
+            if (state) {
+                log(`Player ${id} Position`, `X: ${state.position.x.toFixed(2)}, Y: ${state.position.y.toFixed(2)}, Z: ${state.position.z.toFixed(2)}`);
+                log(`Player ${id} Velocity`, `X: ${state.linearVelocity.x.toFixed(2)}, Y: ${state.linearVelocity.y.toFixed(2)}, Z: ${state.linearVelocity.z.toFixed(2)}`);
+            }
+        });
 
         // Clean up old states
         this.cleanupStateBuffers();
@@ -202,6 +218,9 @@ export class ClientPhysicsWorld {
 
         // Interpolate states
         this.interpolateStates();
+
+        const endTime = performance.now();
+        logPerformance('Total Physics Update', endTime - startTime);
     }
 
     /**
@@ -234,6 +253,10 @@ export class ClientPhysicsWorld {
                     const serverVelocityMag = Vector3.Distance(state.linearVelocity, Vector3.Zero());
                     const velocityError = Math.abs(currentVelocityMag - serverVelocityMag);
                     
+                    // Log state differences
+                    log(`Player ${id} Position Error`, `${positionError.toFixed(2)}m`, positionError > 1 ? 'warning' : 'info');
+                    log(`Player ${id} Velocity Error`, `${velocityError.toFixed(2)}m/s`, velocityError > 0.5 ? 'warning' : 'info');
+                    
                     // Adjust error thresholds based on server tick difference
                     const tickDiff = Math.abs(this.serverTick - this.lastProcessedTick);
                     const positionThreshold = Math.max(15.0, tickDiff * 0.5);
@@ -264,7 +287,7 @@ export class ClientPhysicsWorld {
                 // For other players, add to buffer for interpolation
                 const newBuffer: StateBuffer = {
                     state: state,
-                    tick: this.serverTick, // Use server tick instead of local tick
+                    tick: this.serverTick,
                     timestamp: now
                 };
                 buffers.push(newBuffer);
