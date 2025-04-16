@@ -6,6 +6,9 @@ import { Game } from './Game';
 import { ClientPhysicsWorld } from './physics/ClientPhysicsWorld';
 import * as CANNON from 'cannon';
 import { CollisionManager } from './CollisionManager';
+import { useGameDebug } from '@/composables/useGameDebug';
+
+const { log } = useGameDebug();
 window.CANNON = CANNON;
 
 /**
@@ -289,6 +292,8 @@ export class GameScene {
      * Handles physics updates, input processing, and camera movement.
      */
     private update(): void {
+        
+        log('FPS', this.engine.getFps());
         const currentTime = performance.now();
         const deltaTime = (currentTime - this.lastTime);
         this.lastTime = currentTime;

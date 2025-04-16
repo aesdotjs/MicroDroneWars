@@ -9,6 +9,9 @@ import { PhysicsInput } from '@shared/physics/types';
 import { Drone } from './vehicles/Drone';
 import { Plane } from './vehicles/Plane';
 import { Flag } from './Flag';
+import { useGameDebug } from '@/composables/useGameDebug';
+
+const { log } = useGameDebug();
 
 /**
  * Main game class that manages the game loop, networking, and scene.
