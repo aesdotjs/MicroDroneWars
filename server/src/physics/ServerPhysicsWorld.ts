@@ -103,55 +103,25 @@ export class ServerPhysicsWorld {
         state.vehicles.forEach((vehicle, id) => {
             const controller = this.controllers.get(id);
             if (controller) {
-                // Get the next input from the queue that matches our current tick
-                let input = null;
-                let queueIndex = -1;
+                // Get the last input and update its tick
+                const input = { ...vehicle.lastInput };
                 
-                // Find the input that matches our current tick
-                for (let i = 0; i < vehicle.inputQueue.length; i++) {
-                    if (vehicle.inputQueue[i].tick === this.physicsWorld.getCurrentTick()) {
-                        input = vehicle.inputQueue[i];
-                        queueIndex = i;
-                        break;
-                    }
-                }
-
-                // If no matching input found, use the most recent input
-                if (!input && vehicle.inputQueue.length > 0) {
-                    // Find the most recent input that's not too old
-                    for (let i = vehicle.inputQueue.length - 1; i >= 0; i--) {
-                        if (vehicle.inputQueue[i].tick >= this.physicsWorld.getCurrentTick() - 10) {
-                            input = vehicle.inputQueue[i];
-                            queueIndex = i;
-                            break;
-                        }
-                    }
-                }
-
-                // If still no input, use default input but with correct tick
-                if (!input) {
-                    input = {
-                        forward: false,
-                        backward: false,
-                        left: false,
-                        right: false,
-                        up: false,
-                        down: false,
-                        pitchUp: false,
-                        pitchDown: false,
-                        yawLeft: false,
-                        yawRight: false,
-                        rollLeft: false,
-                        rollRight: false,
-                        mouseDelta: { x: 0, y: 0 },
-                        tick: this.physicsWorld.getCurrentTick(),
-                        timestamp: performance.now()
-                    };
-                }
-
-                // Remove processed inputs up to the one we're using
-                if (queueIndex >= 0) {
-                    vehicle.inputQueue.splice(0, queueIndex + 1);
+                // If no input has been received yet, use default input
+                if (input.tick === 0) {
+                    input.forward = false;
+                    input.backward = false;
+                    input.left = false;
+                    input.right = false;
+                    input.up = false;
+                    input.down = false;
+                    input.pitchUp = false;
+                    input.pitchDown = false;
+                    input.yawLeft = false;
+                    input.yawRight = false;
+                    input.rollLeft = false;
+                    input.rollRight = false;
+                    input.mouseDelta = { x: 0, y: 0 };
+                    input.timestamp = performance.now();
                 }
 
                 controller.update(this.fixedTimeStep, input);

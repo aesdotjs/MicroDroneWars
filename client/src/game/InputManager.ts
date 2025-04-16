@@ -170,8 +170,8 @@ export class InputManager {
             return;
         }
 
-        this.mouseDelta.x = event.movementX;
-        this.mouseDelta.y = event.movementY;
+        this.mouseDelta.x += event.movementX;
+        this.mouseDelta.y += event.movementY;
     }
 
     /**
@@ -264,7 +264,7 @@ export class InputManager {
             rollRight: this.keys.rollRight.getIsPressed(),
             mouseDelta: currentMouseDelta,
             timestamp: performance.now(),
-            tick: 0,
+            tick: 0
         };
 
         return input;

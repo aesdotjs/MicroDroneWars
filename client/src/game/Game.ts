@@ -29,6 +29,8 @@ export class Game {
     private team!: number;
     /** The player's vehicle type */
     private vehicleType!: 'drone' | 'plane';
+    /** The interval for sending ping messages */
+    private pingInterval: NodeJS.Timeout | null = null;
 
     /**
      * Creates a new Game instance.
@@ -128,7 +130,7 @@ export class Game {
         });
         this.room.send("ping", performance.now());
         // Send ping every second
-        setInterval(() => {
+        this.pingInterval = setInterval(() => {
             if (this.room) {
                 this.room.send("ping", performance.now());
             }
@@ -192,7 +194,6 @@ export class Game {
                         quaternion: new Quaternion(vehicle.quaternionX, vehicle.quaternionY, vehicle.quaternionZ, vehicle.quaternionW),
                         linearVelocity: new Vector3(vehicle.linearVelocityX, vehicle.linearVelocityY, vehicle.linearVelocityZ),
                         angularVelocity: new Vector3(vehicle.angularVelocityX, vehicle.angularVelocityY, vehicle.angularVelocityZ),
-                        timestamp: performance.now(),
                     };
                     gameVehicle.updateState(physicsState);
 
@@ -204,7 +205,6 @@ export class Game {
                                 quaternion: new Quaternion(vehicle.quaternionX, vehicle.quaternionY, vehicle.quaternionZ, vehicle.quaternionW),
                                 linearVelocity: new Vector3(vehicle.linearVelocityX, vehicle.linearVelocityY, vehicle.linearVelocityZ),
                                 angularVelocity: new Vector3(vehicle.angularVelocityX, vehicle.angularVelocityY, vehicle.angularVelocityZ),
-                                timestamp: performance.now(),
                             };
                             // Use vehicle.id instead of sessionId for state management
                             this.gameScene.getPhysicsWorld().addState(gameVehicle.id, updatedState);
@@ -253,5 +253,30 @@ export class Game {
     public sendMovementUpdate(input: PhysicsInput): void {
         if (!this.room) return;
         this.room.send('movement', input);
+    }
+
+    /**
+     * Stops the ping interval.
+     */
+    public stopPing(): void {
+        if (this.pingInterval) {
+            clearInterval(this.pingInterval);
+            this.pingInterval = null;
+        }
+    }
+
+    /**
+     * Gets the game scene.
+     * @returns The game scene
+     */
+    public getGameScene(): GameScene {
+        return this.gameScene;
+    }
+    /**
+     * Cleans up resources.
+     */
+    public cleanup(): void {
+        this.stopPing();
+        this.room?.leave();
     }
 }

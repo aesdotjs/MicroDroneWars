@@ -5,11 +5,16 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue';
+import { onMounted, onUnmounted } from 'vue';
 import { Game } from '@/game/Game';
 
+let game: Game;
 onMounted(() => {
-  new Game();
+  game = new Game();
+});
+
+onUnmounted(() => {
+  game.cleanup();
 });
 </script>
 

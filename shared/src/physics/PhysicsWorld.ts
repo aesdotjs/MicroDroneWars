@@ -257,7 +257,6 @@ export class PhysicsWorld {
             quaternion: new Quaternion(body.quaternion.x, body.quaternion.y, body.quaternion.z, body.quaternion.w),
             linearVelocity: new Vector3(body.velocity.x, body.velocity.y, body.velocity.z),
             angularVelocity: new Vector3(body.angularVelocity.x, body.angularVelocity.y, body.angularVelocity.z),
-            timestamp: performance.now(),
         };
     }
 
@@ -389,7 +388,6 @@ export class PhysicsWorld {
             quaternion: new Quaternion(body.quaternion.x, body.quaternion.y, body.quaternion.z, body.quaternion.w),
             linearVelocity: new Vector3(body.velocity.x, body.velocity.y, body.velocity.z),
             angularVelocity: new Vector3(body.angularVelocity.x, body.angularVelocity.y, body.angularVelocity.z),
-            timestamp: performance.now(),
         };
     }
 

@@ -128,7 +128,6 @@ export abstract class BasePhysicsController {
                 this.body.angularVelocity.y,
                 this.body.angularVelocity.z
             ),
-            timestamp: performance.now(),
         };
     }
 

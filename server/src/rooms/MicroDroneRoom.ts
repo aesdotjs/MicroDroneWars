@@ -45,14 +45,7 @@ export class MicroDroneRoom extends Room<State> {
         this.onMessage("movement", (client, data: PhysicsInput) => {
             const vehicle = this.state.vehicles.get(client.sessionId);
             if (vehicle) {
-                // Add input to queue with current server tick
-                data.tick = this.physicsWorld.getCurrentTick();
-                vehicle.inputQueue.push(data);
-                
-                // Keep queue size reasonable (about 1 second of inputs)
-                if (vehicle.inputQueue.length > 60) {
-                    vehicle.inputQueue.shift();
-                }
+                vehicle.lastInput = data;
             }
         });
 

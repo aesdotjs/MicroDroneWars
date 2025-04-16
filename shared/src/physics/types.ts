@@ -13,8 +13,6 @@ export interface PhysicsState {
     linearVelocity: Vector3;
     /** Current angular velocity */
     angularVelocity: Vector3;
-    /** Timestamp of the state in milliseconds */
-    timestamp: number;
 }
 
 /**
@@ -150,11 +148,11 @@ export interface VehicleCollisionEvent {
  */
 export interface StateBuffer {
     /** Array of recent physics states */
-    states: PhysicsState[];
+    state: PhysicsState;
     /** Last processed simulation tick */
-    lastProcessedTick: number;
+    tick: number;
     /** Timestamp of the last processed state */
-    lastProcessedTimestamp: number;
+    timestamp: number;
 }
 
 /**

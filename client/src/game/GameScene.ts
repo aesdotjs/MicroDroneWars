@@ -93,7 +93,7 @@ export class GameScene {
      */
     private setupPhysicsWorld(): void {
         console.log('Setting up physics world...');
-        this.physicsWorld = new ClientPhysicsWorld(this.engine, this.scene);
+        this.physicsWorld = new ClientPhysicsWorld(this.engine, this.scene, this.game);
         console.log('Physics world created:', this.physicsWorld);
     }
 
@@ -293,20 +293,8 @@ export class GameScene {
         const deltaTime = (currentTime - this.lastTime);
         this.lastTime = currentTime;
         
-        // Get input from the scene's input manager
-        const input = this.inputManager.getInput();
-        
-        // Add timestamp and tick to input
-        input.timestamp = currentTime;
-        input.tick = this.physicsWorld.getCurrentTick();
         // Update physics world with input
-        this.physicsWorld.update(deltaTime, input);
-        
-        // Always send input to server for local player to maintain consistent updates
-        if (this.localPlayer?.id) {            
-            // Send to server
-            this.game.sendMovementUpdate(input);
-        }
+        this.physicsWorld.update(deltaTime);
         
         // Update all vehicles' meshes with their physics states
         this.vehicles.forEach(vehicle => {
@@ -415,6 +403,7 @@ export class GameScene {
     public getPhysicsWorld(): ClientPhysicsWorld {
         return this.physicsWorld;
     }
+    
 
     /**
      * Sets up the game environment.

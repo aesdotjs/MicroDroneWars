@@ -47,8 +47,24 @@ export class Vehicle extends PhysicsState {
     @type("number") team = 0;
     /** Type of vehicle (e.g., "drone" or "plane") */
     @type("string") vehicleType = "";
-    /** Queue of physics inputs to be processed */
-    inputQueue: PhysicsInput[] = [];
+    /** Last received physics input */
+    lastInput: PhysicsInput = {
+        forward: false,
+        backward: false,
+        left: false,
+        right: false,
+        up: false,
+        down: false,
+        pitchUp: false,
+        pitchDown: false,
+        yawLeft: false,
+        yawRight: false,
+        rollLeft: false,
+        rollRight: false,
+        mouseDelta: { x: 0, y: 0 },
+        tick: 0,
+        timestamp: 0
+    };
 }
 
 /**

@@ -91,7 +91,6 @@ export abstract class Vehicle {
                 quaternion: this.mesh.rotationQuaternion || new Quaternion(),
                 linearVelocity: new Vector3(0, 0, 0),
                 angularVelocity: new Vector3(0, 0, 0),
-                timestamp: performance.now(),
             });
         }
     }
