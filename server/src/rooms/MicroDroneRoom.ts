@@ -119,6 +119,8 @@ export class MicroDroneRoom extends Room<State> {
             team: options.team,
             position: { x: vehicle.positionX, y: vehicle.positionY, z: vehicle.positionZ }
         });
+        //log how much vehicle in the room
+        console.log(`There are ${this.state.vehicles.size} vehicles in the room`);
     }
 
     /**

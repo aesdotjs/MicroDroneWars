@@ -278,9 +278,10 @@ export class Game {
     /**
      * Cleans up resources.
      */
-    public cleanup(): void {
-        this.room?.leave();
+    public async cleanup(): Promise<void> {
+        console.log('Cleaning up game');
         this.stopPing();
         this.gameScene.dispose();
+        await this.room?.leave();
     }
 }

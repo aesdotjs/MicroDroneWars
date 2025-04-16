@@ -6,17 +6,22 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted } from 'vue';
+import { onMounted, onBeforeUnmount } from 'vue';
 import { Game } from '@/game/Game';
 import DebugPanel from './DebugPanel.vue';
 
 let game: Game;
 
 onMounted(() => {
+  if (game) {
+    console.log('Cleaning up game');
+    game.cleanup();
+  }
   game = new Game();
 });
 
-onUnmounted(() => {
+onBeforeUnmount(() => {
+  console.log('Unmounting game');
   game.cleanup();
 });
 </script>

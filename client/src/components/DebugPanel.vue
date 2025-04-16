@@ -9,9 +9,23 @@
     <div v-if="isExpanded" class="debug-content">
       <div v-for="[label, data] in debugValues" :key="label" 
            :class="['debug-item', data.type]">
-        <span class="debug-label">{{ label }}:</span>
-        <span class="debug-value">{{ data.value }}</span>
-        <span class="debug-timestamp">{{ formatTimestamp(data.timestamp) }}</span>
+        <template v-if="typeof data.value === 'object' && data.value !== null">
+          <div class="debug-object">
+            <div class="debug-object-header">
+              <span class="debug-label">{{ label }}:</span>
+              <span class="debug-timestamp">{{ formatTimestamp(data.timestamp) }}</span>
+            </div>
+            <div v-for="(value, key) in data.value" :key="key" class="debug-object-row">
+              <span class="debug-object-key">{{ key }}:</span>
+              <span class="debug-object-value">{{ formatValue(value) }}</span>
+            </div>
+          </div>
+        </template>
+        <template v-else>
+          <span class="debug-label">{{ label }}:</span>
+          <span class="debug-value">{{ data.value }}</span>
+          <span class="debug-timestamp">{{ formatTimestamp(data.timestamp) }}</span>
+        </template>
       </div>
     </div>
   </div>
@@ -27,6 +41,19 @@ const isExpanded = ref(true);
 const formatTimestamp = (timestamp: number) => {
   return new Date(timestamp).toLocaleTimeString();
 };
+
+const formatValue = (value: any) => {
+  if (typeof value === 'number') {
+    return value.toFixed(2);
+  }
+  if (typeof value === 'object' && value !== null) {
+    if (value._isDirty) {
+      return `X: ${value._x?.toFixed(2) ?? 'null'}, Y: ${value._y?.toFixed(2) ?? 'null'}, Z: ${value._z?.toFixed(2) ?? 'null'}`;
+    }
+    return JSON.stringify(value, null, 2);
+  }
+  return value;
+};
 </script>
 
 <style scoped>
@@ -39,7 +66,7 @@ const formatTimestamp = (timestamp: number) => {
   padding: 10px;
   border-radius: 5px;
   font-family: monospace;
-  width: 400px;
+  width: 600px;
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -70,11 +97,45 @@ const formatTimestamp = (timestamp: number) => {
 
 .debug-item {
   margin: 5px 0;
-  display: grid;
-  grid-template-columns: 1fr 4fr 1fr;
-  align-items: center;
   padding: 2px 5px;
   border-radius: 3px;
+}
+
+.debug-object {
+  margin: 5px 0;
+  padding: 5px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 3px;
+  width: 100%;
+}
+
+.debug-object-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 5px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid #444;
+}
+
+.debug-object-row {
+  display: grid;
+  grid-template-columns: 1fr 4fr;
+  gap: 10px;
+  padding: 2px 0;
+}
+
+.debug-object-key {
+  color: #4CAF50;
+  font-size: 0.9em;
+  word-break: break-all;
+}
+
+.debug-object-value {
+  color: #fff;
+  font-size: 0.9em;
+  text-align: right;
+  word-break: break-all;
 }
 
 .debug-item.info {
@@ -93,6 +154,12 @@ const formatTimestamp = (timestamp: number) => {
   background: rgba(33, 150, 243, 0.1);
 }
 
+.debug-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 .debug-label {
   color: #4CAF50;
   margin-right: 5px;
@@ -101,6 +168,9 @@ const formatTimestamp = (timestamp: number) => {
 
 .debug-value {
   color: #fff;
+  text-align: right;
+  margin-left: auto;
+  width: 100%;
   margin-right: 10px;
 }
 

@@ -9,7 +9,7 @@ import { DroneSettings, PlaneSettings } from '@shared/physics/VehicleSettings';
 import { Game } from '../Game';
 import { useGameDebug } from '@/composables/useGameDebug';
 
-const { log, logPerformance } = useGameDebug();
+const { log, logPerformance, clearVehicleLogs } = useGameDebug();
 /**
  * Manages physics simulation on the client side.
  * Handles vehicle physics, state interpolation, and network synchronization.
@@ -126,6 +126,7 @@ export class ClientPhysicsWorld {
             controller.cleanup();
             this.controllers.delete(id);
             this.stateBuffers.delete(id);
+            clearVehicleLogs(id);
         }
     }
 
@@ -245,43 +246,124 @@ export class ClientPhysicsWorld {
                 // Get current state for comparison
                 const currentState = this.controllers.get(id)?.getState();
                 if (currentState) {
-                    // Calculate position error
+                    // Validate state values
+                    const isValidState = (state: PhysicsState) => {
+                        return state && 
+                               state.position && 
+                               state.quaternion && 
+                               state.linearVelocity && 
+                               state.angularVelocity &&
+                               !isNaN(state.position.x) && 
+                               !isNaN(state.position.y) && 
+                               !isNaN(state.position.z);
+                    };
+
+                    if (!isValidState(currentState) || !isValidState(state)) {
+                        // If either state is invalid, use server state directly
+                        this.controllers.get(id)?.setState(state);
+                        return;
+                    }
+
+                    // Calculate position and velocity errors
                     const positionError = Vector3.Distance(currentState.position, state.position);
-                    
-                    // Calculate velocity error using magnitude difference
                     const currentVelocityMag = Vector3.Distance(currentState.linearVelocity, Vector3.Zero());
                     const serverVelocityMag = Vector3.Distance(state.linearVelocity, Vector3.Zero());
                     const velocityError = Math.abs(currentVelocityMag - serverVelocityMag);
                     
-                    // Log state differences
-                    log(`Player ${id} Position Error`, `${positionError.toFixed(2)}m`, positionError > 1 ? 'warning' : 'info');
-                    log(`Player ${id} Velocity Error`, `${velocityError.toFixed(2)}m/s`, velocityError > 0.5 ? 'warning' : 'info');
+                    // Calculate rotation error (angle between quaternions)
+                    const currentQuat = new Quaternion(
+                        currentState.quaternion.x,
+                        currentState.quaternion.y,
+                        currentState.quaternion.z,
+                        currentState.quaternion.w
+                    );
+                    const serverQuat = new Quaternion(
+                        state.quaternion.x,
+                        state.quaternion.y,
+                        state.quaternion.z,
+                        state.quaternion.w
+                    );
                     
-                    // Adjust error thresholds based on server tick difference
+                    // Normalize quaternions to ensure valid dot product
+                    currentQuat.normalize();
+                    serverQuat.normalize();
+                    
+                    // Calculate angle between quaternions using dot product with safety checks
+                    const dot = Math.min(1, Math.max(-1, Quaternion.Dot(currentQuat, serverQuat)));
+                    const rotationError = Math.acos(dot) * (180 / Math.PI);
+                    
+                    // Ensure position and velocity errors are valid numbers
+                    const positionErrorSafe = isNaN(positionError) ? 0 : positionError;
+                    const velocityErrorSafe = isNaN(velocityError) ? 0 : velocityError;
+                    const rotationErrorSafe = isNaN(rotationError) ? 0 : rotationError;
+                    
+                    // Log state differences
+                    log(`Player ${id} Position Error`, `${positionErrorSafe.toFixed(2)}m`, positionErrorSafe > 1 ? 'warning' : 'info');
+                    log(`Player ${id} Velocity Error`, `${velocityErrorSafe.toFixed(2)}m/s`, velocityErrorSafe > 0.5 ? 'warning' : 'info');
+                    log(`Player ${id} Rotation Error`, `${rotationErrorSafe.toFixed(2)}°`, rotationErrorSafe > 5 ? 'warning' : 'info');
+                    
+                    // Log detailed reconciliation info
                     const tickDiff = Math.abs(this.serverTick - this.lastProcessedTick);
-                    const positionThreshold = Math.max(15.0, tickDiff * 0.5);
-                    const velocityThreshold = Math.max(8.0, tickDiff * 0.2);
+                    log(`Player ${id} Reconciliation`, {
+                        positionError: positionErrorSafe,
+                        velocityError: velocityErrorSafe,
+                        rotationError: rotationErrorSafe,
+                        tickDiff,
+                        currentPosition: currentState.position,
+                        serverPosition: state.position,
+                        currentVelocity: currentState.linearVelocity,
+                        serverVelocity: state.linearVelocity
+                    }, 'info');
 
-                    // Only reconcile if position or velocity error is significant
-                    if ((positionError > positionThreshold) ||
-                        (velocityError > velocityThreshold)) {
+                    // Always reconcile, but scale the correction based on error magnitude
+                    const tickFactor = Math.min(1.0, tickDiff / 10);
+                    
+                    // Calculate error-based factors with minimum values
+                    const positionErrorFactor = Math.max(0.3, Math.min(1.0, positionErrorSafe / 1.2));
+                    const velocityErrorFactor = Math.max(0.3, Math.min(1.0, velocityErrorSafe / 0.6));
+                    const rotationErrorFactor = Math.max(0.2, Math.min(1.0, rotationErrorSafe / 6));
+                    
+                    // For movement shooters, we want to prioritize rotation accuracy
+                    // and adjust position correction based on rotation error
+                    const rotationAdjustedPositionFactor = positionErrorFactor * (1 - rotationErrorFactor * 0.2);
+                    
+                    // Calculate final interpolation factors with minimum values
+                    const positionFactor = Math.max(0.2, Math.min(0.8, tickFactor * 0.6 * rotationAdjustedPositionFactor));
+                    const velocityFactor = Math.max(0.2, Math.min(0.8, tickFactor * 0.6 * velocityErrorFactor));
+                    const rotationFactor = Math.max(0.3, Math.min(0.95, tickFactor * 0.7 * rotationErrorFactor));
+                    
+                    // Log interpolation factors
+                    log(`Player ${id} Interpolation Factors`, {
+                        tickFactor,
+                        positionErrorFactor,
+                        velocityErrorFactor,
+                        rotationErrorFactor,
+                        rotationAdjustedPositionFactor,
+                        positionFactor,
+                        velocityFactor,
+                        rotationFactor
+                    }, 'info');
                         
-                        // Calculate interpolation factors based on tick difference
-                        const tickFactor = Math.min(1.0, tickDiff / 10);
-                        const positionFactor = Math.min(0.2, tickFactor * 0.1);
-                        const velocityFactor = Math.min(0.2, tickFactor * 0.1);
-                        const rotationFactor = Math.min(0.1, tickFactor * 0.05);
+                    // Smoothly correct all state properties
+                    const correctedState: PhysicsState = {
+                        position: Vector3.Lerp(currentState.position, state.position, positionFactor),
+                        quaternion: Quaternion.Slerp(currentState.quaternion, state.quaternion, rotationFactor),
+                        linearVelocity: Vector3.Lerp(currentState.linearVelocity, state.linearVelocity, velocityFactor),
+                        angularVelocity: Vector3.Lerp(currentState.angularVelocity, state.angularVelocity, velocityFactor),
+                    };
+                    
+                    // Log the correction being applied
+                    log(`Player ${id} Correction Applied`, {
+                        fromPosition: currentState.position,
+                        toPosition: correctedState.position,
+                        positionDelta: Vector3.Distance(currentState.position, correctedState.position),
+                        fromVelocity: currentState.linearVelocity,
+                        toVelocity: correctedState.linearVelocity,
+                        velocityDelta: Vector3.Distance(currentState.linearVelocity, correctedState.linearVelocity),
+                        rotationDelta: Math.acos(Math.min(1, Math.max(-1, Quaternion.Dot(currentState.quaternion, correctedState.quaternion)))) * (180 / Math.PI)
+                    }, 'info');
                         
-                        // Smoothly correct all state properties
-                        const correctedState: PhysicsState = {
-                            position: Vector3.Lerp(currentState.position, state.position, positionFactor),
-                            quaternion: Quaternion.Slerp(currentState.quaternion, state.quaternion, rotationFactor),
-                            linearVelocity: Vector3.Lerp(currentState.linearVelocity, state.linearVelocity, velocityFactor),
-                            angularVelocity: Vector3.Lerp(currentState.angularVelocity, state.angularVelocity, velocityFactor),
-                        };
-                        
-                        this.controllers.get(id)?.setState(correctedState);
-                    }
+                    this.controllers.get(id)?.setState(correctedState);
                 }
             } else {
                 // For other players, add to buffer for interpolation
@@ -372,6 +454,7 @@ export class ClientPhysicsWorld {
         });
         this.controllers.clear();
         this.stateBuffers.clear();
+        this.physicsWorld.cleanup();
     }
 
     /**
