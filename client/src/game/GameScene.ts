@@ -4,15 +4,13 @@ import { Flag } from './Flag';
 import { InputManager } from './InputManager';
 import { Game } from './Game';
 import { ClientPhysicsWorld } from './physics/ClientPhysicsWorld';
-import * as CANNON from 'cannon';
 import { CollisionManager } from './CollisionManager';
 import { useGameDebug } from '@/composables/useGameDebug';
 import { Vehicle as VehicleSchema } from './schemas/Vehicle';
-import { PhysicsState } from '@shared/physics/types';
+import { PhysicsState } from '@shared/types';
 import { Drone } from './vehicles/Drone';
 import { Plane } from './vehicles/Plane';
 const { log } = useGameDebug();
-window.CANNON = CANNON;
 
 /**
  * Manages the game scene, including rendering, physics, and game objects.

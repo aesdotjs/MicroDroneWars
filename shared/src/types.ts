@@ -1,5 +1,12 @@
-import { Vector3, Quaternion } from 'babylonjs';
+import { Vector3, Quaternion, Material } from 'babylonjs';
+import { Rapier } from "./utils/rapier/rapier";
 
+export type Actor = Rapier.RigidBody | Rapier.Collider;
+export type ColliderOptions = {
+	groups: number
+	material: Material | null
+	contact_force_threshold: number
+};
 /**
  * Represents the complete physics state of a vehicle or object.
  * Contains position, orientation, and velocity information.

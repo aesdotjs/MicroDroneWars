@@ -1,4 +1,4 @@
-import { VehiclePhysicsConfig } from "./types";
+import { VehiclePhysicsConfig } from "../types";
 
 /**
  * Default physics settings for drone vehicles.

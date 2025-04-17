@@ -1,5 +1,5 @@
 import * as CANNON from 'cannon';
-import { VehiclePhysicsConfig } from './types';
+import { VehiclePhysicsConfig } from '../types';
 import { BasePhysicsController } from './BasePhysicsController';
 import { DronePhysicsController } from './DronePhysicsController';
 import { PlanePhysicsController } from './PlanePhysicsController';

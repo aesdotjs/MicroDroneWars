@@ -1,6 +1,6 @@
 import * as CANNON from 'cannon';
 import { Vector3, Quaternion, Matrix } from 'babylonjs';
-import { PhysicsState, VehiclePhysicsConfig, PhysicsInput } from './types';
+import { PhysicsState, VehiclePhysicsConfig, PhysicsInput } from '../types';
 import { SpringSimulator } from '../utils/SpringSimulator';
 import { CollisionGroups, collisionMasks } from './CollisionGroups';
 

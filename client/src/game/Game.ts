@@ -1,11 +1,11 @@
 import { State } from './schemas/State';
 import { Flag as FlagSchema } from './schemas/Flag';
 import { Vehicle as VehicleSchema } from './schemas/Vehicle';
-import { PhysicsState } from '@shared/physics/types';
+import { PhysicsState } from '@shared/types';
 import * as Colyseus from 'colyseus.js';
 import { Engine, Vector3, Quaternion } from 'babylonjs';
 import { GameScene } from './GameScene';
-import { PhysicsInput } from '@shared/physics/types';
+import { PhysicsInput } from '@shared/types';
 import { Flag } from './Flag';
 import { useGameDebug } from '@/composables/useGameDebug';
 

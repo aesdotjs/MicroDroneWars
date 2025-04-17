@@ -1,6 +1,6 @@
 import * as CANNON from 'cannon';
 import { Vector3, Quaternion } from 'babylonjs';
-import { VehiclePhysicsConfig, PhysicsInput } from './types';
+import { VehiclePhysicsConfig, PhysicsInput } from '../types';
 import { BasePhysicsController } from './BasePhysicsController';
 
 /**

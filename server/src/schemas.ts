@@ -1,5 +1,5 @@
 import { Schema, MapSchema, type } from "@colyseus/schema";
-import { PhysicsInput } from "@shared/physics/types";
+import { PhysicsInput } from "@shared/types";
 
 /**
  * Represents the physical state of an object in the game world.

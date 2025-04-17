@@ -1,6 +1,6 @@
 import { PhysicsWorld } from '@shared/physics/PhysicsWorld';
 import { PhysicsControllerFactory } from '@shared/physics/PhysicsControllerFactory';
-import { PhysicsState } from '@shared/physics/types';
+import { PhysicsState } from '@shared/types';
 import { Engine, Scene, NullEngine, Vector3, Quaternion } from 'babylonjs';
 import { State, Vehicle } from '../schemas';
 import { DroneSettings, PlaneSettings } from '@shared/physics/VehicleSettings';

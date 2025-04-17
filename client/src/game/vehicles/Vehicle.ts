@@ -1,6 +1,6 @@
 import { Vector3, Quaternion, Mesh, Scene } from 'babylonjs';
 import { InputManager } from '../InputManager';
-import { PhysicsState, PhysicsInput } from '@shared/physics/types';
+import { PhysicsState, PhysicsInput } from '@shared/types';
 import { BasePhysicsController } from '@shared/physics/BasePhysicsController';
 import { Vehicle as VehicleSchema } from '../schemas/Vehicle';
 

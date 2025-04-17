@@ -1,13 +1,14 @@
 import { Vector3, Quaternion, Engine, Scene } from 'babylonjs';
-import { PhysicsState, PhysicsInput, VehiclePhysicsConfig, StateBuffer, InterpolationConfig, PhysicsConfig } from '@shared/physics/types';
+import { PhysicsState, PhysicsInput, VehiclePhysicsConfig, StateBuffer, InterpolationConfig, PhysicsConfig } from '@shared/types';
 import { BasePhysicsController } from '@shared/physics/BasePhysicsController';
 import { DronePhysicsController } from '@shared/physics/DronePhysicsController';
 import { PlanePhysicsController } from '@shared/physics/PlanePhysicsController';
 import { PhysicsWorld } from '@shared/physics/PhysicsWorld';
-import { CollisionEvent } from '@shared/physics/types';
+import { CollisionEvent } from '@shared/types';
 import { DroneSettings, PlaneSettings } from '@shared/physics/VehicleSettings';
 import { Game } from '../Game';
 import { useGameDebug } from '@/composables/useGameDebug';
+import { RigidBody } from '@dimforge/rapier3d-deterministic-compat';
 
 const { log, logPerformance, clearVehicleLogs } = useGameDebug();
 /**
@@ -456,7 +457,7 @@ export class ClientPhysicsWorld {
      * Gets the ground body for collision detection.
      * @returns The ground physics body
      */
-    public getGroundBody(): CANNON.Body | null {
+    public getGroundBody(): RigidBody | null {
         return this.physicsWorld.getGroundBody();
     }
 
@@ -468,22 +469,22 @@ export class ClientPhysicsWorld {
         return this.physicsWorld.getGroundMesh();
     }
 
-    /**
-     * Registers a callback for collision events.
-     * @param id - ID of the vehicle
-     * @param callback - Function to call on collision
-     */
-    public registerCollisionCallback(id: string, callback: (event: CollisionEvent) => void): void {
-        this.physicsWorld.registerCollisionCallback(id, callback);
-    }
+    // /**
+    //  * Registers a callback for collision events.
+    //  * @param id - ID of the vehicle
+    //  * @param callback - Function to call on collision
+    //  */
+    // public registerCollisionCallback(id: string, callback: (event: CollisionEvent) => void): void {
+    //     this.physicsWorld.registerCollisionCallback(id, callback);
+    // }
 
-    /**
-     * Unregisters a collision callback.
-     * @param id - ID of the vehicle
-     */
-    public unregisterCollisionCallback(id: string): void {
-        this.physicsWorld.unregisterCollisionCallback(id);
-    }
+    // /**
+    //  * Unregisters a collision callback.
+    //  * @param id - ID of the vehicle
+    //  */
+    // public unregisterCollisionCallback(id: string): void {
+    //     this.physicsWorld.unregisterCollisionCallback(id);
+    // }
 
     /**
      * Sets the ID of the local player's vehicle.

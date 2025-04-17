@@ -1,4 +1,4 @@
-import { PhysicsInput } from '@shared/physics/types';
+import { PhysicsInput } from '@shared/types';
 import { KeyBinding } from './KeyBinding';
 
 /**

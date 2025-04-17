@@ -1,7 +1,7 @@
 import { Room, Client } from "colyseus";
 import { State, Drone, Plane, Flag } from "../schemas";
 import { ServerPhysicsWorld } from "../physics/ServerPhysicsWorld";
-import { VehiclePhysicsConfig, PhysicsInput } from "@shared/physics/types";
+import { VehiclePhysicsConfig, PhysicsInput } from "@shared/types";
 
 /**
  * Represents a game room for MicroDroneWars multiplayer matches.

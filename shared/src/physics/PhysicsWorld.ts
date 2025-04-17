@@ -1,8 +1,10 @@
 import { Engine, Scene, Vector3, Mesh, Quaternion, CannonJSPlugin, MeshBuilder, StandardMaterial, Color3 } from 'babylonjs';
-import * as CANNON from 'cannon';
+import type { World, Collider, ColliderDesc, RigidBody, RigidBodyDesc, Vector3 as RapierVector3, Quaternion as RapierQuaternion } from '@dimforge/rapier3d-deterministic-compat';
 import { CollisionGroups, collisionMasks } from './CollisionGroups';
-import { CollisionEvent, VehicleCollisionEvent, PhysicsState, PhysicsConfig } from './types';
+import { CollisionEvent, VehicleCollisionEvent, PhysicsState, PhysicsConfig } from '../types';
 import { PhysicsImpostor } from 'babylonjs';
+import { Rapier } from '../utils/rapier/rapier';
+import { PhysicsBonding } from '../utils/rapier/parts/bonding';
 
 /**
  * Manages the physics simulation world for the game.
@@ -11,13 +13,16 @@ import { PhysicsImpostor } from 'babylonjs';
 export class PhysicsWorld {
     private engine: Engine;
     private scene: Scene;
-    private world: CANNON.World;
-    private bodies: Map<string, CANNON.Body> = new Map();
-    private groundBody!: CANNON.Body;
+    private world: World;
+    private bodies: Map<string, RigidBody> = new Map();
+    private groundBody!: RigidBody;
     private groundMesh!: Mesh;
     private collisionCallbacks: Map<string, (event: CollisionEvent) => void> = new Map();
     private currentTick: number = 0;
-
+    private bonding : PhysicsBonding;
+    private collision_events: {a: number, b: number, started: boolean}[] = [];
+	private contact_force_events: Rapier.TempContactForceEvent[] = [];
+	#queue = new Rapier.EventQueue(true);
     /**
      * Creates a new PhysicsWorld instance.
      * @param engine - The Babylon.js engine instance
@@ -28,201 +33,177 @@ export class PhysicsWorld {
         this.engine = engine;
         this.scene = scene;
         
-        // Initialize physics engine
-        this.initializePhysics();
-        
         // Configure physics world
-        this.world = new CANNON.World();
-        this.world.gravity.set(0, -config.gravity, 0);
-        this.world.broadphase = new CANNON.NaiveBroadphase();
-        this.world.solver.iterations = 10;
+        this.world = new Rapier.World(new Rapier.Vector3(0, -config.gravity, 0));
+        this.bonding = new PhysicsBonding();
         
-        // Create materials
-        const groundMaterial = new CANNON.Material('groundMaterial');
-        const vehicleMaterial = new CANNON.Material('vehicleMaterial');
+        // // Create materials
+        // const groundMaterial = new Rapier.Material('groundMaterial');
+        // const vehicleMaterial = new CANNON.Material('vehicleMaterial');
         
-        // Configure contact materials
-        const groundVehicleContactMaterial = new CANNON.ContactMaterial(
-            groundMaterial,
-            vehicleMaterial,
-            {
-                friction: 0.5,
-                restitution: 0.3
-            }
-        );
-        this.world.addContactMaterial(groundVehicleContactMaterial);
+        // // Configure contact materials
+        // const groundVehicleContactMaterial = new CANNON.ContactMaterial(
+        //     groundMaterial,
+        //     vehicleMaterial,
+        //     {
+        //         friction: 0.5,
+        //         restitution: 0.3
+        //     }
+        // );
+        // this.world.addContactMaterial(groundVehicleContactMaterial);
 
-        // Create ground
-        this.createGround(groundMaterial);
+        // // Create ground
+        // this.createGround(groundMaterial);
         
-        // Add collision event listeners
-        this.world.addEventListener('beginContact', (event: CollisionEvent) => {
-            this.handleCollision(event);
-        });
+        // // Add collision event listeners
+        // this.world.addEventListener('beginContact', (event: CollisionEvent) => {
+        //     this.handleCollision(event);
+        // });
     }
 
-    /**
-     * Initializes the physics engine and enables physics in the scene.
-     * Sets up gravity and collision detection.
-     */
-    private initializePhysics(): void {
-        // Enable physics in the scene
-        this.scene.gravity = new Vector3(0, -9.81, 0);
-        this.scene.collisionsEnabled = true;
-        
-        // Initialize CannonJS plugin
-        const plugin = new CannonJSPlugin(true, 10, CANNON);
-        this.scene.enablePhysics(this.scene.gravity, plugin);
-        
-        console.log('Physics initialized:', {
-            hasPhysics: this.scene.isPhysicsEnabled(),
-            gravity: this.scene.gravity,
-            collisionsEnabled: this.scene.collisionsEnabled
-        });
-    }
 
     /**
      * Creates the ground plane for the physics world.
      * Sets up both the physics body and visual mesh.
      * @param groundMaterial - The physics material for the ground
      */
-    private createGround(groundMaterial: CANNON.Material): void {
-        // Create ground plane
-        const groundShape = new CANNON.Plane();
-        this.groundBody = new CANNON.Body({
-            mass: 0,
-            material: groundMaterial,
-            collisionFilterGroup: CollisionGroups.Environment,
-            collisionFilterMask: CollisionGroups.Drones | CollisionGroups.Planes,
-            position: new CANNON.Vec3(0, 0, 0)
-        });
-        this.groundBody.addShape(groundShape);
-        this.groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
-        this.world.addBody(this.groundBody);
+    // private createGround(groundMaterial: CANNON.Material): void {
+    //     // Create ground plane
+    //     const groundShape = new CANNON.Plane();
+    //     this.groundBody = new CANNON.Body({
+    //         mass: 0,
+    //         material: groundMaterial,
+    //         collisionFilterGroup: CollisionGroups.Environment,
+    //         collisionFilterMask: CollisionGroups.Drones | CollisionGroups.Planes,
+    //         position: new CANNON.Vec3(0, 0, 0)
+    //     });
+    //     this.groundBody.addShape(groundShape);
+    //     this.groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
+    //     this.world.addBody(this.groundBody);
 
-        console.log('Ground body created:', {
-            collisionGroup: this.groundBody.collisionFilterGroup,
-            collisionMask: this.groundBody.collisionFilterMask,
-            position: this.groundBody.position,
-            quaternion: this.groundBody.quaternion,
-            shape: this.groundBody.shapes[0]?.type
-        });
+    //     console.log('Ground body created:', {
+    //         collisionGroup: this.groundBody.collisionFilterGroup,
+    //         collisionMask: this.groundBody.collisionFilterMask,
+    //         position: this.groundBody.position,
+    //         quaternion: this.groundBody.quaternion,
+    //         shape: this.groundBody.shapes[0]?.type
+    //     });
 
-        // Create ground mesh if we have a scene
-        if (this.scene) {
-            this.groundMesh = MeshBuilder.CreateGround("ground", {
-                width: 200,
-                height: 200,
-                subdivisions: 1
-            }, this.scene);
+    //     // Create ground mesh if we have a scene
+    //     if (this.scene) {
+    //         this.groundMesh = MeshBuilder.CreateGround("ground", {
+    //             width: 200,
+    //             height: 200,
+    //             subdivisions: 1
+    //         }, this.scene);
 
-            const groundMaterial = new StandardMaterial("groundMaterial", this.scene);
-            groundMaterial.diffuseColor = new Color3(0.3, 0.3, 0.3); // Grey color
-            groundMaterial.specularColor = new Color3(0.1, 0.1, 0.1);
-            groundMaterial.specularPower = 64;
-            groundMaterial.ambientColor = new Color3(0.3, 0.3, 0.3); // Add ambient color
+    //         const groundMaterial = new StandardMaterial("groundMaterial", this.scene);
+    //         groundMaterial.diffuseColor = new Color3(0.3, 0.3, 0.3); // Grey color
+    //         groundMaterial.specularColor = new Color3(0.1, 0.1, 0.1);
+    //         groundMaterial.specularPower = 64;
+    //         groundMaterial.ambientColor = new Color3(0.3, 0.3, 0.3); // Add ambient color
             
-            this.groundMesh.material = groundMaterial;
-            this.groundMesh.position.y = 0;
-            this.groundMesh.checkCollisions = true;
-            this.groundMesh.receiveShadows = true;
+    //         this.groundMesh.material = groundMaterial;
+    //         this.groundMesh.position.y = 0;
+    //         this.groundMesh.checkCollisions = true;
+    //         this.groundMesh.receiveShadows = true;
 
-            // Add collision shape to mesh
-            this.groundMesh.physicsImpostor = new PhysicsImpostor(
-                this.groundMesh,
-                PhysicsImpostor.BoxImpostor,
-                { 
-                    mass: 0, 
-                    restitution: 0.3, 
-                    friction: 0.5
-                },
-                this.scene
-            );
+    //         // Add collision shape to mesh
+    //         this.groundMesh.physicsImpostor = new PhysicsImpostor(
+    //             this.groundMesh,
+    //             PhysicsImpostor.BoxImpostor,
+    //             { 
+    //                 mass: 0, 
+    //                 restitution: 0.3, 
+    //                 friction: 0.5
+    //             },
+    //             this.scene
+    //         );
 
-            console.log('Ground mesh created:', {
-                size: { width: 200, height: 200 },
-                position: this.groundMesh.position,
-                hasMaterial: !!this.groundMesh.material,
-                hasPhysicsImpostor: !!this.groundMesh.physicsImpostor,
-                physicsImpostorType: this.groundMesh.physicsImpostor?.type
-            });
-        }
-    }
+    //         console.log('Ground mesh created:', {
+    //             size: { width: 200, height: 200 },
+    //             position: this.groundMesh.position,
+    //             hasMaterial: !!this.groundMesh.material,
+    //             hasPhysicsImpostor: !!this.groundMesh.physicsImpostor,
+    //             physicsImpostorType: this.groundMesh.physicsImpostor?.type
+    //         });
+    //     }
+    // }
 
     /**
      * Handles collision events between physics bodies.
      * Processes ground collisions and vehicle-vehicle collisions.
      * @param event - The collision event data
      */
-    private handleCollision(event: CollisionEvent): void {
-        const bodyA = event.bodyA;
-        const bodyB = event.bodyB;
+    // private handleCollision(event: CollisionEvent): void {
+    //     const bodyA = event.bodyA;
+    //     const bodyB = event.bodyB;
         
-        // Check if either body is the ground
-        const isGroundCollision = bodyA === this.groundBody || bodyB === this.groundBody;
-        const vehicleBody = isGroundCollision ? 
-            (bodyA === this.groundBody ? bodyB : bodyA) : 
-            null;
+    //     // Check if either body is the ground
+    //     const isGroundCollision = bodyA === this.groundBody || bodyB === this.groundBody;
+    //     const vehicleBody = isGroundCollision ? 
+    //         (bodyA === this.groundBody ? bodyB : bodyA) : 
+    //         null;
 
-        if (isGroundCollision && vehicleBody) {
-            const impactVelocity = event.contact.getImpactVelocityAlongNormal();
-            console.log('Ground collision:', {
-                vehicleId: vehicleBody.id,
-                impactVelocity,
-                vehiclePosition: vehicleBody.position,
-                groundPosition: this.groundBody.position,
-                vehicleVelocity: vehicleBody.velocity,
-                contactPoint: event.contact.ri
-            });
+    //     if (isGroundCollision && vehicleBody) {
+    //         const impactVelocity = event.contact.getImpactVelocityAlongNormal();
+    //         console.log('Ground collision:', {
+    //             vehicleId: vehicleBody.id,
+    //             impactVelocity,
+    //             vehiclePosition: vehicleBody.position,
+    //             groundPosition: this.groundBody.position,
+    //             vehicleVelocity: vehicleBody.velocity,
+    //             contactPoint: event.contact.ri
+    //         });
             
-            // Apply bounce and friction
-            if (Math.abs(impactVelocity) > 5) {
-                // Find the vehicle ID for this body
-                for (const [id, body] of this.bodies.entries()) {
-                    if (body === vehicleBody) {
-                        const callback = this.collisionCallbacks.get(id);
-                        if (callback) {
-                            callback(event);
-                        }
-                        break;
-                    }
-                }
-            }
-        } else {
-            // Handle vehicle-vehicle collisions
-            for (const [id, body] of this.bodies.entries()) {
-                if (body === bodyA || body === bodyB) {
-                    const callback = this.collisionCallbacks.get(id);
-                    if (callback) {
-                        callback(event);
-                    }
-                }
-            }
-        }
-    }
+    //         // Apply bounce and friction
+    //         if (Math.abs(impactVelocity) > 5) {
+    //             // Find the vehicle ID for this body
+    //             for (const [id, body] of this.bodies.entries()) {
+    //                 if (body === vehicleBody) {
+    //                     const callback = this.collisionCallbacks.get(id);
+    //                     if (callback) {
+    //                         callback(event);
+    //                     }
+    //                     break;
+    //                 }
+    //             }
+    //         }
+    //     } else {
+    //         // Handle vehicle-vehicle collisions
+    //         for (const [id, body] of this.bodies.entries()) {
+    //             if (body === bodyA || body === bodyB) {
+    //                 const callback = this.collisionCallbacks.get(id);
+    //                 if (callback) {
+    //                     callback(event);
+    //                 }
+    //             }
+    //         }
+    //     }
+    // }
 
-    /**
-     * Registers a callback function for collision events for a specific body.
-     * @param id - The ID of the body to register the callback for
-     * @param callback - The function to call when a collision occurs
-     */
-    public registerCollisionCallback(id: string, callback: (event: CollisionEvent) => void): void {
-        this.collisionCallbacks.set(id, callback);
-    }
+    // /**
+    //  * Registers a callback function for collision events for a specific body.
+    //  * @param id - The ID of the body to register the callback for
+    //  * @param callback - The function to call when a collision occurs
+    //  */
+    // public registerCollisionCallback(id: string, callback: (event: CollisionEvent) => void): void {
+    //     this.collisionCallbacks.set(id, callback);
+    // }
 
-    /**
-     * Removes a collision callback for a specific body.
-     * @param id - The ID of the body to remove the callback for
-     */
-    public unregisterCollisionCallback(id: string): void {
-        this.collisionCallbacks.delete(id);
-    }
+    // /**
+    //  * Removes a collision callback for a specific body.
+    //  * @param id - The ID of the body to remove the callback for
+    //  */
+    // public unregisterCollisionCallback(id: string): void {
+    //     this.collisionCallbacks.delete(id);
+    // }
 
     /**
      * Gets the underlying CANNON.js physics world instance.
      * @returns The CANNON.js world instance
      */
-    public getWorld(): CANNON.World {
+    public getWorld(): Rapier.World {
         return this.world;
     }
 
@@ -231,7 +212,18 @@ export class PhysicsWorld {
      * @param deltaTime - The time step in seconds
      */
     public update(deltaTime: number): void {
-        this.world.step(deltaTime);
+        this.world.timestep = deltaTime;
+        this.world.step();
+        this.bonding.synchronize();
+        this.collision_events = [];
+		this.contact_force_events = [];
+        this.#queue.drainCollisionEvents(
+			(a, b, started) => this.collision_events.push({a, b, started})
+		);
+
+		this.#queue.drainContactForceEvents(
+			event => this.contact_force_events.push(event)
+		);
         this.currentTick++;
     }
 

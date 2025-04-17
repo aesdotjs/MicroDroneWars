@@ -20,6 +20,7 @@
     "@colyseus/tools": "^0.16.0",
     "@colyseus/uwebsockets-transport": "^0.16.0",
     "@colyseus/ws-transport": "^0.16.4",
+    "@dimforge/rapier3d-deterministic-compat": "^0.15.1",
     "babylonjs": "^8.2.0",
     "babylonjs-loaders": "^8.2.0",
     "cannon": "^0.6.2",
