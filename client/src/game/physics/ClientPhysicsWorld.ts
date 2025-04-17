@@ -84,7 +84,7 @@ export class ClientPhysicsWorld {
      * @param initialState - Optional initial physics state
      * @returns The created physics controller
      */
-    createVehicle(id: string, type: 'drone' | 'plane', initialState?: PhysicsState): BasePhysicsController {
+    createVehicle(id: string, type: 'drone' | 'plane', initialState: PhysicsState): BasePhysicsController {
         console.log('Creating vehicle:', { id, initialState});
         let controller: BasePhysicsController;
 
@@ -94,17 +94,8 @@ export class ClientPhysicsWorld {
             controller = new PlanePhysicsController(this.physicsWorld.getWorld(), PlaneSettings);
         }
 
-        // Use provided initial state or create default one
-        const state = initialState || {
-            position: new Vector3(0, 10, 0), // This will be overridden by server state
-            quaternion: new Quaternion(0, 0, 0, 1),
-            linearVelocity: new Vector3(0, 0, 0),
-            angularVelocity: new Vector3(0, 0, 0),
-            tick: this.lastProcessedTick
-        };
-
         // Set initial state
-        controller.setState(state);
+        controller.setState(initialState);
 
         this.controllers.set(id, controller);
         this.stateBuffers.set(id, []);
@@ -230,7 +221,7 @@ export class ClientPhysicsWorld {
      * @param id - ID of the vehicle
      * @param state - The physics state to add
      */
-    public addState(id: string, state: PhysicsState): void {
+    public addVehicleState(id: string, state: PhysicsState): void {
         const buffers = this.stateBuffers.get(id);
         if (buffers) {
             // Calculate jitter
@@ -350,6 +341,8 @@ export class ClientPhysicsWorld {
                         quaternion: Quaternion.Slerp(currentState.quaternion, state.quaternion, rotationFactor),
                         linearVelocity: Vector3.Lerp(currentState.linearVelocity, state.linearVelocity, velocityFactor),
                         angularVelocity: Vector3.Lerp(currentState.angularVelocity, state.angularVelocity, velocityFactor),
+                        tick: state.tick,
+                        timestamp: state.timestamp
                     };
                     
                     // Log the correction being applied
@@ -429,7 +422,9 @@ export class ClientPhysicsWorld {
             ),
             quaternion: Quaternion.Slerp(state1.quaternion, state2.quaternion, t),
             linearVelocity: Vector3.Lerp(state1.linearVelocity, state2.linearVelocity, t),
-            angularVelocity: Vector3.Lerp(state1.angularVelocity, state2.angularVelocity, t)
+            angularVelocity: Vector3.Lerp(state1.angularVelocity, state2.angularVelocity, t),
+            tick: state2.tick,
+            timestamp: state2.timestamp
         };
     }
 

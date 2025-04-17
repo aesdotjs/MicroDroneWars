@@ -103,9 +103,7 @@ export class DronePhysicsController extends BasePhysicsController {
      * @param deltaTime - Time elapsed since last update in seconds
      * @param input - Physics input from the player
      */
-    public update(deltaTime: number, input: PhysicsInput): void {
-        this.currentTick++;
-        
+    public update(deltaTime: number, input: PhysicsInput): void {        
         // Get orientation vectors first
         const { right, up, forward } = this.getOrientationVectors();
         

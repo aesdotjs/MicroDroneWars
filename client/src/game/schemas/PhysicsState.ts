@@ -39,4 +39,8 @@ export class PhysicsState extends Schema {
     @type("number") public angularVelocityY: number = 0;
     /** Z-component of the vehicle's angular velocity */
     @type("number") public angularVelocityZ: number = 0;
+    /** Current tick */
+    @type("number") public tick: number = 0;
+    /** Timestamp of the state in milliseconds */
+    @type("number") public timestamp: number = 0;
 }

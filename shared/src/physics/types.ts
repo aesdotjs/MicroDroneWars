@@ -13,6 +13,10 @@ export interface PhysicsState {
     linearVelocity: Vector3;
     /** Current angular velocity */
     angularVelocity: Vector3;
+    /** Current tick */
+    tick: number;
+    /** Timestamp of the state in milliseconds */
+    timestamp: number;
 }
 
 /**

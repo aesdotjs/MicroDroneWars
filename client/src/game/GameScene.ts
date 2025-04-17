@@ -7,7 +7,10 @@ import { ClientPhysicsWorld } from './physics/ClientPhysicsWorld';
 import * as CANNON from 'cannon';
 import { CollisionManager } from './CollisionManager';
 import { useGameDebug } from '@/composables/useGameDebug';
-
+import { Vehicle as VehicleSchema } from './schemas/Vehicle';
+import { PhysicsState } from '@shared/physics/types';
+import { Drone } from './vehicles/Drone';
+import { Plane } from './vehicles/Plane';
 const { log } = useGameDebug();
 window.CANNON = CANNON;
 
@@ -180,52 +183,104 @@ export class GameScene {
      * @param sessionId - The session ID of the vehicle's owner
      * @param vehicle - The vehicle to add
      */
-    public addVehicle(sessionId: string, vehicle: Vehicle): void {
+    public createVehicle(sessionId: string, vehicle: VehicleSchema): void {
         console.log('Adding vehicle:', sessionId);
-        this.vehicles.set(sessionId, vehicle);
-        
-        // Create initial state from vehicle mesh
-        const initialState = {
-            position: new Vector3(0, 10, 0), // This will be overridden by server state
-            quaternion: new Quaternion(0, 0, 0, 1),
-            linearVelocity: new Vector3(0, 0, 0),
-            angularVelocity: new Vector3(0, 0, 0),
-            timestamp: performance.now(),
-            tick: this.physicsWorld.getCurrentTick()
-        };
-        
-        // Create physics controller for the vehicle
-        const controller = this.physicsWorld.createVehicle(
-            vehicle.id,
-            vehicle.type,
-            initialState
-        );
+        // Validate vehicle type
+        if (!vehicle.vehicleType) {
+            console.error('Invalid vehicle type:', vehicle);
+            return;
+        }
 
-        // Connect physics controller to vehicle
-        vehicle.setPhysicsController(controller);
+        // Create vehicle in the game scene
+        const isLocalPlayer = sessionId === this.game.getRoom()?.sessionId;
+        let gameVehicle: Drone | Plane | undefined;
+        try {
+            if (vehicle.vehicleType === 'drone') {
+                console.log('Creating drone vehicle...');
+                gameVehicle = new Drone(
+                    sessionId,
+                    this.scene, 
+                    'drone', 
+                    vehicle, 
+                    isLocalPlayer ? this.inputManager : undefined,
+                    isLocalPlayer
+                );
+            } else if (vehicle.vehicleType === 'plane') {
+                console.log('Creating plane vehicle...');
+                gameVehicle = new Plane(
+                    sessionId,
+                    this.scene, 
+                    'plane', 
+                    vehicle, 
+                    isLocalPlayer ? this.inputManager : undefined,
+                    isLocalPlayer
+                );
+            } else {
+                console.error('Unknown vehicle type:', vehicle.vehicleType);
+                return;
+            }
+            
+            if (gameVehicle) {
+                console.log('Vehicle created:', {
+                    id: gameVehicle.id,
+                    type: gameVehicle.type,
+                    team: gameVehicle.team,
+                    isLocalPlayer,
+                    hasMesh: !!gameVehicle.mesh,
+                    meshPosition: gameVehicle.mesh?.position
+                });
+
+                // Set initial position and rotation from server state
+                const physicsState: PhysicsState = {
+                    position: new Vector3(vehicle.positionX, vehicle.positionY, vehicle.positionZ),
+                    quaternion: new Quaternion(vehicle.quaternionX, vehicle.quaternionY, vehicle.quaternionZ, vehicle.quaternionW),
+                    linearVelocity: new Vector3(vehicle.linearVelocityX, vehicle.linearVelocityY, vehicle.linearVelocityZ),
+                    angularVelocity: new Vector3(vehicle.angularVelocityX, vehicle.angularVelocityY, vehicle.angularVelocityZ),
+                    tick: vehicle.tick,
+                    timestamp: vehicle.timestamp
+                };
+                gameVehicle.updateState(physicsState);
+                this.vehicles.set(sessionId, gameVehicle);
         
-        // Add vehicle to shadow generator
-        if (this.shadowGenerator && vehicle.mesh) {
-            this.shadowGenerator.addShadowCaster(vehicle.mesh);
-            // Also add child meshes (propellers, etc.) to shadow generator
-            vehicle.mesh.getChildMeshes().forEach(mesh => {
-                this.shadowGenerator.addShadowCaster(mesh);
-            });
+                
+                // Create physics controller for the vehicle
+                const controller = this.physicsWorld.createVehicle(
+                    sessionId,
+                    gameVehicle.type,
+                    physicsState
+                );
+        
+                // Connect physics controller to vehicle
+                gameVehicle.setPhysicsController(controller);
+                
+                // Add vehicle to shadow generator
+                if (this.shadowGenerator && gameVehicle.mesh) {
+                    this.shadowGenerator.addShadowCaster(gameVehicle.mesh);
+                    // Also add child meshes (propellers, etc.) to shadow generator
+                    gameVehicle.mesh.getChildMeshes().forEach(mesh => {
+                        this.shadowGenerator.addShadowCaster(mesh);
+                    });
+                }
+                
+                // Set up local player
+                if (isLocalPlayer) {
+                    this.setLocalPlayer(gameVehicle);
+                }
+                
+                console.log('Vehicle added successfully:', {
+                    sessionId,
+                    type: gameVehicle.type,
+                    team: gameVehicle.team,
+                    isLocalPlayer: isLocalPlayer,
+                    vehicleCount: this.vehicles.size,
+                    hasPhysicsController: !!controller
+                });
+                
+            }
+            
+        } catch (error) {
+            console.error('Error creating vehicle:', error);
         }
-        
-        // Set up local player
-        if (vehicle.isLocalPlayer) {
-            this.setLocalPlayer(vehicle);
-        }
-        
-        console.log('Vehicle added successfully:', {
-            sessionId,
-            type: vehicle.type,
-            team: vehicle.team,
-            isLocalPlayer: vehicle.isLocalPlayer,
-            vehicleCount: this.vehicles.size,
-            hasPhysicsController: !!controller
-        });
     }
 
     /**

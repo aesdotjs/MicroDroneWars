@@ -33,16 +33,15 @@ export class Plane extends Vehicle {
 
     /**
      * Creates a new Plane instance.
+     * @param id - The unique identifier for the plane
      * @param scene - The Babylon.js scene to add the plane to
      * @param type - The type of vehicle ('drone' or 'plane')
      * @param vehicle - The vehicle schema containing initial state
-     * @param canvas - The HTML canvas element
      * @param inputManager - Optional input manager for controlling the plane
      * @param isLocalPlayer - Whether this plane is controlled by the local player
      */
-    constructor(scene: Scene, type: 'drone' | 'plane', vehicle: VehicleSchema, canvas: HTMLCanvasElement, inputManager?: InputManager, isLocalPlayer: boolean = false) {
-        super(scene, type, vehicle, canvas, inputManager, isLocalPlayer);
-        this.id = `plane_${Math.random().toString(36).substr(2, 9)}`;
+    constructor(id: string, scene: Scene, type: 'drone' | 'plane', vehicle: VehicleSchema, inputManager?: InputManager, isLocalPlayer: boolean = false) {
+        super(id, scene, type, vehicle, inputManager, isLocalPlayer);
         this.maxHealth = 200;
         this.health = 200;
         

@@ -40,7 +40,6 @@ export class PlanePhysicsController extends BasePhysicsController {
      * @param input - Physics input from the player
      */
     public update(deltaTime: number, input: PhysicsInput): void {
-        this.currentTick++;
         this.updateEnginePower(input);
         const { right, up, forward } = this.getOrientationVectors();
         

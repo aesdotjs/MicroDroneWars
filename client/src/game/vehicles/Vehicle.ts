@@ -22,8 +22,6 @@ export abstract class Vehicle {
     public isLocalPlayer: boolean = false;
     /** The Babylon.js scene containing the vehicle */
     protected scene: Scene;
-    /** The HTML canvas element for rendering */
-    protected canvas: HTMLCanvasElement;
     /** Optional input manager for controlling the vehicle */
     protected inputManager?: InputManager;
     /** Physics controller for handling vehicle physics */
@@ -55,21 +53,21 @@ export abstract class Vehicle {
 
     /**
      * Creates a new Vehicle instance.
+     * @param id - The unique identifier for the vehicle
      * @param scene - The Babylon.js scene to add the vehicle to
      * @param type - The type of vehicle ('drone' or 'plane')
      * @param vehicle - The vehicle schema containing initial state
-     * @param canvas - The HTML canvas element
      * @param inputManager - Optional input manager for controlling the vehicle
      * @param isLocalPlayer - Whether this vehicle is controlled by the local player
      */
-    constructor(scene: Scene, type: 'drone' | 'plane', vehicle: VehicleSchema, canvas: HTMLCanvasElement, inputManager?: InputManager, isLocalPlayer: boolean = false) {
+    constructor(id: string, scene: Scene, type: 'drone' | 'plane', vehicle: VehicleSchema, inputManager?: InputManager, isLocalPlayer: boolean = false) {
+        this.id = id;
         this.scene = scene;
         this.type = type;
         this.team = vehicle.team;
-        this.canvas = canvas;
         this.inputManager = inputManager;
         this.isLocalPlayer = isLocalPlayer;
-        this.id = `${type}_${Math.random().toString(36).substr(2, 9)}`;
+        this.id = id;
 
         // Initialize collision sphere
         this.collisionSphere = {
@@ -84,15 +82,6 @@ export abstract class Vehicle {
      */
     public setPhysicsController(controller: BasePhysicsController): void {
         this.physicsController = controller;
-        // Set initial state from mesh if it exists
-        if (this.mesh) {
-            this.physicsController.setState({
-                position: this.mesh.position,
-                quaternion: this.mesh.rotationQuaternion || new Quaternion(),
-                linearVelocity: new Vector3(0, 0, 0),
-                angularVelocity: new Vector3(0, 0, 0),
-            });
-        }
     }
 
     /**

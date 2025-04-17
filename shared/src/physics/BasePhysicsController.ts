@@ -35,7 +35,10 @@ export abstract class BasePhysicsController {
     /** Last calculated drag value */
     protected lastDrag: number = 0;
     /** Current physics simulation tick */
-    protected currentTick: number = 0;
+    protected tick: number = 0;
+    /** Current physics simulation timestamp */
+    protected timestamp: number = 0;
+
 
     /**
      * Creates a new BasePhysicsController instance.
@@ -128,6 +131,8 @@ export abstract class BasePhysicsController {
                 this.body.angularVelocity.y,
                 this.body.angularVelocity.z
             ),
+            tick: this.tick,
+            timestamp: this.timestamp
         };
     }
 
@@ -161,6 +166,8 @@ export abstract class BasePhysicsController {
             state.angularVelocity.y,
             state.angularVelocity.z
         );
+        this.tick = state.tick;
+        this.timestamp = state.timestamp;
     }
 
     /**

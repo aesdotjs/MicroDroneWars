@@ -6,8 +6,6 @@ import * as Colyseus from 'colyseus.js';
 import { Engine, Vector3, Quaternion } from 'babylonjs';
 import { GameScene } from './GameScene';
 import { PhysicsInput } from '@shared/physics/types';
-import { Drone } from './vehicles/Drone';
-import { Plane } from './vehicles/Plane';
 import { Flag } from './Flag';
 import { useGameDebug } from '@/composables/useGameDebug';
 
@@ -143,80 +141,20 @@ export class Game {
         $(this.room.state).vehicles.onAdd((vehicle: VehicleSchema, sessionId: string) => {
             console.log('Vehicle added to room:', { vehicle,sessionId, vehicleType: vehicle.vehicleType, team: vehicle.team });
             
-            // Validate vehicle type
-            if (!vehicle.vehicleType) {
-                console.error('Invalid vehicle type:', vehicle);
-                return;
-            }
-
-            // Create vehicle in the game scene
-            const isLocalPlayer = sessionId === this.room?.sessionId;
-            let gameVehicle: Drone | Plane | undefined;
-            
-            try {
-                if (vehicle.vehicleType === 'drone') {
-                    console.log('Creating drone vehicle...');
-                    gameVehicle = new Drone(
-                        this.gameScene.getScene(), 
-                        'drone', 
-                        vehicle, 
-                        this.canvas, 
-                        isLocalPlayer ? this.gameScene.getInputManager() : undefined,
-                        isLocalPlayer
-                    );
-                } else if (vehicle.vehicleType === 'plane') {
-                    console.log('Creating plane vehicle...');
-                    gameVehicle = new Plane(
-                        this.gameScene.getScene(), 
-                        'plane', 
-                        vehicle, 
-                        this.canvas, 
-                        isLocalPlayer ? this.gameScene.getInputManager() : undefined,
-                        isLocalPlayer
-                    );
-                } else {
-                    console.error('Unknown vehicle type:', vehicle.vehicleType);
-                    return;
-                }
-                
-                if (gameVehicle) {
-                    console.log('Vehicle created:', {
-                        id: gameVehicle.id,
-                        type: gameVehicle.type,
-                        team: gameVehicle.team,
-                        isLocalPlayer,
-                        hasMesh: !!gameVehicle.mesh,
-                        meshPosition: gameVehicle.mesh?.position
-                    });
-
-                    this.gameScene.addVehicle(sessionId, gameVehicle);
-
-                    // Set initial position and rotation from server state
-                    const physicsState: PhysicsState = {
-                        position: new Vector3(vehicle.positionX, vehicle.positionY, vehicle.positionZ),
-                        quaternion: new Quaternion(vehicle.quaternionX, vehicle.quaternionY, vehicle.quaternionZ, vehicle.quaternionW),
-                        linearVelocity: new Vector3(vehicle.linearVelocityX, vehicle.linearVelocityY, vehicle.linearVelocityZ),
-                        angularVelocity: new Vector3(vehicle.angularVelocityX, vehicle.angularVelocityY, vehicle.angularVelocityZ),
-                    };
-                    gameVehicle.updateState(physicsState);
-
-                    // Listen for vehicle updates
-                    $(vehicle).onChange(() => {
-                        if (gameVehicle) {
-                            const updatedState: PhysicsState = {
-                                position: new Vector3(vehicle.positionX, vehicle.positionY, vehicle.positionZ),
-                                quaternion: new Quaternion(vehicle.quaternionX, vehicle.quaternionY, vehicle.quaternionZ, vehicle.quaternionW),
-                                linearVelocity: new Vector3(vehicle.linearVelocityX, vehicle.linearVelocityY, vehicle.linearVelocityZ),
-                                angularVelocity: new Vector3(vehicle.angularVelocityX, vehicle.angularVelocityY, vehicle.angularVelocityZ),
-                            };
-                            // Use vehicle.id instead of sessionId for state management
-                            this.gameScene.getPhysicsWorld().addState(gameVehicle.id, updatedState);
-                        }
-                    });
-                }
-            } catch (error) {
-                console.error('Error creating vehicle:', error);
-            }
+            this.gameScene.createVehicle(sessionId, vehicle);
+            // Listen for vehicle updates
+            $(vehicle).onChange(() => {
+                const updatedState: PhysicsState = {
+                    position: new Vector3(vehicle.positionX, vehicle.positionY, vehicle.positionZ),
+                    quaternion: new Quaternion(vehicle.quaternionX, vehicle.quaternionY, vehicle.quaternionZ, vehicle.quaternionW),
+                    linearVelocity: new Vector3(vehicle.linearVelocityX, vehicle.linearVelocityY, vehicle.linearVelocityZ),
+                    angularVelocity: new Vector3(vehicle.angularVelocityX, vehicle.angularVelocityY, vehicle.angularVelocityZ),
+                    tick: vehicle.tick,
+                    timestamp: vehicle.timestamp
+                };
+                // Add vehicle state to the physics world
+                this.gameScene.getPhysicsWorld().addVehicleState(sessionId, updatedState);
+            });
         });
 
         $(this.room.state).vehicles.onRemove((_vehicle: VehicleSchema, sessionId: string) => {
@@ -269,11 +207,27 @@ export class Game {
     }
 
     /**
+     * Gets the current game room.
+     * @returns The current game room
+     */
+    public getRoom(): Colyseus.Room<State> | null {
+        return this.room;
+    }
+
+    /**
      * Gets the game scene.
      * @returns The game scene
      */
     public getGameScene(): GameScene {
         return this.gameScene;
+    }
+
+    /**
+     * Gets the canvas element.
+     * @returns The canvas element
+     */
+    public getCanvas(): HTMLCanvasElement {
+        return this.canvas;
     }
     /**
      * Cleans up resources.

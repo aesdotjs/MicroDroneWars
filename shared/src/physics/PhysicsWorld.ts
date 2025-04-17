@@ -244,28 +244,11 @@ export class PhysicsWorld {
     }
 
     /**
-     * Gets the current physics state of a body.
-     * @param id - The ID of the body to get the state for
-     * @returns The current physics state or null if the body doesn't exist
-     */
-    public getState(id: string): PhysicsState | null {
-        const body = this.bodies.get(id);
-        if (!body) return null;
-
-        return {
-            position: new Vector3(body.position.x, body.position.y, body.position.z),
-            quaternion: new Quaternion(body.quaternion.x, body.quaternion.y, body.quaternion.z, body.quaternion.w),
-            linearVelocity: new Vector3(body.velocity.x, body.velocity.y, body.velocity.z),
-            angularVelocity: new Vector3(body.angularVelocity.x, body.angularVelocity.y, body.angularVelocity.z),
-        };
-    }
-
-    /**
-     * Sets the physics state of a body.
+     * Sets the physics state of a vehicle.
      * @param id - The ID of the body to set the state for
      * @param state - The new physics state to apply
      */
-    public setState(id: string, state: PhysicsState): void {
+    public setVehicleState(id: string, state: PhysicsState): void {
         const body = this.bodies.get(id);
         if (!body) return;
 
@@ -388,6 +371,8 @@ export class PhysicsWorld {
             quaternion: new Quaternion(body.quaternion.x, body.quaternion.y, body.quaternion.z, body.quaternion.w),
             linearVelocity: new Vector3(body.velocity.x, body.velocity.y, body.velocity.z),
             angularVelocity: new Vector3(body.angularVelocity.x, body.angularVelocity.y, body.angularVelocity.z),
+            tick: this.currentTick,
+            timestamp: performance.now()
         };
     }
 
