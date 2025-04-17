@@ -41,7 +41,7 @@ export abstract class Vehicle {
         rollLeft: false,
         rollRight: false,
         mouseDelta: { x: 0, y: 0 },
-        timestamp: performance.now(),
+        timestamp: Date.now(),
         tick: 0
     };
     /** Collision detection sphere for the vehicle */

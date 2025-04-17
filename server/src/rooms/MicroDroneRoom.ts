@@ -10,6 +10,10 @@ import { VehiclePhysicsConfig, PhysicsInput } from "@shared/physics/types";
  */
 export class MicroDroneRoom extends Room<State> {
     private physicsWorld!: ServerPhysicsWorld;
+    private readonly TICK_RATE = 1/60;
+    private readonly MAX_LATENCY = 1000; // 1 second max latency
+    private readonly MAX_INPUTS_PER_TICK = 3;
+    private clientLatencies: Map<string, number> = new Map();
 
     /**
      * Initializes the game room when it's created.
@@ -21,7 +25,8 @@ export class MicroDroneRoom extends Room<State> {
         console.log("MicroDrone room created");
 
         // Set room options for faster connection
-        this.patchRate = 1000 / 60; // 60 updates per second
+        this.setPatchRate(1000 * this.TICK_RATE); // 60 updates per second
+        this.setSimulationInterval((deltaTime) => this.update(deltaTime));
         this.autoDispose = false; // Keep room alive even when empty
         this.maxClients = 20; // Set a reasonable max clients
 
@@ -42,16 +47,34 @@ export class MicroDroneRoom extends Room<State> {
         this.state.flags.set("teamB", teamBFlag);
 
         // Set up message handlers
-        this.onMessage("movement", (client, data: PhysicsInput) => {
+        this.onMessage("movement", (client, input: PhysicsInput) => {
             const vehicle = this.state.vehicles.get(client.sessionId);
             if (vehicle) {
-                vehicle.lastInput = data;
+                // Validate input timestamp - convert to milliseconds if needed
+                const now = Date.now();
+                const inputTime = typeof input.timestamp === 'number' ? input.timestamp : now;
+                const latency = this.clientLatencies.get(client.sessionId) || 0;
+                const maxAge = (this.MAX_LATENCY + latency);
+                
+                // Only drop inputs that are truly old
+                if (now - inputTime > maxAge) {
+                    console.log(`Dropping old input from ${client.sessionId}, age: ${now - inputTime}ms`);
+                    return;
+                }
+                // Store input for processing
+                this.physicsWorld.addInput(client.sessionId, input);
             }
         });
 
-        // Add ping/pong handlers
+        // Add ping/pong handlers for latency measurement
         this.onMessage("ping", (client, timestamp) => {
-            client.send("pong", timestamp);
+            const latency = (Date.now() - timestamp) / 2;
+            this.clientLatencies.set(client.sessionId, latency);
+            client.send("pong", {
+                clientTime: timestamp,
+                serverTime: Date.now(),
+                latency
+            });
         });
 
         // Handle player leaving
@@ -59,14 +82,9 @@ export class MicroDroneRoom extends Room<State> {
             console.log(`Player ${client.sessionId} left the game`);
             this.onLeave(client);
         });
+
+        // Initialize server tick
         this.state.serverTick = this.physicsWorld.getCurrentTick();
-        // Set up fixed tick rate simulation
-        this.setSimulationInterval((deltaTime) => {
-            // Convert deltaTime to seconds and update physics
-            this.physicsWorld.update(deltaTime / 1000, this.state);
-            // Update server tick in state
-            this.state.serverTick = this.physicsWorld.getCurrentTick();
-        });
     }
 
     /**
@@ -145,6 +163,7 @@ export class MicroDroneRoom extends Room<State> {
         this.physicsWorld.removeVehicle(client.sessionId);
 
         this.state.vehicles.delete(client.sessionId);
+        this.clientLatencies.delete(client.sessionId);
         console.log(`Vehicle left: ${client.sessionId}`);
     }
 
@@ -155,5 +174,18 @@ export class MicroDroneRoom extends Room<State> {
     onDispose() {
         // Clean up physics world
         this.physicsWorld.dispose();
+    }
+
+    private update(deltaTime: number) {
+        // Convert deltaTime to seconds and update physics
+        this.physicsWorld.update(deltaTime / 1000, this.state);
+        
+        // Update server tick in state
+        this.state.serverTick = this.physicsWorld.getCurrentTick();
+        
+        // Update last processed input ticks for each vehicle
+        this.state.vehicles.forEach((vehicle, id) => {
+            vehicle.lastProcessedInputTick = this.physicsWorld.getLastProcessedInputTick(id);
+        });
     }
 }

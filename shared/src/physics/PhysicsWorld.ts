@@ -372,7 +372,7 @@ export class PhysicsWorld {
             linearVelocity: new Vector3(body.velocity.x, body.velocity.y, body.velocity.z),
             angularVelocity: new Vector3(body.angularVelocity.x, body.angularVelocity.y, body.angularVelocity.z),
             tick: this.currentTick,
-            timestamp: performance.now()
+            timestamp: Date.now(),
         };
     }
 

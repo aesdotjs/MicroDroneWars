@@ -34,7 +34,7 @@ export class GameScene {
     /** The local player's vehicle */
     private localPlayer: Vehicle | null = null;
     /** Timestamp of the last update */
-    private lastTime: number = performance.now();
+    private lastTime: number = Date.now();
     /** Input manager for handling user input */
     private inputManager!: InputManager;
     /** Physics world for simulation */
@@ -349,7 +349,7 @@ export class GameScene {
     private update(): void {
         
         log('FPS', Math.round(this.engine.getFps()));
-        const currentTime = performance.now();
+        const currentTime = Date.now();
         const deltaTime = (currentTime - this.lastTime);
         this.lastTime = currentTime;
         

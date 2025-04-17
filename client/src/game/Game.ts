@@ -1,11 +1,10 @@
 import { State } from './schemas/State';
 import { Flag as FlagSchema } from './schemas/Flag';
 import { Vehicle as VehicleSchema } from './schemas/Vehicle';
-import { PhysicsState } from '@shared/physics/types';
+import { PhysicsState, PhysicsInput } from '@shared/physics/types';
 import * as Colyseus from 'colyseus.js';
 import { Engine, Vector3, Quaternion } from 'babylonjs';
 import { GameScene } from './GameScene';
-import { PhysicsInput } from '@shared/physics/types';
 import { Flag } from './Flag';
 import { useGameDebug } from '@/composables/useGameDebug';
 
@@ -32,6 +31,16 @@ export class Game {
     private vehicleType!: 'drone' | 'plane';
     /** The interval for sending ping messages */
     private pingInterval: NodeJS.Timeout | null = null;
+    private networkStats = {
+        latency: 0,
+        jitter: 0,
+        quality: 1.0
+    };
+    private readonly PING_INTERVAL = 1000;
+    private readonly MIN_LATENCY = 5;
+    private readonly LATENCY_SMOOTHING = 0.1;
+    private readonly QUALITY_SAMPLES = 20;
+    private qualitySamples: number[] = [];
 
     /**
      * Creates a new Game instance.
@@ -105,41 +114,61 @@ export class Game {
      */
     private setupRoomHandlers(): void {
         if (!this.room) return;
-        const $ = Colyseus.getStateCallbacks(this.room);
         this.gameScene.getPhysicsWorld().initializeTick(this.room.state.serverTick);
-        // Update server tick when state changes
-        $(this.room.state).onChange(() => {
-            if (this.room?.state.serverTick) {
-                this.gameScene.getPhysicsWorld().updateServerTick(this.room.state.serverTick);
-            }
-        });
-
-        // Add latency measurement with smoothing
-        let smoothedLatency = 0;
-        const smoothingFactor = 0.1;
-        const minLatency = 5;
-
-        this.room.onMessage("pong", (timestamp) => {
-            const rtt = performance.now() - timestamp;
-            const oneWayLatency = Math.max(minLatency, rtt / 2);
+        const $ = Colyseus.getStateCallbacks(this.room);
+        // Handle network quality measurements
+        this.room.onMessage("pong", (data: { clientTime: number, serverTime: number, latency: number }) => {
+            const now = Date.now();
+            const rtt = now - data.clientTime;
+            const oneWayLatency = Math.max(this.MIN_LATENCY, rtt / 2); // Divide by 2 for one-way latency
+            const jitter = Math.abs(rtt/2 - oneWayLatency);
             
-            smoothedLatency = smoothedLatency === 0 
+            // Update network stats with smoothing
+            this.networkStats.latency = this.networkStats.latency === 0 
                 ? oneWayLatency 
-                : smoothingFactor * oneWayLatency + (1 - smoothingFactor) * smoothedLatency;
+                : this.LATENCY_SMOOTHING * oneWayLatency + (1 - this.LATENCY_SMOOTHING) * this.networkStats.latency;
+            
+            this.networkStats.jitter = this.networkStats.jitter === 0
+                ? jitter
+                : this.LATENCY_SMOOTHING * jitter + (1 - this.LATENCY_SMOOTHING) * this.networkStats.jitter;
 
-            this.gameScene.getPhysicsWorld().updateNetworkLatency(smoothedLatency);
+
+            // Update network quality
+            const latencyScore = Math.max(0, 1 - (oneWayLatency / 500));
+            const jitterScore = Math.max(0, 1 - (jitter / 100));
+            const qualityScore = (latencyScore + jitterScore) / 2;
+
+            this.qualitySamples.push(qualityScore);
+            if (this.qualitySamples.length > this.QUALITY_SAMPLES) {
+                this.qualitySamples.shift();
+            }
+
+            this.networkStats.quality = this.qualitySamples.reduce((a, b) => a + b, 0) / 
+                                      this.qualitySamples.length;
+
+            // Update physics world with network stats
+            this.gameScene.getPhysicsWorld().updateNetworkLatency(this.networkStats.latency);
+            this.gameScene.getPhysicsWorld().updateNetworkQuality(this.networkStats.quality);
+            this.gameScene.getPhysicsWorld().updateNetworkJitter(this.networkStats.jitter);
+
+            log('Network Stats', {
+                latency: this.networkStats.latency.toFixed(2),
+                jitter: this.networkStats.jitter.toFixed(2),
+                quality: this.networkStats.quality.toFixed(2)
+            });
         });
-        this.room.send("ping", performance.now());
-        // Send ping every second
+
+        // Start ping measurements
+        this.room.send("ping", Date.now());
         this.pingInterval = setInterval(() => {
             if (this.room) {
-                this.room.send("ping", performance.now());
+                this.room.send("ping", Date.now());
             }
-        }, 1000);
+        }, this.PING_INTERVAL);
 
         // Handle vehicle updates
         $(this.room.state).vehicles.onAdd((vehicle: VehicleSchema, sessionId: string) => {
-            console.log('Vehicle added to room:', { vehicle,sessionId, vehicleType: vehicle.vehicleType, team: vehicle.team });
+            console.log('Vehicle added to room:', { vehicle, sessionId, vehicleType: vehicle.vehicleType, team: vehicle.team });
             
             this.gameScene.createVehicle(sessionId, vehicle);
             // Listen for vehicle updates
@@ -193,6 +222,7 @@ export class Game {
      */
     public sendMovementUpdate(input: PhysicsInput): void {
         if (!this.room) return;
+        input.timestamp = Date.now();
         this.room.send('movement', input);
     }
 
@@ -229,6 +259,11 @@ export class Game {
     public getCanvas(): HTMLCanvasElement {
         return this.canvas;
     }
+
+    public getNetworkStats() {
+        return this.networkStats;
+    }
+
     /**
      * Cleans up resources.
      */

@@ -39,18 +39,16 @@ export class ClientPhysicsWorld {
     private accumulator: number = 0;
     /** Current network latency in milliseconds */
     private networkLatency: number = 0;
-    /** Current server tick */
-    private serverTick: number = 0;
 
-    // New properties for improved networking
-    private inputBuffer: PhysicsInput[] = [];
-    private readonly INPUT_BUFFER_SIZE = 60; // 1 second at 60fps
-    private readonly JITTER_BUFFER_TIME = 100; // ms
-    private readonly MAX_EXTRAPOLATION_TIME = 250; // ms
-    private lastServerStateTime: number = 0;
-    private networkQuality: number = 1.0; // 0.0 to 1.0, higher is better
-    private readonly NETWORK_QUALITY_SAMPLES = 10;
-    private networkQualitySamples: number[] = [];
+    // Update properties for improved networking
+    private pendingInputs: PhysicsInput[] = []; // Renamed from inputBuffer for clarity
+    private networkQuality: number = 1.0;
+    private currentInterpolationDelay: number = 100; // Start with 100ms base delay
+    private targetInterpolationDelay: number = 100;
+    private readonly INTERPOLATION_DELAY_SMOOTHING = 0.1;
+    private readonly MIN_INTERPOLATION_DELAY = 50; // Minimum delay in ms
+    private readonly MAX_INTERPOLATION_DELAY = 200; // Maximum delay in ms
+    private readonly QUALITY_TO_DELAY_FACTOR = 0.5; // How much quality affects delay
 
     /**
      * Creates a new ClientPhysicsWorld instance.
@@ -67,14 +65,13 @@ export class ClientPhysicsWorld {
         this.controllers = new Map();
         this.stateBuffers = new Map();
         this.interpolationConfig = {
-            delay: 100, // ms - for other players' interpolation
-            maxBufferSize: 10,
+            delay: 150, // Increased base delay
+            maxBufferSize: 20, // Increased buffer size
             interpolationFactor: 0.2
         };
         
         // Initialize new properties
-        this.inputBuffer = [];
-        this.networkQualitySamples = [];
+        this.pendingInputs = [];
     }
 
     /**
@@ -129,63 +126,40 @@ export class ClientPhysicsWorld {
     public update(deltaTime: number): void {
         const startTime = performance.now();
         
-        // Add frame time to accumulator (convert to seconds)
+        // Phase 1: Physics & Input
         this.accumulator += deltaTime / 1000;
-
-        // Process fixed timestep updates with a maximum of 3 steps per frame
         let steps = 0;
+        
         while (this.accumulator >= this.fixedTimeStep && steps < 3) {
+            this.lastProcessedTick++;
             const physicsStartTime = performance.now();
             
-            // Get input from input manager and add to buffer
+            // Get and process local input
             const input = this.game.getGameScene().getInputManager().getInput();
-            this.addInput(input);
-            
-            // Get the most recent input from buffer
-            const currentInput = this.inputBuffer.length > 0 
-                ? this.inputBuffer[this.inputBuffer.length - 1]
-                : input;
-            
-            // Scale mouse delta by fixed timestep to maintain consistent sensitivity
-            if (currentInput.mouseDelta) {
-                currentInput.mouseDelta.x *= this.fixedTimeStep;
-                currentInput.mouseDelta.y *= this.fixedTimeStep;
-            }
-
-            currentInput.timestamp = performance.now();
-            currentInput.tick = this.lastProcessedTick;
-
-            // Step physics world
-            this.physicsWorld.update(this.fixedTimeStep);
-
-            // Update all vehicle controllers
-            this.controllers.forEach((controller, id) => {
-                if (id === this.localPlayerId) {
-                    controller.update(this.fixedTimeStep, currentInput);
-                    this.game.sendMovementUpdate(currentInput);
-                } else {
-                    const defaultInput: PhysicsInput = {
-                        forward: false,
-                        backward: false,
-                        left: false,
-                        right: false,
-                        up: false,
-                        down: false,
-                        pitchUp: false,
-                        pitchDown: false,
-                        yawLeft: false,
-                        yawRight: false,
-                        rollLeft: false,
-                        rollRight: false,
-                        mouseDelta: { x: 0, y: 0 },
-                        tick: this.lastProcessedTick,
-                        timestamp: performance.now()
-                    };
-                    controller.update(this.fixedTimeStep, defaultInput);
+            if (input) {
+                // Scale mouse delta by fixed timestep
+                // if (input.mouseDelta) {
+                //     input.mouseDelta.x *= this.fixedTimeStep;
+                //     input.mouseDelta.y *= this.fixedTimeStep;
+                // }
+                
+                // Add to pending inputs with current tick and timestamp in milliseconds
+                input.timestamp = Date.now();
+                input.tick = this.lastProcessedTick;
+                this.pendingInputs.push({ ...input });
+                
+                // Update local player immediately
+                const localController = this.controllers.get(this.localPlayerId);
+                if (localController) {
+                    localController.update(this.fixedTimeStep, input);
                 }
-            });
-
-            this.lastProcessedTick++;
+                
+                // Send to server
+                this.game.sendMovementUpdate(input);
+            }
+            
+            // Step physics world for all controllers
+            this.physicsWorld.update(this.fixedTimeStep);
             this.accumulator -= this.fixedTimeStep;
             steps++;
 
@@ -193,23 +167,8 @@ export class ClientPhysicsWorld {
             logPerformance('Physics Update', physicsEndTime - physicsStartTime);
         }
 
-        // Log physics state differences
-        this.controllers.forEach((controller, id) => {
-            const state = controller.getState();
-            if (state) {
-                log(`Player ${id} Position`, `X: ${state.position.x.toFixed(2)}, Y: ${state.position.y.toFixed(2)}, Z: ${state.position.z.toFixed(2)}`);
-                log(`Player ${id} Velocity`, `X: ${state.linearVelocity.x.toFixed(2)}, Y: ${state.linearVelocity.y.toFixed(2)}, Z: ${state.linearVelocity.z.toFixed(2)}`);
-            }
-        });
-
-        // Clean up old states
-        this.cleanupStateBuffers();
-
-        // Correct tick drift if needed
-        this.correctTickDrift();
-
-        // Interpolate states
-        this.interpolateStates();
+        // Phase 2: Interpolation
+        this.interpolateRemotes();
 
         const endTime = performance.now();
         logPerformance('Total Physics Update', endTime - startTime);
@@ -222,150 +181,38 @@ export class ClientPhysicsWorld {
      * @param state - The physics state to add
      */
     public addVehicleState(id: string, state: PhysicsState): void {
-        const buffers = this.stateBuffers.get(id);
-        if (buffers) {
-            // Calculate jitter
-            const now = performance.now();
-            const jitter = Math.abs(now - this.lastServerStateTime - this.interpolationConfig.delay);
-            this.lastServerStateTime = now;
-
-            // Update network quality
-            this.updateNetworkQuality(this.networkLatency, jitter);
-
-            // If this is the local player, only use for reconciliation
-            if (id === this.localPlayerId) {
-                // Get current state for comparison
-                const currentState = this.controllers.get(id)?.getState();
-                if (currentState) {
-                    // Validate state values
-                    const isValidState = (state: PhysicsState) => {
-                        return state && 
-                               state.position && 
-                               state.quaternion && 
-                               state.linearVelocity && 
-                               state.angularVelocity &&
-                               !isNaN(state.position.x) && 
-                               !isNaN(state.position.y) && 
-                               !isNaN(state.position.z);
-                    };
-
-                    if (!isValidState(currentState) || !isValidState(state)) {
-                        // If either state is invalid, use server state directly
-                        this.controllers.get(id)?.setState(state);
-                        return;
-                    }
-
-                    // Calculate position and velocity errors
-                    const positionError = Vector3.Distance(currentState.position, state.position);
-                    const currentVelocityMag = Vector3.Distance(currentState.linearVelocity, Vector3.Zero());
-                    const serverVelocityMag = Vector3.Distance(state.linearVelocity, Vector3.Zero());
-                    const velocityError = Math.abs(currentVelocityMag - serverVelocityMag);
-                    
-                    // Calculate rotation error (angle between quaternions)
-                    const currentQuat = new Quaternion(
-                        currentState.quaternion.x,
-                        currentState.quaternion.y,
-                        currentState.quaternion.z,
-                        currentState.quaternion.w
-                    );
-                    const serverQuat = new Quaternion(
-                        state.quaternion.x,
-                        state.quaternion.y,
-                        state.quaternion.z,
-                        state.quaternion.w
-                    );
-                    
-                    // Normalize quaternions to ensure valid dot product
-                    currentQuat.normalize();
-                    serverQuat.normalize();
-                    
-                    // Calculate angle between quaternions using dot product with safety checks
-                    const dot = Math.min(1, Math.max(-1, Quaternion.Dot(currentQuat, serverQuat)));
-                    const rotationError = Math.acos(dot) * (180 / Math.PI);
-                    
-                    // Ensure position and velocity errors are valid numbers
-                    const positionErrorSafe = isNaN(positionError) ? 0 : positionError;
-                    const velocityErrorSafe = isNaN(velocityError) ? 0 : velocityError;
-                    const rotationErrorSafe = isNaN(rotationError) ? 0 : rotationError;
-                    
-                    // Log state differences
-                    log(`Player ${id} Position Error`, `${positionErrorSafe.toFixed(2)}m`, positionErrorSafe > 1 ? 'warning' : 'info');
-                    log(`Player ${id} Velocity Error`, `${velocityErrorSafe.toFixed(2)}m/s`, velocityErrorSafe > 0.5 ? 'warning' : 'info');
-                    log(`Player ${id} Rotation Error`, `${rotationErrorSafe.toFixed(2)}°`, rotationErrorSafe > 5 ? 'warning' : 'info');
-                    
-                    // Log detailed reconciliation info
-                    const tickDiff = Math.abs(this.serverTick - this.lastProcessedTick);
-                    log(`Player ${id} Reconciliation`, {
-                        positionError: positionErrorSafe,
-                        velocityError: velocityErrorSafe,
-                        rotationError: rotationErrorSafe,
-                        tickDiff,
-                        currentPosition: currentState.position,
-                        serverPosition: state.position,
-                        currentVelocity: currentState.linearVelocity,
-                        serverVelocity: state.linearVelocity
-                    }, 'info');
-
-                    // Always reconcile, but scale the correction based on error magnitude
-                    const tickFactor = Math.min(1.0, tickDiff / 10);
-                    
-                    // Calculate error-based factors with minimum values
-                    const positionErrorFactor = Math.max(0.3, Math.min(1.0, positionErrorSafe / 1.2));
-                    const velocityErrorFactor = Math.max(0.3, Math.min(1.0, velocityErrorSafe / 0.6));
-                    const rotationErrorFactor = Math.max(0.2, Math.min(1.0, rotationErrorSafe / 6));
-                    
-                    // For movement shooters, we want to prioritize rotation accuracy
-                    // and adjust position correction based on rotation error
-                    const rotationAdjustedPositionFactor = positionErrorFactor * (1 - rotationErrorFactor * 0.2);
-                    
-                    // Calculate final interpolation factors with minimum values
-                    const positionFactor = Math.max(0.2, Math.min(0.8, tickFactor * 0.6 * rotationAdjustedPositionFactor));
-                    const velocityFactor = Math.max(0.2, Math.min(0.8, tickFactor * 0.6 * velocityErrorFactor));
-                    const rotationFactor = Math.max(0.3, Math.min(0.95, tickFactor * 0.7 * rotationErrorFactor));
-                    
-                    // Log interpolation factors
-                    log(`Player ${id} Interpolation Factors`, {
-                        tickFactor,
-                        positionErrorFactor,
-                        velocityErrorFactor,
-                        rotationErrorFactor,
-                        rotationAdjustedPositionFactor,
-                        positionFactor,
-                        velocityFactor,
-                        rotationFactor
-                    }, 'info');
-                        
-                    // Smoothly correct all state properties
-                    const correctedState: PhysicsState = {
-                        position: Vector3.Lerp(currentState.position, state.position, positionFactor),
-                        quaternion: Quaternion.Slerp(currentState.quaternion, state.quaternion, rotationFactor),
-                        linearVelocity: Vector3.Lerp(currentState.linearVelocity, state.linearVelocity, velocityFactor),
-                        angularVelocity: Vector3.Lerp(currentState.angularVelocity, state.angularVelocity, velocityFactor),
-                        tick: state.tick,
-                        timestamp: state.timestamp
-                    };
-                    
-                    // Log the correction being applied
-                    log(`Player ${id} Correction Applied`, {
-                        fromPosition: currentState.position,
-                        toPosition: correctedState.position,
-                        positionDelta: Vector3.Distance(currentState.position, correctedState.position),
-                        fromVelocity: currentState.linearVelocity,
-                        toVelocity: correctedState.linearVelocity,
-                        velocityDelta: Vector3.Distance(currentState.linearVelocity, correctedState.linearVelocity),
-                        rotationDelta: Math.acos(Math.min(1, Math.max(-1, Quaternion.Dot(currentState.quaternion, correctedState.quaternion)))) * (180 / Math.PI)
-                    }, 'info');
-                        
-                    this.controllers.get(id)?.setState(correctedState);
+        if (id === this.localPlayerId) {
+            // Phase 2: Reconciliation for local player
+            const controller = this.controllers.get(id);
+            if (!controller) return;
+            
+            // Get current client state
+            const clientState = controller.getState();
+            if (!clientState) return;
+            
+            // Snap to server state
+            controller.setState(state);
+            
+            // Replay unprocessed inputs
+            const remaining: PhysicsInput[] = [];
+            for (const input of this.pendingInputs) {
+                if (input.tick > state.tick) {
+                    controller.update(this.fixedTimeStep, input);
+                } else {
+                    // this input has now been processed by the server
+                    remaining.push(input);
                 }
-            } else {
-                // For other players, add to buffer for interpolation
-                const newBuffer: StateBuffer = {
+            }
+            this.pendingInputs = remaining;
+        } else {
+            // Phase 3: Buffer remote states for interpolation
+            const buffers = this.stateBuffers.get(id);
+            if (buffers) {
+                buffers.push({
                     state: state,
-                    tick: this.serverTick,
-                    timestamp: now
-                };
-                buffers.push(newBuffer);
+                    timestamp: Date.now(),
+                    tick: state.tick
+                });
                 
                 // Keep buffer size reasonable
                 if (buffers.length > this.interpolationConfig.maxBufferSize) {
@@ -375,69 +222,51 @@ export class ClientPhysicsWorld {
         }
     }
 
-    /**
-     * Interpolates between physics states for smooth movement.
-     */
-    private interpolateStates(): void {
-        const targetTick = this.calculateInterpolationTick();
+    private interpolateRemotes(): void {
+        const now = Date.now();
+        const targetTime = now - this.currentInterpolationDelay;
         
-        this.stateBuffers.forEach((buffers, id) => {
-            if (id === this.localPlayerId) return;
-            if (buffers.length < 2) return;
-
-            // Find the two states to interpolate between based on server tick
-            let buffer1 = buffers[0];
-            let buffer2 = buffers[1];
-            let i = 1;
-
-            while (i < buffers.length - 1 && buffer1.tick < targetTick) {
-                buffer1 = buffers[i];
-                buffer2 = buffers[i + 1];
+        this.stateBuffers.forEach((buffer, id) => {
+            if (id === this.localPlayerId || buffer.length < 2) return;
+            
+            // Find states bracketing target time
+            let i = 0;
+            while (i < buffer.length - 1 && buffer[i + 1].timestamp <= targetTime) {
                 i++;
             }
 
-            // Remove old states
-            buffers.splice(0, i - 1);
-
-            if (!buffer1 || !buffer2) return;
-
-            // Calculate interpolation factor based on server tick difference
-            const tickDiff = buffer2.tick - buffer1.tick;
-            if (tickDiff === 0) return;
-
-            const t = (targetTick - buffer1.tick) / tickDiff;
+            if (i >= buffer.length - 1) return;
+            
+            const a = buffer[i];
+            const b = buffer[i + 1];
+            const t = (targetTime - a.timestamp) / (b.timestamp - a.timestamp);
+            
             const controller = this.controllers.get(id);
             if (controller) {
-                const predictedState = this.predictState(buffer1.state, buffer2.state, t);
-                controller.setState(predictedState);
+                controller.setState({
+                    position: Vector3.Lerp(a.state.position, b.state.position, t),
+                    quaternion: Quaternion.Slerp(a.state.quaternion, b.state.quaternion, t),
+                    linearVelocity: Vector3.Lerp(a.state.linearVelocity, b.state.linearVelocity, t),
+                    angularVelocity: Vector3.Lerp(a.state.angularVelocity, b.state.angularVelocity, t),
+                    tick: b.state.tick,
+                    timestamp: b.state.timestamp
+                });
+            }
+            
+            // Clean up old states
+            if (i > 0) {
+                buffer.splice(0, i);
             }
         });
     }
 
-    // New method for velocity-based prediction
-    private predictState(state1: PhysicsState, state2: PhysicsState, t: number): PhysicsState {
-        return {
-            position: Vector3.Lerp(state1.position, state2.position, t).add(
-                state1.linearVelocity.scale((1-t) * this.fixedTimeStep)
-            ),
-            quaternion: Quaternion.Slerp(state1.quaternion, state2.quaternion, t),
-            linearVelocity: Vector3.Lerp(state1.linearVelocity, state2.linearVelocity, t),
-            angularVelocity: Vector3.Lerp(state1.angularVelocity, state2.angularVelocity, t),
-            tick: state2.tick,
-            timestamp: state2.timestamp
-        };
-    }
 
-    // New method for calculating interpolation tick
-    private calculateInterpolationTick(): number {
-        // Calculate how many ticks behind we want to be based on network conditions
-        const ticksBehind = Math.ceil((this.interpolationConfig.delay + this.networkLatency) / (this.fixedTimeStep * 1000));
-        
-        // Use server tick as reference
-        return Math.max(
-            this.serverTick - ticksBehind,
-            this.serverTick - Math.ceil(this.MAX_EXTRAPOLATION_TIME / (this.fixedTimeStep * 1000))
-        );
+    /**
+     * Initializes the tick value.
+     * @param serverTick - The server tick value
+     */
+    public initializeTick(serverTick: number): void {
+        this.lastProcessedTick = serverTick;
     }
 
     /**
@@ -511,82 +340,48 @@ export class ClientPhysicsWorld {
 
     /**
      * Updates the network latency value.
-     * @param latency - Current network latency in milliseconds
      */
     public updateNetworkLatency(latency: number): void {
         this.networkLatency = latency;
+        this.updateInterpolationDelay();
     }
 
     /**
-     * Initializes the physics tick with the server's tick.
-     * @param serverTick - Current server tick
+     * Updates the network quality value.
      */
-    public initializeTick(serverTick: number): void {
-        if (this.lastProcessedTick === 0) {
-            this.lastProcessedTick = serverTick;
-            console.log('Initialized client tick with server tick:', {
-                serverTick,
-                lastProcessedTick: this.lastProcessedTick
-            });
-        }
+    public updateNetworkQuality(quality: number): void {
+        this.networkQuality = quality;
+        this.updateInterpolationDelay();
     }
 
     /**
-     * Updates the server tick value.
-     * @param serverTick - Current server tick
+     * Updates the network jitter value.
      */
-    public updateServerTick(serverTick: number): void {
-        this.serverTick = serverTick;
-    }
-
-    // add input to buffer
-    public addInput(input: PhysicsInput): void {        
-        this.inputBuffer.push(input);
-        if (this.inputBuffer.length > this.INPUT_BUFFER_SIZE) {
-            this.inputBuffer.shift();
+    public updateNetworkJitter(jitter: number): void {
+        // Adjust buffer size based on jitter
+        const newBufferSize = Math.max(10, Math.min(30, 
+            Math.ceil(20 + (jitter / 10))));
+        if (newBufferSize !== this.interpolationConfig.maxBufferSize) {
+            this.interpolationConfig.maxBufferSize = newBufferSize;
         }
     }
 
-    // update network quality
-    private updateNetworkQuality(latency: number, jitter: number): void {
-        // Calculate quality score (0.0 to 1.0)
-        const latencyScore = Math.max(0, 1 - (latency / 500)); // 500ms max latency
-        const jitterScore = Math.max(0, 1 - (jitter / 100)); // 100ms max jitter
-        const qualityScore = (latencyScore + jitterScore) / 2;
-
-        // Add to samples
-        this.networkQualitySamples.push(qualityScore);
-        if (this.networkQualitySamples.length > this.NETWORK_QUALITY_SAMPLES) {
-            this.networkQualitySamples.shift();
-        }
-
-        // Calculate average quality
-        this.networkQuality = this.networkQualitySamples.reduce((a, b) => a + b, 0) / 
-                            this.networkQualitySamples.length;
-
-        // Adjust interpolation delay based on network quality
-        this.interpolationConfig.delay = Math.max(30, Math.min(150, 
-            50 + (1 - this.networkQuality) * 100));
-    }
-
-    // Update cleanupStateBuffers to use server tick
-    private cleanupStateBuffers(): void {
-        const maxTicksToKeep = Math.ceil(this.interpolationConfig.delay * 2 / (this.fixedTimeStep * 1000));
+    private updateInterpolationDelay(): void {
+        // Calculate base delay based on latency
+        let baseDelay = this.networkLatency * 1.5; // 1.5x latency as base
         
-        this.stateBuffers.forEach((buffers, id) => {
-            const validStates = buffers.filter(buffer => 
-                this.serverTick - buffer.tick <= maxTicksToKeep
-            );
-            this.stateBuffers.set(id, validStates);
-        });
-    }
-
-    // correct tick drift
-    private correctTickDrift(): void {
-        const tickDiff = this.serverTick - this.lastProcessedTick;
-        if (Math.abs(tickDiff) > 10) { // Significant drift
-            this.lastProcessedTick = this.serverTick - 2; // Leave room for interpolation
-            console.log('Correcting tick drift:', tickDiff);
-        }
+        // Adjust based on network quality
+        const qualityFactor = 1 - (this.networkQuality * this.QUALITY_TO_DELAY_FACTOR);
+        baseDelay *= (1 + qualityFactor);
+        
+        // Clamp to reasonable range
+        this.targetInterpolationDelay = Math.max(
+            this.MIN_INTERPOLATION_DELAY,
+            Math.min(this.MAX_INTERPOLATION_DELAY, baseDelay)
+        );
+        
+        // Smooth transition to new delay
+        this.currentInterpolationDelay += (this.targetInterpolationDelay - this.currentInterpolationDelay) * 
+            this.INTERPOLATION_DELAY_SMOOTHING;
     }
 } 

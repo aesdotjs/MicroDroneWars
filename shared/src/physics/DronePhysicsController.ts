@@ -12,7 +12,7 @@ export class DronePhysicsController extends BasePhysicsController {
     private momentumDamping: number = 0.99;
     private moveSpeed: number = 0.2;
     private rotationSpeed: number = 0.02; // Reduced from 0.1 for less sensitive keyboard controls
-    private mouseSensitivity: number = 0.05; // Reduced sensitivity for smoother movement
+    private mouseSensitivity: number = 0.002; // Reduced sensitivity for smoother movement
     private integralError: number = 0;
     private targetAltitude: number = 10;
     private rollStabilizationStrength: number = 5.0; // Strength of auto-stabilization

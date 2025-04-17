@@ -263,7 +263,7 @@ export class InputManager {
             rollLeft: this.keys.rollLeft.getIsPressed(),
             rollRight: this.keys.rollRight.getIsPressed(),
             mouseDelta: currentMouseDelta,
-            timestamp: performance.now(),
+            timestamp: Date.now(),
             tick: 0
         };
 
