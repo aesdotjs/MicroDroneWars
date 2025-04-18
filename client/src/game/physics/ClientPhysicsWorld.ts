@@ -8,6 +8,7 @@ import { CollisionEvent } from '@shared/physics/types';
 import { DroneSettings, PlaneSettings } from '@shared/physics/VehicleSettings';
 import { Game } from '../Game';
 import { useGameDebug } from '@/composables/useGameDebug';
+import * as CANNON from 'cannon-es';
 
 const { log, logPerformance, clearVehicleLogs } = useGameDebug();
 /**
@@ -155,19 +156,21 @@ export class ClientPhysicsWorld {
                 timestamp: Date.now(),
                 tick: this.physicsWorld.getCurrentTick()
             }
-            if(!isIdle) {
+            if (!isIdle) {
                 this.game.sendMovementUpdate(finalInput);
                 this.pendingInputs.push(finalInput);
+                const MAX_PENDING_INPUTS = 60;
+                if (this.pendingInputs.length > MAX_PENDING_INPUTS) {
+                    this.pendingInputs.splice(0, this.pendingInputs.length - MAX_PENDING_INPUTS);
+                }
             }
-
-            if (finalInput.yawLeft) console.log(`→ send input timestamp=${finalInput.timestamp}`);
             
             // Update local player immediately
             const localController = this.controllers.get(this.localPlayerId);
             if (localController) {
                 localController.update(this.fixedTimeStep, finalInput);
             }
-            console.log(`[Client] pendingInputs.length before send: ${this.pendingInputs.length}`);
+            // console.log(`[Client] pendingInputs.length before send: ${this.pendingInputs.length}`);
         }
 
         this.physicsWorld.update(this.fixedTimeStep, this.fixedTimeStep, 1);
@@ -186,6 +189,7 @@ export class ClientPhysicsWorld {
      */
     public addVehicleState(id: string, state: PhysicsState): void {
         if (id === this.localPlayerId) {
+            this.physicsWorld.setCurrentTick(state.tick);
             // Phase 2: Reconciliation for local player
             const controller = this.controllers.get(id);
             if (!controller) return;
@@ -242,11 +246,11 @@ export class ClientPhysicsWorld {
                 // }
                 // controller.setState(state);
             // }
+            const lastProcessedInputTick = state.lastProcessedInputTick ?? state.tick;
             controller.setState(state);
-            // Replay unprocessed inputs
-            const lastProcessedInputTick = state.lastProcessedInputTick || state.tick;
-            const pendingInputs = this.pendingInputs.filter(i => i.tick > lastProcessedInputTick);
 
+            // Replay unprocessed inputs
+            const pendingInputs = this.pendingInputs.filter(i => i.tick > lastProcessedInputTick);
             for (const input of pendingInputs) {
                 if (input.mouseDelta) {
                     input.mouseDelta.x *= this.fixedTimeStep;
@@ -255,7 +259,8 @@ export class ClientPhysicsWorld {
                 controller.update(this.fixedTimeStep, input);
             }
             this.pendingInputs = pendingInputs;
-            console.log(`[Client] pendingInputs.length after reconciliation: ${this.pendingInputs.length} [${pendingInputs.map(i=>i.tick).join(',')}]`);
+            // console.log(`[Client] pendingInputs.length after reconciliation: ${this.pendingInputs.length} [${pendingInputs.map(i=>i.tick).join(',')}] lastProcessedInputTick: ${lastProcessedInputTick}`);
+
             // const remaining: PhysicsInput[] = [];
             // for (const input of this.pendingInputs) {
             //     log('input',`${state.lastProcessedInputTimestamp}, ${input.tick}`); 

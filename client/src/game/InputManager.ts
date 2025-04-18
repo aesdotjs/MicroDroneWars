@@ -287,6 +287,8 @@ export class InputManager {
                !this.keys.yawRight.getIsPressed() &&
                !this.keys.rollLeft.getIsPressed() &&
                !this.keys.rollRight.getIsPressed() &&
+               !this.keys.up.getIsPressed() &&
+               !this.keys.down.getIsPressed() &&
                !this.keys.fire.getIsPressed() &&
                !this.keys.zoom.getIsPressed() &&
                !this.mouseDelta.x &&

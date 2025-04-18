@@ -1,15 +1,14 @@
-import * as CANNON from 'cannon-es';
-import { VehiclePhysicsConfig } from './types';
-import { BasePhysicsController } from './BasePhysicsController';
-import { DronePhysicsController } from './DronePhysicsController';
-import { PlanePhysicsController } from './PlanePhysicsController';
-
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.PhysicsControllerFactory = void 0;
+const DronePhysicsController_1 = require("./DronePhysicsController");
+const PlanePhysicsController_1 = require("./PlanePhysicsController");
 /**
  * Factory class for creating physics controllers for different vehicle types.
  * Provides a centralized way to instantiate the appropriate physics controller
  * based on the vehicle configuration.
  */
-export class PhysicsControllerFactory {
+class PhysicsControllerFactory {
     /**
      * Creates a physics controller based on the vehicle type specified in the configuration.
      * @param world - The CANNON.js physics world instance
@@ -17,14 +16,15 @@ export class PhysicsControllerFactory {
      * @returns A new physics controller instance
      * @throws Error if the vehicle type is unknown
      */
-    public static createController(world: CANNON.World, config: VehiclePhysicsConfig): BasePhysicsController {
+    static createController(world, config) {
         switch (config.vehicleType) {
             case 'drone':
-                return new DronePhysicsController(world, config);
+                return new DronePhysicsController_1.DronePhysicsController(world, config);
             case 'plane':
-                return new PlanePhysicsController(world, config);
+                return new PlanePhysicsController_1.PlanePhysicsController(world, config);
             default:
                 throw new Error(`Unknown vehicle type: ${config.vehicleType}`);
         }
     }
-} 
+}
+exports.PhysicsControllerFactory = PhysicsControllerFactory;

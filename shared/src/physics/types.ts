@@ -1,5 +1,5 @@
 import { Vector3, Quaternion } from 'babylonjs';
-
+import type { Body as CannonBody } from 'cannon-es';
 /**
  * Represents the complete physics state of a vehicle or object.
  * Contains position, orientation, and velocity information.
@@ -116,19 +116,21 @@ export interface PhysicsInput {
  */
 export interface CollisionEvent {
     /** First colliding body */
-    bodyA: CANNON.Body;
+    bodyA: CannonBody;
     /** Second colliding body */
-    bodyB: CANNON.Body;
+    bodyB: CannonBody;
     /** Contact information between the bodies */
-    contact: {
-        /** Gets the impact velocity along the contact normal */
-        getImpactVelocityAlongNormal: () => number;
-        /** Gets the contact normal vector */
-        getNormal: () => CANNON.Vec3;
-        /** Contact point on body A */
-        ri: CANNON.Vec3;
-        /** Contact point on body B */
-        rj: CANNON.Vec3;
+    target: {
+        contacts: {
+            /** Gets the impact velocity along the contact normal */
+            getImpactVelocityAlongNormal: () => number;
+            /** Gets the contact normal vector */
+            getNormal: () => CANNON.Vec3;
+            /** Contact point on body A */
+            ri: CANNON.Vec3;
+            /** Contact point on body B */
+            rj: CANNON.Vec3;
+        }[];
     };
 }
 
@@ -138,16 +140,21 @@ export interface CollisionEvent {
  */
 export interface VehicleCollisionEvent {
     /** The vehicle body involved in the collision */
-    body: CANNON.Body;
+    body: CannonBody;
     /** Contact information */
-    contact: {
-        /** Gets the impact velocity along the contact normal */
-        getImpactVelocityAlongNormal: () => number;
-        /** Contact point on the vehicle */
-        ri: CANNON.Vec3;
-        /** Contact point on the other body */
-        rj: CANNON.Vec3;
-    };
+    // contacts is inside a target object
+    target: {
+        contacts: {
+            /** Gets the impact velocity along the contact normal */
+            getImpactVelocityAlongNormal: () => number;
+            /** Gets the contact normal vector */
+            getNormal: () => CANNON.Vec3;
+            /** Contact point on body A */
+            ri: CANNON.Vec3;
+            /** Contact point on body B */
+            rj: CANNON.Vec3;
+        }[];
+    };    
 }
 
 /**

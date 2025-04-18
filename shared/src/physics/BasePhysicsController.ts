@@ -1,4 +1,4 @@
-import * as CANNON from 'cannon';
+import * as CANNON from 'cannon-es';
 import { Vector3, Quaternion, Matrix } from 'babylonjs';
 import { PhysicsState, VehiclePhysicsConfig, PhysicsInput } from './types';
 import { SpringSimulator } from '../utils/SpringSimulator';
@@ -183,7 +183,7 @@ export abstract class BasePhysicsController {
      */
     cleanup(): void {
         if (this.body) {
-            this.world.remove(this.body);
+            this.world.removeBody(this.body);
         }
     }
 

@@ -4,7 +4,7 @@ import { Flag } from './Flag';
 import { InputManager } from './InputManager';
 import { Game } from './Game';
 import { ClientPhysicsWorld } from './physics/ClientPhysicsWorld';
-import * as CANNON from 'cannon';
+import * as CANNON from 'cannon-es';
 import { CollisionManager } from './CollisionManager';
 import { useGameDebug } from '@/composables/useGameDebug';
 import { Vehicle as VehicleSchema } from './schemas/Vehicle';

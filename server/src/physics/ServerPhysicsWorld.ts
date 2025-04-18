@@ -5,6 +5,9 @@ import { Engine, Scene, NullEngine, Vector3, Quaternion } from 'babylonjs';
 import { State, Vehicle } from '../schemas';
 import { DroneSettings, PlaneSettings } from '@shared/physics/VehicleSettings';
 import { BasePhysicsController } from '@shared/physics/BasePhysicsController';
+let stepCount = 0;
+let lastStepLog = performance.now();
+let lastFire = performance.now();
 /**
  * Handles server-side physics simulation for the game.
  * Manages vehicle physics controllers and updates game state based on physics calculations.
@@ -125,10 +128,15 @@ export class ServerPhysicsWorld {
      * @param state - Current game state to update
      */
     private processFixedUpdate = (deltaTime: number, state: State) => {
+        stepCount++;
+        const now = performance.now();
+        const realDt = now - lastFire;
+        lastFire = now;
+        const t0 = performance.now();
         // Process all vehicles' inputs
         state.vehicles.forEach((vehicle, id) => {
             const controller = this.controllers.get(id);
-            const inputBuffer = this.inputBuffers.get(id);
+            const inputBuffer = this.inputBuffers.get(id) ?? [];
             const idleInput: PhysicsInput = {
                 forward: false,
                 backward: false,
@@ -146,34 +154,39 @@ export class ServerPhysicsWorld {
                     x: 0,
                     y: 0
                 },
-                
-                
+                            
                 tick: this.physicsWorld.getCurrentTick(),
                 timestamp: Date.now(),
             };
             
-            if (controller && inputBuffer) {
+            if (controller) {
                 // Get all unprocessed inputs
-                const lastProcessedTick = this.lastProcessedInputTicks.get(id) ?? 0;
-                const unprocessedInputs = inputBuffer.filter(input => input.tick > lastProcessedTick);
-                if (unprocessedInputs.length > 0) console.log(`[Server][processFixed] ${id}: lastProcessedTick=${lastProcessedTick}, buffer=[${inputBuffer.map(i=>i.tick).join(',')}]`);
+                let lastProcessedTick = this.lastProcessedInputTicks.get(id) ?? 0;
+                // console.log(`[Server][processFixed] ${id}: lastProcessedTick=${lastProcessedTick}, buffer=[${inputBuffer.map(i=>i.tick).join(',')}]`);
+                const buffer = inputBuffer.sort((a, b) => a.tick - b.tick);
+                if (buffer.length > 0) console.log(`[Server][processFixed] ${id}: lastProcessedTick=${lastProcessedTick}, buffer=[${inputBuffer.map(i=>i.tick).join(',')}]`);
                 // // Process each input in order
-                for (const input of unprocessedInputs) {
-                    // Scale mouse delta by fixed timestep to maintain consistent sensitivity
-                    if (input.mouseDelta) {
-                        input.mouseDelta.x *= this.FIXED_TIME_STEP;
-                        input.mouseDelta.y *= this.FIXED_TIME_STEP;
+                let processedCount = 0;
+                for (const input of buffer) {
+                    if (input.tick > lastProcessedTick) {
+                        // Scale mouse delta by fixed timestep to maintain consistent sensitivity
+                        if (input.mouseDelta) {
+                            input.mouseDelta.x *= this.FIXED_TIME_STEP;
+                            input.mouseDelta.y *= this.FIXED_TIME_STEP;
+                        }
+                        controller.update(this.FIXED_TIME_STEP, input);
+                        lastProcessedTick = input.tick;
                     }
-                    controller.update(this.FIXED_TIME_STEP, input);
-                    this.lastProcessedInputTicks.set(id, input.tick);
-                }
-
-                // // if no inputs, send idle input
-                if (unprocessedInputs.length === 0) {
+                    processedCount++;
+                }    
+                // if no inputs, send idle input
+                if (processedCount === 0) {
                     controller.update(this.FIXED_TIME_STEP, idleInput);
-                    this.lastProcessedInputTicks.set(id, this.physicsWorld.getCurrentTick());
-                } 
+                }             
+                this.lastProcessedInputTicks.set(id, lastProcessedTick);
                 this.lastProcessedInputTimestamps.set(id, Date.now());
+
+                buffer.splice(0, processedCount);
 
                 // const nextInput = unprocessedInputs.length > 0 ? unprocessedInputs.shift()! : idleInput;
                 // controller.update(this.FIXED_TIME_STEP, nextInput);
@@ -181,7 +194,7 @@ export class ServerPhysicsWorld {
                 // this.lastProcessedInputTimestamps.set(id, nextInput.timestamp);
                 
                 // this.inputBuffers.set(id, unprocessedInputs);
-                this.inputBuffers.set(id, []);
+                this.inputBuffers.set(id, buffer);
 
                 // Update vehicle state in the game state
                 const physicsState = controller.getState();
@@ -206,9 +219,26 @@ export class ServerPhysicsWorld {
                 }
             }
         });
-
+        
+        const t1 = performance.now();
+        const cost = t1 - t0;
+        const t2 = performance.now();
         // Step physics world
         this.physicsWorld.update(this.FIXED_TIME_STEP, this.FIXED_TIME_STEP, 1);
+        const t3 = performance.now();
+        const cost2 = t3 - t2;
+        if (now - lastStepLog > 1000) {
+            console.log(
+                `[Server][SIM] ` +
+                `requested dt: ${deltaTime.toFixed(2)} ms, ` +
+                `actual dt: ${realDt.toFixed(2)} ms, ` +
+                `input cost: ${cost.toFixed(2)} ms, ` +
+                `update cost: ${cost2.toFixed(2)} ms, ` +
+                `ticks/sec: ${stepCount}`
+              );
+            stepCount = 0;
+            lastStepLog = now;
+        }
         // Update flag positions if carried
         state.flags.forEach(flag => {
             if (flag.carriedBy) {
