@@ -166,7 +166,7 @@ export class InputManager {
      */
     private handleMouseMove(event: MouseEvent): void {
         // Check both hasFocus and isPointerLocked since we want to accept input when either is true
-        if (!this.hasFocus || !this.isPointerLocked) {
+        if (!this.hasFocus && !this.isPointerLocked) {
             return;
         }
 
@@ -264,17 +264,6 @@ export class InputManager {
             rollRight: this.keys.rollRight.getIsPressed(),
             mouseDelta: currentMouseDelta,
         };
-
-        console.log(
-            '[InputManager] →',
-            JSON.stringify({
-              forward: input.forward,
-              backward: input.backward,
-              left: input.left,
-              right: input.right,
-              mouse: input.mouseDelta,
-            })
-          );
 
         return input;
     }

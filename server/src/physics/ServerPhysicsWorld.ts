@@ -154,25 +154,26 @@ export class ServerPhysicsWorld {
             
             if (controller && inputBuffer) {
                 // Get all unprocessed inputs
-                const lastProcessedTick = this.lastProcessedInputTicks.get(id) || this.physicsWorld.getCurrentTick();
+                const lastProcessedTick = this.lastProcessedInputTicks.get(id) ?? 0;
                 const unprocessedInputs = inputBuffer.filter(input => input.tick > lastProcessedTick);
                 if (unprocessedInputs.length > 0) console.log(`[Server][processFixed] ${id}: lastProcessedTick=${lastProcessedTick}, buffer=[${inputBuffer.map(i=>i.tick).join(',')}]`);
                 // // Process each input in order
                 for (const input of unprocessedInputs) {
                     // Scale mouse delta by fixed timestep to maintain consistent sensitivity
-                    // if (input.mouseDelta) {
-                    //     input.mouseDelta.x *= this.FIXED_TIME_STEP;
-                    //     input.mouseDelta.y *= this.FIXED_TIME_STEP;
-                    // }
+                    if (input.mouseDelta) {
+                        input.mouseDelta.x *= this.FIXED_TIME_STEP;
+                        input.mouseDelta.y *= this.FIXED_TIME_STEP;
+                    }
                     controller.update(this.FIXED_TIME_STEP, input);
                     this.lastProcessedInputTicks.set(id, input.tick);
-                    this.lastProcessedInputTimestamps.set(id, input.timestamp);
                 }
 
                 // // if no inputs, send idle input
                 if (unprocessedInputs.length === 0) {
                     controller.update(this.FIXED_TIME_STEP, idleInput);
+                    this.lastProcessedInputTicks.set(id, this.physicsWorld.getCurrentTick());
                 } 
+                this.lastProcessedInputTimestamps.set(id, Date.now());
 
                 // const nextInput = unprocessedInputs.length > 0 ? unprocessedInputs.shift()! : idleInput;
                 // controller.update(this.FIXED_TIME_STEP, nextInput);

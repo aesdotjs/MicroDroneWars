@@ -146,18 +146,18 @@ export class ClientPhysicsWorld {
         const input = this.game.getGameScene().getInputManager().getInput();
         if (input) {
             // Scale mouse delta by fixed timestep
-            // if (input.mouseDelta) {
-            //     input.mouseDelta.x *= this.fixedTimeStep;
-            //     input.mouseDelta.y *= this.fixedTimeStep;
-            // }
+            if (input.mouseDelta) {
+                input.mouseDelta.x *= this.fixedTimeStep;
+                input.mouseDelta.y *= this.fixedTimeStep;
+            }
             const finalInput: PhysicsInput = {
                 ...input,
                 timestamp: Date.now(),
                 tick: this.physicsWorld.getCurrentTick()
             }
-            this.pendingInputs.push(finalInput);
             if(!isIdle) {
                 this.game.sendMovementUpdate(finalInput);
+                this.pendingInputs.push(finalInput);
             }
 
             if (finalInput.yawLeft) console.log(`→ send input timestamp=${finalInput.timestamp}`);
@@ -167,7 +167,6 @@ export class ClientPhysicsWorld {
             if (localController) {
                 localController.update(this.fixedTimeStep, finalInput);
             }
-            console.log(`[Client] tick=${this.physicsWorld.getCurrentTick()}  → sending input.tick=${finalInput.tick}`);
             console.log(`[Client] pendingInputs.length before send: ${this.pendingInputs.length}`);
         }
 
@@ -245,19 +244,31 @@ export class ClientPhysicsWorld {
             // }
             controller.setState(state);
             // Replay unprocessed inputs
-            const remaining: PhysicsInput[] = [];
-            for (const input of this.pendingInputs) {
-                log('input',`${state.lastProcessedInputTimestamp}, ${input.tick}`); 
-                if (input.yawLeft) console.log(`← server timestamp=${state.timestamp}, lastProcessedInputTimestamp=${state.lastProcessedInputTimestamp}, input=${input.timestamp}`);
-                const lastProcessedInputTick = state.lastProcessedInputTick || state.tick;
-                this.pendingInputs = this.pendingInputs.filter(i => i.tick > lastProcessedInputTick);
-                if (input.tick > lastProcessedInputTick) {
-                    controller.update(this.fixedTimeStep, input);
-                } else {
-                    remaining.push(input);
+            const lastProcessedInputTick = state.lastProcessedInputTick || state.tick;
+            const pendingInputs = this.pendingInputs.filter(i => i.tick > lastProcessedInputTick);
+
+            for (const input of pendingInputs) {
+                if (input.mouseDelta) {
+                    input.mouseDelta.x *= this.fixedTimeStep;
+                    input.mouseDelta.y *= this.fixedTimeStep;
                 }
+                controller.update(this.fixedTimeStep, input);
             }
-            this.pendingInputs = remaining;
+            this.pendingInputs = pendingInputs;
+            console.log(`[Client] pendingInputs.length after reconciliation: ${this.pendingInputs.length} [${pendingInputs.map(i=>i.tick).join(',')}]`);
+            // const remaining: PhysicsInput[] = [];
+            // for (const input of this.pendingInputs) {
+            //     log('input',`${state.lastProcessedInputTimestamp}, ${input.tick}`); 
+            //     if (input.yawLeft) console.log(`← server timestamp=${state.timestamp}, lastProcessedInputTimestamp=${state.lastProcessedInputTimestamp}, input=${input.timestamp}`);
+            //     const lastProcessedInputTick = state.lastProcessedInputTick || state.tick;
+            //     this.pendingInputs = this.pendingInputs.filter(i => i.tick > lastProcessedInputTick);
+            //     if (input.tick > lastProcessedInputTick) {
+            //         controller.update(this.fixedTimeStep, input);
+            //     } else {
+            //         remaining.push(input);
+            //     }
+            // }
+            // this.pendingInputs = remaining;
             // this.step(this.engine.getDeltaTime());
         } else {
             // Phase 3: Buffer remote states for interpolation
