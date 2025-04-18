@@ -10,7 +10,7 @@ import { VehiclePhysicsConfig, PhysicsInput } from "@shared/physics/types";
  */
 export class MicroDroneRoom extends Room<State> {
     private physicsWorld!: ServerPhysicsWorld;
-    private readonly TICK_RATE = 1/60;
+    private readonly TICK_RATE = 60;
     private readonly MAX_LATENCY = 1000; // 1 second max latency
     private readonly MAX_INPUTS_PER_TICK = 3;
     private clientLatencies: Map<string, number> = new Map();
@@ -24,14 +24,16 @@ export class MicroDroneRoom extends Room<State> {
         this.state = new State();
         console.log("MicroDrone room created");
 
-        // Set room options for faster connection
-        this.setPatchRate(1000 * this.TICK_RATE); // 60 updates per second
-        this.setSimulationInterval((deltaTime) => this.update(deltaTime));
         this.autoDispose = false; // Keep room alive even when empty
         this.maxClients = 20; // Set a reasonable max clients
 
         // Initialize physics world
         this.physicsWorld = new ServerPhysicsWorld();
+        this.state.serverTick = this.physicsWorld.getCurrentTick();
+
+         // Set room options for faster connection
+         this.patchRate = 1000 / this.TICK_RATE; // 60 updates per second
+         this.setSimulationInterval((deltaTime) =>  { this.update(deltaTime) }, 1000 / this.TICK_RATE);
 
         // Initialize flags
         const teamAFlag = new Flag();
@@ -83,8 +85,6 @@ export class MicroDroneRoom extends Room<State> {
             this.onLeave(client);
         });
 
-        // Initialize server tick
-        this.state.serverTick = this.physicsWorld.getCurrentTick();
     }
 
     /**
@@ -111,25 +111,12 @@ export class MicroDroneRoom extends Room<State> {
         vehicle.positionY = 10;
         vehicle.positionZ = 0;
         vehicle.vehicleType = options.vehicleType;
-
-        // Create physics controller for the vehicle
-        const config: VehiclePhysicsConfig = {
-            vehicleType: options.vehicleType,
-            mass: 50,
-            drag: 0.8,
-            angularDrag: 0.8,
-            maxSpeed: 20,
-            maxAngularSpeed: 0.2,
-            maxAngularAcceleration: 0.05,
-            angularDamping: 0.9,
-            forceMultiplier: 0.005,
-            thrust: options.vehicleType === "drone" ? 20 : 30,
-            lift: options.vehicleType === "drone" ? 15 : 12,
-            torque: options.vehicleType === "drone" ? 1 : 2,
-        };
+        vehicle.lastProcessedInputTick = this.physicsWorld.getCurrentTick();
+        vehicle.tick = this.physicsWorld.getCurrentTick();
         
         // Create vehicle and add to state
         this.physicsWorld.createVehicle(client.sessionId, vehicle);
+        this.state.serverTick = this.physicsWorld.getCurrentTick();
         this.state.vehicles.set(client.sessionId, vehicle);
         
         console.log(`Vehicle created for ${client.sessionId}:`, {
@@ -178,8 +165,7 @@ export class MicroDroneRoom extends Room<State> {
 
     private update(deltaTime: number) {
         // Convert deltaTime to seconds and update physics
-        this.physicsWorld.update(deltaTime / 1000, this.state);
-        
+        this.physicsWorld.update(deltaTime, this.state);
         // Update server tick in state
         this.state.serverTick = this.physicsWorld.getCurrentTick();
         

@@ -31,10 +31,10 @@ export class ClientPhysicsWorld {
     private interpolationConfig: InterpolationConfig;
     /** ID of the local player's vehicle */
     private localPlayerId: string = '';
-    /** Last processed physics tick */
-    private lastProcessedTick: number = 0;
     /** Fixed time step for physics updates */
     private fixedTimeStep: number = 1/60;
+    /** Fixed time step in milliseconds */
+    private fixedTimeStepMs: number = 1000 / 60;
     /** Accumulator for fixed time step updates */
     private accumulator: number = 0;
     /** Current network latency in milliseconds */
@@ -49,7 +49,7 @@ export class ClientPhysicsWorld {
     private readonly MIN_INTERPOLATION_DELAY = 50; // Minimum delay in ms
     private readonly MAX_INTERPOLATION_DELAY = 200; // Maximum delay in ms
     private readonly QUALITY_TO_DELAY_FACTOR = 0.5; // How much quality affects delay
-
+    private readonly MAX_SUBSTEPS = 3;
     /**
      * Creates a new ClientPhysicsWorld instance.
      * @param engine - The Babylon.js engine
@@ -127,13 +127,12 @@ export class ClientPhysicsWorld {
         const startTime = performance.now();
         
         // Phase 1: Physics & Input
-        this.accumulator += deltaTime / 1000;
+        this.accumulator += deltaTime;
         let steps = 0;
         
-        while (this.accumulator >= this.fixedTimeStep && steps < 3) {
-            this.lastProcessedTick++;
+        while (this.accumulator >= this.fixedTimeStepMs && steps < this.MAX_SUBSTEPS) {
             const physicsStartTime = performance.now();
-            
+            log('Tick', this.physicsWorld.getCurrentTick());
             // Get and process local input
             const input = this.game.getGameScene().getInputManager().getInput();
             if (input) {
@@ -142,11 +141,13 @@ export class ClientPhysicsWorld {
                 //     input.mouseDelta.x *= this.fixedTimeStep;
                 //     input.mouseDelta.y *= this.fixedTimeStep;
                 // }
-                
+                const finalInput: PhysicsInput = {
+                    ...input,
+                    timestamp: Date.now(),
+                    tick: this.physicsWorld.getCurrentTick()
+                }
                 // Add to pending inputs with current tick and timestamp in milliseconds
-                input.timestamp = Date.now();
-                input.tick = this.lastProcessedTick;
-                this.pendingInputs.push({ ...input });
+                this.pendingInputs.push(finalInput);
                 
                 // Update local player immediately
                 const localController = this.controllers.get(this.localPlayerId);
@@ -159,8 +160,8 @@ export class ClientPhysicsWorld {
             }
             
             // Step physics world for all controllers
-            this.physicsWorld.update(this.fixedTimeStep);
-            this.accumulator -= this.fixedTimeStep;
+            this.physicsWorld.update(this.fixedTimeStepMs / 1000, this.fixedTimeStepMs / 1000, 1);
+            this.accumulator -= this.fixedTimeStepMs;
             steps++;
 
             const physicsEndTime = performance.now();
@@ -196,7 +197,9 @@ export class ClientPhysicsWorld {
             // Replay unprocessed inputs
             const remaining: PhysicsInput[] = [];
             for (const input of this.pendingInputs) {
-                if (input.tick > state.tick) {
+                log('input',`${state.lastProcessedInputTick}, ${input.tick}`); 
+                const lastProcessedInputTick = state.lastProcessedInputTick || state.tick;
+                if (input.tick > lastProcessedInputTick) {
                     controller.update(this.fixedTimeStep, input);
                 } else {
                     // this input has now been processed by the server
@@ -266,7 +269,7 @@ export class ClientPhysicsWorld {
      * @param serverTick - The server tick value
      */
     public initializeTick(serverTick: number): void {
-        this.lastProcessedTick = serverTick;
+        this.physicsWorld.setCurrentTick(serverTick);
     }
 
     /**
@@ -335,7 +338,7 @@ export class ClientPhysicsWorld {
      * @returns Current physics tick
      */
     public getCurrentTick(): number {
-        return this.lastProcessedTick;
+        return this.physicsWorld.getCurrentTick();
     }
 
     /**

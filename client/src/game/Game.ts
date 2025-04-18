@@ -102,7 +102,10 @@ export class Game {
                 team: this.team 
             });
             console.log("Joined room:", this.room, "Team:", this.team, "Vehicle Type:", this.vehicleType);
-            this.setupRoomHandlers();
+            this.room.onStateChange.once(() => {
+                console.log("Got initial serverTick:", this.room!.state.serverTick);
+                this.setupRoomHandlers();
+            });
         } catch (err) {
             console.error("Error joining room:", err);
         }
@@ -114,8 +117,8 @@ export class Game {
      */
     private setupRoomHandlers(): void {
         if (!this.room) return;
-        this.gameScene.getPhysicsWorld().initializeTick(this.room.state.serverTick);
         const $ = Colyseus.getStateCallbacks(this.room);
+        this.gameScene.getPhysicsWorld().initializeTick(this.room.state.serverTick);
         // Handle network quality measurements
         this.room.onMessage("pong", (data: { clientTime: number, serverTime: number, latency: number }) => {
             const now = Date.now();
@@ -179,7 +182,8 @@ export class Game {
                     linearVelocity: new Vector3(vehicle.linearVelocityX, vehicle.linearVelocityY, vehicle.linearVelocityZ),
                     angularVelocity: new Vector3(vehicle.angularVelocityX, vehicle.angularVelocityY, vehicle.angularVelocityZ),
                     tick: vehicle.tick,
-                    timestamp: vehicle.timestamp
+                    timestamp: vehicle.timestamp,
+                    lastProcessedInputTick: vehicle.lastProcessedInputTick
                 };
                 // Add vehicle state to the physics world
                 this.gameScene.getPhysicsWorld().addVehicleState(sessionId, updatedState);

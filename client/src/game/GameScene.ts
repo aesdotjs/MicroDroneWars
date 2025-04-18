@@ -33,8 +33,6 @@ export class GameScene {
     private game: Game;
     /** The local player's vehicle */
     private localPlayer: Vehicle | null = null;
-    /** Timestamp of the last update */
-    private lastTime: number = Date.now();
     /** Input manager for handling user input */
     private inputManager!: InputManager;
     /** Physics world for simulation */
@@ -349,12 +347,8 @@ export class GameScene {
     private update(): void {
         
         log('FPS', Math.round(this.engine.getFps()));
-        const currentTime = Date.now();
-        const deltaTime = (currentTime - this.lastTime);
-        this.lastTime = currentTime;
-        
         // Update physics world with input
-        this.physicsWorld.update(deltaTime);
+        this.physicsWorld.update(this.engine.getDeltaTime());
         
         // Update all vehicles' meshes with their physics states
         this.vehicles.forEach(vehicle => {

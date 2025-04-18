@@ -239,7 +239,7 @@ export class InputManager {
      * Updates all key bindings and returns the current input state.
      * @returns The current physics input state
      */
-    public getInput(): PhysicsInput {
+    public getInput(): any {
         // Update all key bindings
         Object.values(this.keys).forEach(binding => {
             binding.update();
@@ -263,8 +263,6 @@ export class InputManager {
             rollLeft: this.keys.rollLeft.getIsPressed(),
             rollRight: this.keys.rollRight.getIsPressed(),
             mouseDelta: currentMouseDelta,
-            timestamp: Date.now(),
-            tick: 0
         };
 
         return input;

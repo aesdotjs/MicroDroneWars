@@ -17,6 +17,8 @@ export interface PhysicsState {
     tick: number;
     /** Timestamp of the state in milliseconds */
     timestamp: number;
+    /** Last processed input tick */
+    lastProcessedInputTick?: number;
 }
 
 /**

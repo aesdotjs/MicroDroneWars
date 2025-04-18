@@ -1,8 +1,7 @@
-import { Engine, Scene, Vector3, Mesh, Quaternion, CannonJSPlugin, MeshBuilder, StandardMaterial, Color3 } from 'babylonjs';
+import { Engine, Scene, Vector3, Mesh, Quaternion, MeshBuilder, StandardMaterial, Color3 } from 'babylonjs';
 import * as CANNON from 'cannon';
 import { CollisionGroups, collisionMasks } from './CollisionGroups';
 import { CollisionEvent, VehicleCollisionEvent, PhysicsState, PhysicsConfig } from './types';
-import { PhysicsImpostor } from 'babylonjs';
 
 /**
  * Manages the physics simulation world for the game.
@@ -70,9 +69,9 @@ export class PhysicsWorld {
         this.scene.gravity = new Vector3(0, -9.81, 0);
         this.scene.collisionsEnabled = true;
         
-        // Initialize CannonJS plugin
-        const plugin = new CannonJSPlugin(true, 10, CANNON);
-        this.scene.enablePhysics(this.scene.gravity, plugin);
+        // // Initialize CannonJS plugin
+        // const plugin = new CannonJSPlugin(true, 10, CANNON);
+        // this.scene.enablePhysics(this.scene.gravity, plugin);
         
         console.log('Physics initialized:', {
             hasPhysics: this.scene.isPhysicsEnabled(),
@@ -127,24 +126,23 @@ export class PhysicsWorld {
             this.groundMesh.checkCollisions = true;
             this.groundMesh.receiveShadows = true;
 
-            // Add collision shape to mesh
-            this.groundMesh.physicsImpostor = new PhysicsImpostor(
-                this.groundMesh,
-                PhysicsImpostor.BoxImpostor,
-                { 
-                    mass: 0, 
-                    restitution: 0.3, 
-                    friction: 0.5
-                },
-                this.scene
-            );
+            // // Add collision shape to mesh
+            // this.groundMesh.physicsImpostor = new PhysicsImpostor(
+            //     this.groundMesh,
+            //     PhysicsImpostor.BoxImpostor,
+            //     { 
+            //         mass: 0, 
+            //         restitution: 0.3, 
+            //         friction: 0.5
+            //     },
+            //     this.scene
+            // );
 
             console.log('Ground mesh created:', {
                 size: { width: 200, height: 200 },
                 position: this.groundMesh.position,
                 hasMaterial: !!this.groundMesh.material,
                 hasPhysicsImpostor: !!this.groundMesh.physicsImpostor,
-                physicsImpostorType: this.groundMesh.physicsImpostor?.type
             });
         }
     }
@@ -230,8 +228,14 @@ export class PhysicsWorld {
      * Updates the physics simulation by one step.
      * @param deltaTime - The time step in seconds
      */
-    public update(deltaTime: number): void {
-        this.world.step(deltaTime);
+    public update(fixedTimeStep: number, deltaTime: number, maxSubsteps: number): void {
+        this.world.step(fixedTimeStep, deltaTime, maxSubsteps);
+        console.log('update', {
+            fixedTimeStep,
+            deltaTime,
+            maxSubsteps,
+            currentTick: this.currentTick
+        });
         this.currentTick++;
     }
 
@@ -358,25 +362,6 @@ export class PhysicsWorld {
     }
 
     /**
-     * Gets the current physics state of a vehicle.
-     * @param id - The ID of the vehicle to get the state for
-     * @returns The current physics state or null if the vehicle doesn't exist
-     */
-    public getVehicleState(id: string): PhysicsState | null {
-        const body = this.bodies.get(id);
-        if (!body) return null;
-
-        return {
-            position: new Vector3(body.position.x, body.position.y, body.position.z),
-            quaternion: new Quaternion(body.quaternion.x, body.quaternion.y, body.quaternion.z, body.quaternion.w),
-            linearVelocity: new Vector3(body.velocity.x, body.velocity.y, body.velocity.z),
-            angularVelocity: new Vector3(body.angularVelocity.x, body.angularVelocity.y, body.angularVelocity.z),
-            tick: this.currentTick,
-            timestamp: Date.now(),
-        };
-    }
-
-    /**
      * Cleans up physics resources and removes all bodies.
      */
     public cleanup(): void {
@@ -409,5 +394,13 @@ export class PhysicsWorld {
      */
     public getGroundMesh(): any {
         return this.groundMesh;
+    }
+
+    /**
+     * Sets the current simulation tick number.
+     * @param tick - The tick number to set
+     */
+    public setCurrentTick(tick: number): void {
+        this.currentTick = tick;
     }
 } 

@@ -14,10 +14,11 @@ export class ServerPhysicsWorld {
     private scene: Scene;
     private physicsWorld: PhysicsWorld;
     private controllers: Map<string, any> = new Map();
-    private accumulator: number = 0;
+    // private accumulator: number = 0;
     private readonly FIXED_TIME_STEP: number = 1/60;
-    private readonly MAX_ACCUMULATED_TIME: number = this.FIXED_TIME_STEP * 3;
-    private readonly MIN_ACCUMULATED_TIME: number = 0.0001;
+    // private readonly MAX_SUBSTEPS: number = 3;
+    // private readonly MAX_ACCUMULATED_TIME: number = this.FIXED_TIME_STEP * 3;
+    // private readonly MIN_ACCUMULATED_TIME: number = 0.0001;
     private lastProcessedInputs: Map<string, number> = new Map();
     private inputBuffers: Map<string, PhysicsInput[]> = new Map();
     private readonly MAX_INPUT_BUFFER_SIZE = 60; // 1 second worth of inputs at 60fps
@@ -74,9 +75,9 @@ export class ServerPhysicsWorld {
     public addInput(id: string, input: PhysicsInput): void {
         const buffer = this.inputBuffers.get(id);
         if (buffer) {
-            if (input.tick <= 0 || isNaN(input.tick)) {
-                input.tick = this.physicsWorld.getCurrentTick();
-            }
+            // if (input.tick <= 0 || isNaN(input.tick)) {
+            //     input.tick = this.physicsWorld.getCurrentTick();
+            // }
             buffer.push(input);
             // Keep buffer size reasonable
             while (buffer.length > this.MAX_INPUT_BUFFER_SIZE) {
@@ -93,25 +94,25 @@ export class ServerPhysicsWorld {
      */
     public update(deltaTime: number, state: State): void {
         // Add frame time to accumulator
-        this.accumulator += deltaTime;
+        // this.accumulator += deltaTime;
 
-        // Prevent accumulator from growing too large
-        if (this.accumulator > this.MAX_ACCUMULATED_TIME) {
-            this.accumulator = this.MAX_ACCUMULATED_TIME;
-        }
+        // // Prevent accumulator from growing too large
+        // if (this.accumulator > this.MAX_ACCUMULATED_TIME) {
+        //     this.accumulator = this.MAX_ACCUMULATED_TIME;
+        // }
 
-        // Process fixed timestep updates
-        let steps = 0;
-        while (this.accumulator >= this.FIXED_TIME_STEP && steps < 3) {
-            this.processFixedUpdate(state);
-            this.accumulator -= this.FIXED_TIME_STEP;
-            steps++;
-        }
+        // // Process fixed timestep updates
+        // let steps = 0;
+        // while (this.accumulator >= this.FIXED_TIME_STEP && steps < this.MAX_SUBSTEPS) {
+        this.processFixedUpdate(state);
+        //     this.accumulator -= this.FIXED_TIME_STEP;
+        //     steps++;
+        // }
 
-        // Reset accumulator if it gets too small
-        if (this.accumulator < this.MIN_ACCUMULATED_TIME) {
-            this.accumulator = 0;
-        }
+        // // Reset accumulator if it gets too small
+        // if (this.accumulator < this.MIN_ACCUMULATED_TIME) {
+        //     this.accumulator = 0;
+        // }
     }
 
     /**
@@ -168,7 +169,7 @@ export class ServerPhysicsWorld {
         });
 
         // Step physics world
-        this.physicsWorld.update(this.FIXED_TIME_STEP);
+        this.physicsWorld.update(this.FIXED_TIME_STEP, this.FIXED_TIME_STEP, 1);
 
         // Update flag positions if carried
         state.flags.forEach(flag => {
