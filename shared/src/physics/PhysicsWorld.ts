@@ -223,6 +223,8 @@ export class PhysicsWorld {
     public getWorld(): CANNON.World {
         return this.world;
     }
+    
+    
 
     /**
      * Updates the physics simulation by one step.
@@ -230,12 +232,6 @@ export class PhysicsWorld {
      */
     public update(fixedTimeStep: number, deltaTime: number, maxSubsteps: number): void {
         this.world.step(fixedTimeStep, deltaTime, maxSubsteps);
-        console.log('update', {
-            fixedTimeStep,
-            deltaTime,
-            maxSubsteps,
-            currentTick: this.currentTick
-        });
         this.currentTick++;
     }
 

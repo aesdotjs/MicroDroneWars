@@ -36,8 +36,10 @@ export class PhysicsState extends Schema {
     @type("number") tick = 0;
     /** Timestamp of the state in milliseconds */
     @type("number") timestamp = 0;
+    /** Last processed input timestamp */
+    @type("number") lastProcessedInputTimestamp = 0;
     /** Last processed input tick */
-    @type("number") lastProcessedInputTick: number = 0;
+    @type("number") lastProcessedInputTick = 0;
 }
 
 /**

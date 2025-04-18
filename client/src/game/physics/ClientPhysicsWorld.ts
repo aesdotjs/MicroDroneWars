@@ -33,12 +33,9 @@ export class ClientPhysicsWorld {
     private localPlayerId: string = '';
     /** Fixed time step for physics updates */
     private fixedTimeStep: number = 1/60;
-    /** Fixed time step in milliseconds */
-    private fixedTimeStepMs: number = 1000 / 60;
-    /** Accumulator for fixed time step updates */
-    private accumulator: number = 0;
     /** Current network latency in milliseconds */
     private networkLatency: number = 0;
+    private physicsInterval: NodeJS.Timeout | null = null;
 
     // Update properties for improved networking
     private pendingInputs: PhysicsInput[] = []; // Renamed from inputBuffer for clarity
@@ -49,7 +46,11 @@ export class ClientPhysicsWorld {
     private readonly MIN_INTERPOLATION_DELAY = 50; // Minimum delay in ms
     private readonly MAX_INTERPOLATION_DELAY = 200; // Maximum delay in ms
     private readonly QUALITY_TO_DELAY_FACTOR = 0.5; // How much quality affects delay
-    private readonly MAX_SUBSTEPS = 3;
+    private accumulatedTime: number = 0;
+    private readonly RECONCILIATION_POSITION_THRESHOLD = 2.0; // Threshold for position reconciliation
+    private readonly RECONCILIATION_ROTATION_THRESHOLD = Math.PI * (10/180); // Threshold for rotation reconciliation in radians
+    private readonly RECONCILIATION_POSITION_SMOOTHING = 0.2; // Smoothing factor for corrections
+    private readonly RECONCILIATION_ROTATION_SMOOTHING = 0.3; // Smoothing factor for corrections
     /**
      * Creates a new ClientPhysicsWorld instance.
      * @param engine - The Babylon.js engine
@@ -62,6 +63,7 @@ export class ClientPhysicsWorld {
         this.physicsWorld = new PhysicsWorld(this.engine, this.scene, {
             gravity: 9.81,
         });
+        // this.startPhysicsLoop();
         this.controllers = new Map();
         this.stateBuffers = new Map();
         this.interpolationConfig = {
@@ -118,58 +120,60 @@ export class ClientPhysicsWorld {
         }
     }
 
+    // private startPhysicsLoop(): void {
+    //     this.physicsInterval = setInterval(() => {
+    //         this.step(this.engine.getDeltaTime() / 1000);
+    //     }, 1000 / 60);
+    // }
+
+    public update(deltaTime: number): void {
+        this.accumulatedTime += deltaTime;
+        while (this.accumulatedTime >= this.fixedTimeStep) {
+            this.step(this.fixedTimeStep);
+            this.accumulatedTime -= this.fixedTimeStep;
+        }
+    }
+
     /**
      * Updates physics simulation and handles state interpolation.
      * @param deltaTime - Time elapsed since last update in milliseconds
      * @param input - Current input state
      */
-    public update(deltaTime: number): void {
+    public step(deltaTime: number): void {
         const startTime = performance.now();
-        
-        // Phase 1: Physics & Input
-        this.accumulator += deltaTime;
-        let steps = 0;
-        
-        while (this.accumulator >= this.fixedTimeStepMs && steps < this.MAX_SUBSTEPS) {
-            const physicsStartTime = performance.now();
-            log('Tick', this.physicsWorld.getCurrentTick());
-            // Get and process local input
-            const input = this.game.getGameScene().getInputManager().getInput();
-            if (input) {
-                // Scale mouse delta by fixed timestep
-                // if (input.mouseDelta) {
-                //     input.mouseDelta.x *= this.fixedTimeStep;
-                //     input.mouseDelta.y *= this.fixedTimeStep;
-                // }
-                const finalInput: PhysicsInput = {
-                    ...input,
-                    timestamp: Date.now(),
-                    tick: this.physicsWorld.getCurrentTick()
-                }
-                // Add to pending inputs with current tick and timestamp in milliseconds
-                this.pendingInputs.push(finalInput);
-                
-                // Update local player immediately
-                const localController = this.controllers.get(this.localPlayerId);
-                if (localController) {
-                    localController.update(this.fixedTimeStep, input);
-                }
-                
-                // Send to server
-                this.game.sendMovementUpdate(input);
+        // Get and process local input
+        const isIdle = this.game.getGameScene().getInputManager().isIdle();
+        const input = this.game.getGameScene().getInputManager().getInput();
+        if (input) {
+            // Scale mouse delta by fixed timestep
+            // if (input.mouseDelta) {
+            //     input.mouseDelta.x *= this.fixedTimeStep;
+            //     input.mouseDelta.y *= this.fixedTimeStep;
+            // }
+            const finalInput: PhysicsInput = {
+                ...input,
+                timestamp: Date.now(),
+                tick: this.physicsWorld.getCurrentTick()
             }
-            
-            // Step physics world for all controllers
-            this.physicsWorld.update(this.fixedTimeStepMs / 1000, this.fixedTimeStepMs / 1000, 1);
-            this.accumulator -= this.fixedTimeStepMs;
-            steps++;
+            this.pendingInputs.push(finalInput);
+            if(!isIdle) {
+                this.game.sendMovementUpdate(finalInput);
+            }
 
-            const physicsEndTime = performance.now();
-            logPerformance('Physics Update', physicsEndTime - physicsStartTime);
+            if (finalInput.yawLeft) console.log(`→ send input timestamp=${finalInput.timestamp}`);
+            
+            // Update local player immediately
+            const localController = this.controllers.get(this.localPlayerId);
+            if (localController) {
+                localController.update(this.fixedTimeStep, finalInput);
+            }
+            console.log(`[Client] tick=${this.physicsWorld.getCurrentTick()}  → sending input.tick=${finalInput.tick}`);
+            console.log(`[Client] pendingInputs.length before send: ${this.pendingInputs.length}`);
         }
 
-        // Phase 2: Interpolation
-        this.interpolateRemotes();
+        this.physicsWorld.update(this.fixedTimeStep, this.fixedTimeStep, 1);
+
+        log('Tick', this.physicsWorld.getCurrentTick());
 
         const endTime = performance.now();
         logPerformance('Total Physics Update', endTime - startTime);
@@ -190,30 +194,78 @@ export class ClientPhysicsWorld {
             // Get current client state
             const clientState = controller.getState();
             if (!clientState) return;
-            
-            // Snap to server state
+
+            // Calculate position and rotation errors
+            // const positionError = state.position.subtract(clientState.position).length();
+            // const dot = Math.abs(Quaternion.Dot(clientState.quaternion, state.quaternion));
+            // const rotationError = Math.acos(Math.min(1, dot));  // direct angle
+            // if (currentState) {
+                // Check if either error exceeds threshold
+                // if (positionError > this.RECONCILIATION_POSITION_THRESHOLD) {
+                
+                // console.log("reconciling:", {
+                //     posError: positionError.toFixed(3),
+                //     lastProcessed: state.lastProcessedInputTimestamp,
+                //     pending: this.pendingInputs.length
+                // });
+
+                // // Apply smooth corrections instead of hard snap
+     
+                //     const newPosition = Vector3.Lerp(
+                //         currentState.position,
+                //         state.position,
+                //         this.RECONCILIATION_POSITION_SMOOTHING
+                //     );
+
+                //     // Update controller with smoothed state
+                //     controller.setState({
+                //         ...state,
+                //         position: newPosition,
+                //     });
+                //     return;
+                // }
+                // if (rotationError > this.RECONCILIATION_ROTATION_THRESHOLD) {
+                //     console.log("reconciling rotation:", {
+                //         rotError: rotationError.toFixed(3),
+                //         lastProcessed: state.lastProcessedInputTimestamp,
+                //         pending: this.pendingInputs.length
+                //     });
+                //     const newQuaternion = Quaternion.Slerp(
+                //         currentState.quaternion,
+                //         state.quaternion,
+                //         this.RECONCILIATION_ROTATION_SMOOTHING
+                //     );
+                //     controller.setState({
+                //         ...state,
+                //         quaternion: newQuaternion
+                //     });
+                //     return;
+                // }
+                // controller.setState(state);
+            // }
             controller.setState(state);
-            
             // Replay unprocessed inputs
             const remaining: PhysicsInput[] = [];
             for (const input of this.pendingInputs) {
-                log('input',`${state.lastProcessedInputTick}, ${input.tick}`); 
+                log('input',`${state.lastProcessedInputTimestamp}, ${input.tick}`); 
+                if (input.yawLeft) console.log(`← server timestamp=${state.timestamp}, lastProcessedInputTimestamp=${state.lastProcessedInputTimestamp}, input=${input.timestamp}`);
                 const lastProcessedInputTick = state.lastProcessedInputTick || state.tick;
+                this.pendingInputs = this.pendingInputs.filter(i => i.tick > lastProcessedInputTick);
                 if (input.tick > lastProcessedInputTick) {
                     controller.update(this.fixedTimeStep, input);
                 } else {
-                    // this input has now been processed by the server
                     remaining.push(input);
                 }
             }
             this.pendingInputs = remaining;
+            // this.step(this.engine.getDeltaTime());
         } else {
             // Phase 3: Buffer remote states for interpolation
             const buffers = this.stateBuffers.get(id);
             if (buffers) {
                 buffers.push({
                     state: state,
-                    timestamp: Date.now(),
+                    timestamp: state.timestamp,
                     tick: state.tick
                 });
                 
@@ -225,8 +277,8 @@ export class ClientPhysicsWorld {
         }
     }
 
-    private interpolateRemotes(): void {
-        const now = Date.now();
+    public interpolateRemotes(): void {
+        const now = Date.now() - this.networkLatency;
         const targetTime = now - this.currentInterpolationDelay;
         
         this.stateBuffers.forEach((buffer, id) => {
@@ -252,7 +304,9 @@ export class ClientPhysicsWorld {
                     linearVelocity: Vector3.Lerp(a.state.linearVelocity, b.state.linearVelocity, t),
                     angularVelocity: Vector3.Lerp(a.state.angularVelocity, b.state.angularVelocity, t),
                     tick: b.state.tick,
-                    timestamp: b.state.timestamp
+                    timestamp: b.state.timestamp,
+                    lastProcessedInputTimestamp: b.state.lastProcessedInputTimestamp,
+                    lastProcessedInputTick: b.state.lastProcessedInputTick
                 });
             }
             
@@ -279,6 +333,9 @@ export class ClientPhysicsWorld {
         this.controllers.forEach(controller => {
             controller.cleanup();
         });
+        if (this.physicsInterval) {
+            clearInterval(this.physicsInterval);
+        }
         this.controllers.clear();
         this.stateBuffers.clear();
         this.physicsWorld.cleanup();

@@ -183,6 +183,7 @@ export class Game {
                     angularVelocity: new Vector3(vehicle.angularVelocityX, vehicle.angularVelocityY, vehicle.angularVelocityZ),
                     tick: vehicle.tick,
                     timestamp: vehicle.timestamp,
+                    lastProcessedInputTimestamp: vehicle.lastProcessedInputTimestamp,
                     lastProcessedInputTick: vehicle.lastProcessedInputTick
                 };
                 // Add vehicle state to the physics world

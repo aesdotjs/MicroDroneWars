@@ -111,6 +111,7 @@ export class MicroDroneRoom extends Room<State> {
         vehicle.positionY = 10;
         vehicle.positionZ = 0;
         vehicle.vehicleType = options.vehicleType;
+        vehicle.lastProcessedInputTimestamp = Date.now();
         vehicle.lastProcessedInputTick = this.physicsWorld.getCurrentTick();
         vehicle.tick = this.physicsWorld.getCurrentTick();
         
@@ -171,7 +172,8 @@ export class MicroDroneRoom extends Room<State> {
         
         // Update last processed input ticks for each vehicle
         this.state.vehicles.forEach((vehicle, id) => {
-            vehicle.lastProcessedInputTick = this.physicsWorld.getLastProcessedInputTick(id);
+            vehicle.lastProcessedInputTimestamp = Date.now();
+            vehicle.lastProcessedInputTick = this.physicsWorld.getCurrentTick();
         });
     }
 }

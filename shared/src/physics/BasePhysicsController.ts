@@ -38,7 +38,10 @@ export abstract class BasePhysicsController {
     protected tick: number = 0;
     /** Current physics simulation timestamp */
     protected timestamp: number = 0;
-
+    /** Last processed input timestamp */
+    protected lastProcessedInputTimestamp: number = Date.now();
+    /** Last processed input tick */
+    protected lastProcessedInputTick: number = 0;
 
     /**
      * Creates a new BasePhysicsController instance.
@@ -132,7 +135,9 @@ export abstract class BasePhysicsController {
                 this.body.angularVelocity.z
             ),
             tick: this.tick,
-            timestamp: this.timestamp
+            timestamp: this.timestamp,
+            lastProcessedInputTimestamp: this.lastProcessedInputTimestamp,
+            lastProcessedInputTick: this.lastProcessedInputTick
         };
     }
 
@@ -168,6 +173,8 @@ export abstract class BasePhysicsController {
         );
         this.tick = state.tick;
         this.timestamp = state.timestamp;
+        this.lastProcessedInputTimestamp = state.lastProcessedInputTimestamp || Date.now();
+        this.lastProcessedInputTick = state.lastProcessedInputTick || this.tick;
     }
 
     /**

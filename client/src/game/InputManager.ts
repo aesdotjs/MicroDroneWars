@@ -265,6 +265,17 @@ export class InputManager {
             mouseDelta: currentMouseDelta,
         };
 
+        console.log(
+            '[InputManager] →',
+            JSON.stringify({
+              forward: input.forward,
+              backward: input.backward,
+              left: input.left,
+              right: input.right,
+              mouse: input.mouseDelta,
+            })
+          );
+
         return input;
     }
 
@@ -274,6 +285,23 @@ export class InputManager {
     public resetMouseDelta(): void {
         this.mouseDelta.x = 0;
         this.mouseDelta.y = 0;
+    }
+
+    public isIdle(): boolean {
+        return !this.keys.forward.getIsPressed() &&
+               !this.keys.backward.getIsPressed() &&
+               !this.keys.left.getIsPressed() &&
+               !this.keys.right.getIsPressed() &&
+               !this.keys.pitchUp.getIsPressed() &&
+               !this.keys.pitchDown.getIsPressed() &&
+               !this.keys.yawLeft.getIsPressed() &&
+               !this.keys.yawRight.getIsPressed() &&
+               !this.keys.rollLeft.getIsPressed() &&
+               !this.keys.rollRight.getIsPressed() &&
+               !this.keys.fire.getIsPressed() &&
+               !this.keys.zoom.getIsPressed() &&
+               !this.mouseDelta.x &&
+               !this.mouseDelta.y;
     }
 
     /**

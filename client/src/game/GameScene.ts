@@ -235,7 +235,9 @@ export class GameScene {
                     linearVelocity: new Vector3(vehicle.linearVelocityX, vehicle.linearVelocityY, vehicle.linearVelocityZ),
                     angularVelocity: new Vector3(vehicle.angularVelocityX, vehicle.angularVelocityY, vehicle.angularVelocityZ),
                     tick: vehicle.tick,
-                    timestamp: vehicle.timestamp
+                    timestamp: vehicle.timestamp,
+                    lastProcessedInputTimestamp: vehicle.lastProcessedInputTimestamp,
+                    lastProcessedInputTick: vehicle.lastProcessedInputTick
                 };
                 gameVehicle.updateState(physicsState);
                 this.vehicles.set(sessionId, gameVehicle);
@@ -325,7 +327,7 @@ export class GameScene {
             
             this.camera.position = cameraPosition;
             this.camera.setTarget(cameraTarget);
-            this.camera.attachControl(this.engine.getRenderingCanvas(), true);
+            // this.camera.attachControl(this.engine.getRenderingCanvas(), true);
         }
 
         // Set local player ID in physics world using vehicle.id
@@ -345,11 +347,9 @@ export class GameScene {
      * Handles physics updates, input processing, and camera movement.
      */
     private update(): void {
-        
+        this.physicsWorld.update(this.engine.getDeltaTime() / 1000);
         log('FPS', Math.round(this.engine.getFps()));
-        // Update physics world with input
-        this.physicsWorld.update(this.engine.getDeltaTime());
-        
+        this.physicsWorld.interpolateRemotes();
         // Update all vehicles' meshes with their physics states
         this.vehicles.forEach(vehicle => {
             const controller = this.physicsWorld.controllers.get(vehicle.id);
