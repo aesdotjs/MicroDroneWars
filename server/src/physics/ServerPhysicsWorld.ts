@@ -5,9 +5,7 @@ import { Engine, Scene, NullEngine, Vector3, Quaternion } from 'babylonjs';
 import { State, Vehicle } from '../schemas';
 import { DroneSettings, PlaneSettings } from '@shared/physics/VehicleSettings';
 import { BasePhysicsController } from '@shared/physics/BasePhysicsController';
-let stepCount = 0;
-let lastStepLog = performance.now();
-let lastFire = performance.now();
+
 /**
  * Handles server-side physics simulation for the game.
  * Manages vehicle physics controllers and updates game state based on physics calculations.
@@ -51,9 +49,9 @@ export class ServerPhysicsWorld {
         );
         this.controllers.set(id, controller);
         this.inputBuffers.set(id, []);
-        const lastProcessedInputTimestamp = vehicle.lastProcessedInputTimestamp || Date.now();
+        const lastProcessedInputTimestamp = Date.now();
         this.lastProcessedInputTimestamps.set(id, lastProcessedInputTimestamp);
-        this.lastProcessedInputTicks.set(id, vehicle.lastProcessedInputTick);
+        this.lastProcessedInputTicks.set(id, this.physicsWorld.getCurrentTick());
         const initialState = {
             position: new Vector3(vehicle.positionX, vehicle.positionY, vehicle.positionZ),
             quaternion: new Quaternion(0, 0, 0, 1),
@@ -62,7 +60,7 @@ export class ServerPhysicsWorld {
             timestamp: Date.now(),
             tick: this.physicsWorld.getCurrentTick(),
             lastProcessedInputTimestamp: lastProcessedInputTimestamp,
-            lastProcessedInputTick: this.lastProcessedInputTicks.get(id) || this.physicsWorld.getCurrentTick()
+            lastProcessedInputTick: this.physicsWorld.getCurrentTick()
         };
         console.log('Server: Initial state:', initialState);
         controller.setState(initialState);
@@ -85,7 +83,6 @@ export class ServerPhysicsWorld {
             //     input.tick = this.physicsWorld.getCurrentTick();
             // }
             buffer.push(input);
-            console.log(`[Server][addInput] for ${id}: tick=${input.tick} timestamp=${input.timestamp}`);
             // Keep buffer size reasonable
             while (buffer.length > this.MAX_INPUT_BUFFER_SIZE) {
                 buffer.shift();
@@ -128,11 +125,8 @@ export class ServerPhysicsWorld {
      * @param state - Current game state to update
      */
     private processFixedUpdate = (deltaTime: number, state: State) => {
-        stepCount++;
-        const now = performance.now();
-        const realDt = now - lastFire;
-        lastFire = now;
-        const t0 = performance.now();
+        // Step physics world
+        this.physicsWorld.update(this.FIXED_TIME_STEP, this.FIXED_TIME_STEP, 1);
         // Process all vehicles' inputs
         state.vehicles.forEach((vehicle, id) => {
             const controller = this.controllers.get(id);
@@ -162,18 +156,11 @@ export class ServerPhysicsWorld {
             if (controller) {
                 // Get all unprocessed inputs
                 let lastProcessedTick = this.lastProcessedInputTicks.get(id) ?? 0;
-                // console.log(`[Server][processFixed] ${id}: lastProcessedTick=${lastProcessedTick}, buffer=[${inputBuffer.map(i=>i.tick).join(',')}]`);
                 const buffer = inputBuffer.sort((a, b) => a.tick - b.tick);
-                if (buffer.length > 0) console.log(`[Server][processFixed] ${id}: lastProcessedTick=${lastProcessedTick}, buffer=[${inputBuffer.map(i=>i.tick).join(',')}]`);
                 // // Process each input in order
                 let processedCount = 0;
                 for (const input of buffer) {
                     if (input.tick > lastProcessedTick) {
-                        // Scale mouse delta by fixed timestep to maintain consistent sensitivity
-                        if (input.mouseDelta) {
-                            input.mouseDelta.x *= this.FIXED_TIME_STEP;
-                            input.mouseDelta.y *= this.FIXED_TIME_STEP;
-                        }
                         controller.update(this.FIXED_TIME_STEP, input);
                         lastProcessedTick = input.tick;
                     }
@@ -182,9 +169,10 @@ export class ServerPhysicsWorld {
                 // if no inputs, send idle input
                 if (processedCount === 0) {
                     controller.update(this.FIXED_TIME_STEP, idleInput);
-                }             
-                this.lastProcessedInputTicks.set(id, lastProcessedTick);
-                this.lastProcessedInputTimestamps.set(id, Date.now());
+                } else {
+                    this.lastProcessedInputTicks.set(id, lastProcessedTick);
+                    this.lastProcessedInputTimestamps.set(id, Date.now());
+                }           
 
                 buffer.splice(0, processedCount);
 
@@ -195,8 +183,6 @@ export class ServerPhysicsWorld {
                 
                 // this.inputBuffers.set(id, unprocessedInputs);
                 this.inputBuffers.set(id, buffer);
-
-                // Update vehicle state in the game state
                 const physicsState = controller.getState();
                 if (physicsState) {
                     vehicle.positionX = physicsState.position.x;
@@ -214,31 +200,12 @@ export class ServerPhysicsWorld {
                     vehicle.angularVelocityZ = physicsState.angularVelocity.z;
                     vehicle.tick = this.physicsWorld.getCurrentTick();
                     vehicle.timestamp = Date.now();
-                    vehicle.lastProcessedInputTimestamp = this.lastProcessedInputTimestamps.get(id) || Date.now();
-                    vehicle.lastProcessedInputTick = this.lastProcessedInputTicks.get(id) || this.physicsWorld.getCurrentTick();
+                    vehicle.lastProcessedInputTimestamp = this.lastProcessedInputTimestamps.get(id) ?? Date.now();
+                    vehicle.lastProcessedInputTick = this.lastProcessedInputTicks.get(id) ?? this.physicsWorld.getCurrentTick();
                 }
             }
         });
         
-        const t1 = performance.now();
-        const cost = t1 - t0;
-        const t2 = performance.now();
-        // Step physics world
-        this.physicsWorld.update(this.FIXED_TIME_STEP, this.FIXED_TIME_STEP, 1);
-        const t3 = performance.now();
-        const cost2 = t3 - t2;
-        if (now - lastStepLog > 1000) {
-            console.log(
-                `[Server][SIM] ` +
-                `requested dt: ${deltaTime.toFixed(2)} ms, ` +
-                `actual dt: ${realDt.toFixed(2)} ms, ` +
-                `input cost: ${cost.toFixed(2)} ms, ` +
-                `update cost: ${cost2.toFixed(2)} ms, ` +
-                `ticks/sec: ${stepCount}`
-              );
-            stepCount = 0;
-            lastStepLog = now;
-        }
         // Update flag positions if carried
         state.flags.forEach(flag => {
             if (flag.carriedBy) {

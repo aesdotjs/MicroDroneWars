@@ -2,9 +2,10 @@
   "name": "microdrone-wars-server",
   "version": "1.0.0",
   "description": "MicroDrone Wars Game Server",
-  "main": "lib/index.js",
+  "main": "dist/index.js",
   "scripts": {
-    "start": "ts-node-dev -r tsconfig-paths/register --respawn --transpile-only src/index.ts",
+    "start": "ts-node -r tsconfig-paths/register dist/index.js",
+    "dev": "ts-node-dev --inspect -r tsconfig-paths/register --respawn --transpile-only -- src/index.ts",
     "build": "tsc",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

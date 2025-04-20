@@ -32,7 +32,7 @@ export class MicroDroneRoom extends Room<State> {
         this.state.serverTick = this.physicsWorld.getCurrentTick();
 
          // Set room options for faster connection
-        //  this.patchRate = 1000 / this.TICK_RATE; // 60 updates per second
+         this.patchRate = 1000 / this.TICK_RATE; // 60 updates per second
          this.setSimulationInterval((deltaTime) =>  {
             this.update(deltaTime);
             this.broadcastPatch();
@@ -172,10 +172,10 @@ export class MicroDroneRoom extends Room<State> {
         this.physicsWorld.update(deltaTime, this.state);
         // Update server tick in state
         this.state.serverTick = this.physicsWorld.getCurrentTick();
-        // Update last processed input ticks for each vehicle (attention ???)
-        this.state.vehicles.forEach((vehicle, id) => {
-            vehicle.lastProcessedInputTimestamp = Date.now();
-            vehicle.lastProcessedInputTick = this.physicsWorld.getCurrentTick();
-        });
+        // // Update last processed input ticks for each vehicle (attention ???)
+        // this.state.vehicles.forEach((vehicle, id) => {
+        //     vehicle.lastProcessedInputTimestamp = Date.now();
+        //     vehicle.lastProcessedInputTick = this.physicsWorld.getCurrentTick();
+        // });
     }
 }

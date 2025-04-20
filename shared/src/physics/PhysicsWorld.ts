@@ -70,7 +70,7 @@ export class PhysicsWorld {
     private initializePhysics(): void {
         // Enable physics in the scene
         // this.scene.gravity = new Vector3(0, -9.81, 0);
-        this.scene.collisionsEnabled = true;
+        // this.scene.collisionsEnabled = true;
         
         // // Initialize CannonJS plugin
         // const plugin = new CannonJSPlugin(true, 10, CANNON);
@@ -164,7 +164,6 @@ export class PhysicsWorld {
         const vehicleBody = isGroundCollision ? 
             (bodyA === this.groundBody ? bodyB : bodyA) : 
             null;
-        console.log('Collision event:', event);
         if (isGroundCollision && vehicleBody) {
             const impactVelocity = event.target.contacts[0]?.getImpactVelocityAlongNormal();
             console.log('Ground collision:', {
@@ -234,18 +233,18 @@ export class PhysicsWorld {
      * @param deltaTime - The time step in seconds
      */
     public update(fixedTimeStep: number, deltaTime: number, maxSubsteps: number): void {
-        const t0 = performance.now();
+        // const t0 = performance.now();
         this.world.step(fixedTimeStep, deltaTime, maxSubsteps);
-        const t1 = performance.now();
-        const cost = t1 - t0;
         this.currentTick++;
-        stepCount++;
-        const now = performance.now();
-        if (now - lastStepLog > 1000) {
-            console.log(`[Physics] Step count: ${stepCount} cost: ${cost.toFixed(2)} ms`);
-            stepCount = 0;
-            lastStepLog = now;
-        }
+        // const t1 = performance.now();
+        // const cost = t1 - t0;
+        // stepCount++;
+        // const now = performance.now();
+        // if (now - lastStepLog > 1000) {
+        //     console.log(`[Physics] Step count: ${stepCount} cost: ${cost.toFixed(2)} ms`);
+        //     stepCount = 0;
+        //     lastStepLog = now;
+        // }
     }
 
     /**

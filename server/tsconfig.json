@@ -9,12 +9,9 @@
     "emitDecoratorMetadata": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "outDir": "lib",
+    "outDir": "dist",
     "baseUrl": ".",
-    "rootDirs": [
-      "./src",
-      "../shared/src"
-    ],
+    "rootDir": "../",
     "paths": {
       "@shared/*": ["../shared/src/*"]
     },
@@ -22,5 +19,5 @@
     "resolveJsonModule": true
   },
   "include": ["src/**/*", "../shared/src/**/*"],
-  "exclude": ["node_modules", "**/*.spec.ts"]
+  "exclude": ["node_modules", "**/*.spec.ts", "dist"]
 } 

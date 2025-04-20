@@ -13,14 +13,6 @@ import { WebSocket } from "ws";
 const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 2567;
 const app = express();
 
-// Only serve static files in production
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, "../../client/dist")));
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, "../../client/dist/index.html"));
-  });
-}
-
 /**
  * Creates the HTTP server and Colyseus game server.
  * Configures development settings and room handlers.
@@ -31,10 +23,6 @@ const gameServer = new Server({
   // Development settings
   pingInterval: 0, // Disable ping interval during development
   pingMaxRetries: 3,
-  verifyClient: (info: { req: http.IncomingMessage; secure: boolean }, next: (result: boolean) => void) => {
-    // Accept all connections during development
-    next(true);
-  }
 });
 
 /**
@@ -49,7 +37,7 @@ gameServer.define('microdrone_room', MicroDroneRoom, {
 // Make sure to never call the `simulateLatency()` method in production.
 if (process.env.NODE_ENV !== "production") {
   // simulate 200ms latency between server and client.
-  // gameServer.simulateLatency(200);
+  gameServer.simulateLatency(200);
 }
 
 /**

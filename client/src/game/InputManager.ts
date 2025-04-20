@@ -166,7 +166,7 @@ export class InputManager {
      */
     private handleMouseMove(event: MouseEvent): void {
         // Check both hasFocus and isPointerLocked since we want to accept input when either is true
-        if (!this.hasFocus && !this.isPointerLocked) {
+        if (!this.hasFocus || !this.isPointerLocked) {
             return;
         }
 
@@ -291,8 +291,8 @@ export class InputManager {
                !this.keys.down.getIsPressed() &&
                !this.keys.fire.getIsPressed() &&
                !this.keys.zoom.getIsPressed() &&
-               !this.mouseDelta.x &&
-               !this.mouseDelta.y;
+               this.mouseDelta.x === 0 && 
+               this.mouseDelta.y === 0;
     }
 
     /**
