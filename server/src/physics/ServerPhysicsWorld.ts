@@ -80,7 +80,7 @@ export class ServerPhysicsWorld {
         const buffer = this.inputBuffers.get(id);
         if (buffer) {
             buffer.push(input);
-            console.log(`[Server] [addInput] inputtick=${input.tick} buffer.ticks=${buffer.map(i => i.tick).join(', ')}`)
+            // console.log(`[Server] [addInput] inputtick=${input.tick} buffer.ticks=${buffer.map(i => i.tick).join(', ')}`)
             // Keep buffer size reasonable
             while (buffer.length > this.MAX_INPUT_BUFFER_SIZE) {
                 buffer.shift();
@@ -132,7 +132,7 @@ export class ServerPhysicsWorld {
                 for (const input of buffer) {
                     if (input.tick > lastProcessedTick) {
                         controller.update(this.FIXED_TIME_STEP, input);
-                        console.log(`[Server] [update] processed input tick=${input.tick} lastProcessedTick=${lastProcessedTick}`)
+                        // console.log(`[Server] [update] processed input tick=${input.tick} lastProcessedTick=${lastProcessedTick}`)
                         lastProcessedTick = input.tick;
                     }
                     processedCount++;

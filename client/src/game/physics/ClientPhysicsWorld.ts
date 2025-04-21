@@ -36,6 +36,7 @@ export class ClientPhysicsWorld {
     private fixedTimeStep: number = 1/60;
     /** Current network latency in milliseconds */
     private networkLatency: number = 0;
+    private lastProcessedInputTick: number = 0;
     private physicsInterval: NodeJS.Timeout | null = null;
 
     // Update properties for improved networking
@@ -152,6 +153,11 @@ export class ClientPhysicsWorld {
             //     input.mouseDelta.x *= this.fixedTimeStep;
             //     input.mouseDelta.y *= this.fixedTimeStep;
             // }
+            const currentTick = this.physicsWorld.getCurrentTick();
+            if (currentTick === this.lastProcessedInputTick) {
+                // we already processed an input for this tick
+                return;
+            }
             const finalInput: PhysicsInput = {
                 ...input,
                 timestamp: Date.now(),
@@ -165,7 +171,8 @@ export class ClientPhysicsWorld {
             if (!isIdle) {
                 this.game.sendMovementUpdate(finalInput);
                 this.pendingInputs.push(finalInput);
-                console.log(`[Client] [step] queuing and sending input=${finalInput.tick}`);
+                this.lastProcessedInputTick = currentTick;
+                // console.log(`[Client] [step] queuing and sending input=${finalInput.tick}`);
             }
             const MAX_PENDING_INPUTS = 60;
             if (this.pendingInputs.length > MAX_PENDING_INPUTS) {
@@ -248,7 +255,7 @@ export class ClientPhysicsWorld {
             // }
             const lastProcessedInputTick = state.lastProcessedInputTick ?? state.tick;
             controller.setState(state);
-            if (this.pendingInputs.length > 0) console.log(`[Client][addVehicleState] lastprocessedInputTick=${lastProcessedInputTick}, pending.ticks=${this.pendingInputs.map(i => i.tick).join(', ')}`);
+            // if (this.pendingInputs.length > 0) console.log(`[Client][addVehicleState] lastprocessedInputTick=${lastProcessedInputTick}, pending.ticks=${this.pendingInputs.map(i => i.tick).join(', ')}`);
             // Replay unprocessed inputs
             const pendingInputs = this.pendingInputs.filter(i => i.tick > lastProcessedInputTick);
             for (const input of pendingInputs) {
