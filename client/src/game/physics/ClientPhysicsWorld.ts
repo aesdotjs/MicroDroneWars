@@ -165,6 +165,7 @@ export class ClientPhysicsWorld {
             if (!isIdle) {
                 this.game.sendMovementUpdate(finalInput);
                 this.pendingInputs.push(finalInput);
+                console.log(`[Client] [step] queuing and sending input=${finalInput.tick}`);
             }
             const MAX_PENDING_INPUTS = 60;
             if (this.pendingInputs.length > MAX_PENDING_INPUTS) {
@@ -247,7 +248,7 @@ export class ClientPhysicsWorld {
             // }
             const lastProcessedInputTick = state.lastProcessedInputTick ?? state.tick;
             controller.setState(state);
-            if (this.pendingInputs.length > 0) console.log('reconciled state', state, this.pendingInputs);
+            if (this.pendingInputs.length > 0) console.log(`[Client][addVehicleState] lastprocessedInputTick=${lastProcessedInputTick}, pending.ticks=${this.pendingInputs.map(i => i.tick).join(', ')}`);
             // Replay unprocessed inputs
             const pendingInputs = this.pendingInputs.filter(i => i.tick > lastProcessedInputTick);
             for (const input of pendingInputs) {

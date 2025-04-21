@@ -79,10 +79,8 @@ export class ServerPhysicsWorld {
     public addInput(id: string, input: PhysicsInput): void {
         const buffer = this.inputBuffers.get(id);
         if (buffer) {
-            // if (input.tick <= 0 || isNaN(input.tick)) {
-            //     input.tick = this.physicsWorld.getCurrentTick();
-            // }
             buffer.push(input);
+            console.log(`[Server] [addInput] inputtick=${input.tick} buffer.ticks=${buffer.map(i => i.tick).join(', ')}`)
             // Keep buffer size reasonable
             while (buffer.length > this.MAX_INPUT_BUFFER_SIZE) {
                 buffer.shift();
@@ -97,34 +95,6 @@ export class ServerPhysicsWorld {
      * @param state - Current game state to update
      */
     public update(deltaTime: number, state: State): void {
-        // Add frame time to accumulator
-        // this.accumulator += deltaTime;
-
-        // // Prevent accumulator from growing too large
-        // if (this.accumulator > this.MAX_ACCUMULATED_TIME) {
-        //     this.accumulator = this.MAX_ACCUMULATED_TIME;
-        // }
-
-        // // Process fixed timestep updates
-        // let steps = 0;
-        // while (this.accumulator >= this.FIXED_TIME_STEP && steps < this.MAX_SUBSTEPS) {
-        this.processFixedUpdate(deltaTime, state);
-        //     this.accumulator -= this.FIXED_TIME_STEP;
-        //     steps++;
-        // }
-
-        // // Reset accumulator if it gets too small
-        // if (this.accumulator < this.MIN_ACCUMULATED_TIME) {
-        //     this.accumulator = 0;
-        // }
-    }
-
-    /**
-     * Processes a single fixed timestep update.
-     * Handles vehicle inputs, physics simulation, and state updates.
-     * @param state - Current game state to update
-     */
-    private processFixedUpdate = (deltaTime: number, state: State) => {
         // Step physics world
         this.physicsWorld.update(this.FIXED_TIME_STEP, this.FIXED_TIME_STEP, 1);
         // Process all vehicles' inputs
@@ -162,6 +132,7 @@ export class ServerPhysicsWorld {
                 for (const input of buffer) {
                     if (input.tick > lastProcessedTick) {
                         controller.update(this.FIXED_TIME_STEP, input);
+                        console.log(`[Server] [update] processed input tick=${input.tick} lastProcessedTick=${lastProcessedTick}`)
                         lastProcessedTick = input.tick;
                     }
                     processedCount++;
@@ -218,6 +189,7 @@ export class ServerPhysicsWorld {
             }
         });
     }
+
 
     /**
      * Gets the current physics state of a vehicle.
