@@ -126,12 +126,38 @@ export interface CollisionEvent {
             getImpactVelocityAlongNormal: () => number;
             /** Gets the contact normal vector */
             getNormal: () => CANNON.Vec3;
+            /** Contact normal vector */
+            ni: CANNON.Vec3;
             /** Contact point on body A */
             ri: CANNON.Vec3;
             /** Contact point on body B */
             rj: CANNON.Vec3;
+            /** Body A */
+            bi: CannonBody;
+            /** Body B */
+            bj: CannonBody;
         }[];
     };
+}
+
+
+/**
+ * Represents the type of collision that occurred
+ */
+export enum CollisionType {
+    VehicleVehicle = 'vehicle-vehicle',
+    VehicleEnvironment = 'vehicle-environment',
+    VehicleProjectile = 'vehicle-projectile',
+    VehicleFlag = 'vehicle-flag'
+}
+
+/**
+ * Represents the severity of a collision
+ */
+export enum CollisionSeverity {
+    Light = 'light',
+    Medium = 'medium',
+    Heavy = 'heavy'
 }
 
 /**

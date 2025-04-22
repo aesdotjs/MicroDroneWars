@@ -1,8 +1,9 @@
 import * as CANNON from 'cannon-es';
 import { Vector3, Quaternion, Matrix } from 'babylonjs';
-import { PhysicsState, VehiclePhysicsConfig, PhysicsInput } from './types';
+import { PhysicsState, VehiclePhysicsConfig, PhysicsInput, CollisionType, CollisionSeverity } from './types';
 import { SpringSimulator } from '../utils/SpringSimulator';
 import { CollisionGroups, collisionMasks } from './CollisionGroups';
+import { CollisionManager, EnhancedCollisionEvent } from './CollisionManager';
 
 /**
  * Base class for vehicle physics controllers.
@@ -42,16 +43,20 @@ export abstract class BasePhysicsController {
     protected lastProcessedInputTimestamp: number = Date.now();
     /** Last processed input tick */
     protected lastProcessedInputTick: number = 0;
+    /** ID of the vehicle */
+    protected id: string;
 
     /**
      * Creates a new BasePhysicsController instance.
      * Initializes physics body, collision filters, and spring simulators.
      * @param world - The CANNON.js physics world
      * @param config - Configuration for the vehicle physics
+     * @param id - Unique identifier for the vehicle
      */
-    constructor(world: CANNON.World, config: VehiclePhysicsConfig) {
+    constructor(world: CANNON.World, config: VehiclePhysicsConfig, id: string) {
         this.world = world;
         this.config = config;
+        this.id = id;
         
         // Get collision group and mask based on vehicle type
         const vehicleGroup = config.vehicleType === 'drone' ? CollisionGroups.Drones : CollisionGroups.Planes;
@@ -271,5 +276,100 @@ export abstract class BasePhysicsController {
      */
     getBody(): CANNON.Body {
         return this.body;
+    }
+
+    /**
+     * Gets the ID of the vehicle.
+     * @returns The vehicle ID
+     */
+    getId(): string {
+        return this.id;
+    }
+
+    /**
+     * Handles a collision event.
+     * @param event - The enhanced collision event
+     */
+    protected handleCollision(event: EnhancedCollisionEvent): void {
+        // Apply collision response based on type and severity
+        switch (event.type) {
+            case CollisionType.VehicleEnvironment:
+                this.handleEnvironmentCollision(event);
+                break;
+            case CollisionType.VehicleVehicle:
+                this.handleVehicleCollision(event);
+                break;
+            case CollisionType.VehicleProjectile:
+                this.handleProjectileCollision(event);
+                break;
+            case CollisionType.VehicleFlag:
+                this.handleFlagCollision(event);
+                break;
+        }
+    }
+
+    /**
+     * Handles collision with environment objects.
+     * @param event - The collision event
+     */
+    protected handleEnvironmentCollision(event: EnhancedCollisionEvent): void {
+        if (event.severity === CollisionSeverity.Heavy) {
+            // Calculate reflection vector
+            const dot = this.body.velocity.dot(event.normal);
+            const reflection = this.body.velocity.vsub(event.normal.scale(2 * dot));
+            
+            // Apply collision response with damping
+            this.body.velocity.copy(reflection.scale(0.5));
+            
+            // Add some random torque for visual effect
+            const randomTorque = new CANNON.Vec3(
+                (Math.random() - 0.5) * event.impactVelocity,
+                (Math.random() - 0.5) * event.impactVelocity,
+                (Math.random() - 0.5) * event.impactVelocity
+            );
+            this.body.angularVelocity.vadd(randomTorque, this.body.angularVelocity);
+        }
+    }
+
+    /**
+     * Handles collision with another vehicle.
+     * @param event - The collision event
+     */
+    protected handleVehicleCollision(event: EnhancedCollisionEvent): void {
+        if (event.severity === CollisionSeverity.Heavy) {
+            // Calculate collision response
+            const dot = this.body.velocity.dot(event.normal);
+            const reflection = this.body.velocity.vsub(event.normal.scale(2 * dot));
+            
+            // Apply collision response with damping
+            this.body.velocity.copy(reflection.scale(0.7));
+            
+            // Add some random torque for visual effect
+            const randomTorque = new CANNON.Vec3(
+                (Math.random() - 0.5) * event.impactVelocity,
+                (Math.random() - 0.5) * event.impactVelocity,
+                (Math.random() - 0.5) * event.impactVelocity
+            );
+            this.body.angularVelocity.vadd(randomTorque, this.body.angularVelocity);
+        }
+    }
+
+    /**
+     * Handles collision with a projectile.
+     * @param event - The collision event
+     */
+    protected handleProjectileCollision(event: EnhancedCollisionEvent): void {
+        // Projectiles always cause damage regardless of severity
+        const damage = event.impactVelocity * 0.1; // Scale damage based on impact velocity
+        // TODO: Emit damage event to game logic
+    }
+
+    /**
+     * Handles collision with a flag.
+     * @param event - The collision event
+     */
+    protected handleFlagCollision(event: EnhancedCollisionEvent): void {
+        // Flag collisions are handled by the game logic
+        // TODO: Emit flag collision event to game logic
     }
 } 

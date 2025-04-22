@@ -5,7 +5,6 @@ import { InputManager } from './InputManager';
 import { Game } from './Game';
 import { ClientPhysicsWorld } from './physics/ClientPhysicsWorld';
 import * as CANNON from 'cannon-es';
-import { CollisionManager } from './CollisionManager';
 import { useGameDebug } from '@/composables/useGameDebug';
 import { Vehicle as VehicleSchema } from './schemas/Vehicle';
 import { PhysicsState } from '@shared/physics/types';
@@ -37,8 +36,6 @@ export class GameScene {
     private inputManager!: InputManager;
     /** Physics world for simulation */
     private physicsWorld!: ClientPhysicsWorld;
-    /** Collision manager for handling collisions */
-    private collisionManager!: CollisionManager;
     /** Shadow generator for rendering shadows */
     private shadowGenerator!: ShadowGenerator;
 
@@ -62,7 +59,6 @@ export class GameScene {
         // Initialize managers first
         this.setupInputManager();
         this.setupPhysicsWorld();
-        this.setupCollisionManager();
         
         this.setupLights();
         this.setupCamera();
@@ -101,16 +97,6 @@ export class GameScene {
         console.log('Physics world created:', this.physicsWorld);
     }
 
-    /**
-     * Sets up the collision manager for handling collisions.
-     */
-    private setupCollisionManager(): void {
-        this.collisionManager = new CollisionManager(this.scene);
-        console.log('CollisionManager initialized:', {
-            hasScene: !!this.scene,
-            hasCollisionManager: !!this.collisionManager
-        });
-    }
 
     /**
      * Sets up the lighting for the scene.
@@ -498,8 +484,6 @@ export class GameScene {
             if (this.shadowGenerator) {
                 this.shadowGenerator.addShadowCaster(obstacle);
             }
-            
-            this.collisionManager.addEnvironmentMesh(obstacle);
         }
     }
 

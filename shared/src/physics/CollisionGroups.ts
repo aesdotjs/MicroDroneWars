@@ -40,9 +40,9 @@ export interface CollisionMasks {
  */
 export const collisionMasks: CollisionMasks = {
     /** Drone collision mask - can collide with environment, projectiles, flags, and planes */
-    Drone: CollisionGroups.Environment | CollisionGroups.Projectiles | CollisionGroups.Flags | CollisionGroups.Planes,
+    Drone: CollisionGroups.Drones | CollisionGroups.Environment | CollisionGroups.Projectiles | CollisionGroups.Flags | CollisionGroups.Planes,
     /** Plane collision mask - can collide with environment, projectiles, flags, and drones */
-    Plane: CollisionGroups.Environment | CollisionGroups.Projectiles | CollisionGroups.Flags | CollisionGroups.Drones,
+    Plane: CollisionGroups.Planes | CollisionGroups.Environment | CollisionGroups.Projectiles | CollisionGroups.Flags | CollisionGroups.Drones,
     /** Projectile collision mask - can collide with drones, planes, and environment */
     Projectile: CollisionGroups.Drones | CollisionGroups.Planes | CollisionGroups.Environment,
     /** Flag collision mask - can collide with drones and planes */

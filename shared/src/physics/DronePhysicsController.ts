@@ -1,7 +1,8 @@
 import * as CANNON from 'cannon-es';
 import { Vector3, Quaternion } from 'babylonjs';
-import { VehiclePhysicsConfig, PhysicsInput } from './types';
+import { VehiclePhysicsConfig, PhysicsInput, CollisionType, CollisionSeverity } from './types';
 import { BasePhysicsController } from './BasePhysicsController';
+import { CollisionManager, EnhancedCollisionEvent } from './CollisionManager';
 
 /**
  * Physics controller for drone vehicles.
@@ -18,16 +19,49 @@ export class DronePhysicsController extends BasePhysicsController {
     private rollStabilizationStrength: number = 5.0; // Strength of auto-stabilization
     private maxRollAngle: number = Math.PI / 4; // Maximum allowed roll angle (45 degrees)
     private maxPitchAngle: number = Math.PI / 2.5; // Maximum pitch angle (about 72 degrees)
+    private collisionManager: CollisionManager;
 
     /**
      * Creates a new DronePhysicsController instance.
      * @param world - The CANNON.js physics world
      * @param config - Configuration for the drone physics
+     * @param id - Unique identifier for the drone
+     * @param collisionManager - The collision manager instance
      */
-    constructor(world: CANNON.World, config: VehiclePhysicsConfig) {
-        super(world, config);
+    constructor(world: CANNON.World, config: VehiclePhysicsConfig, id: string, collisionManager: CollisionManager) {
+        super(world, config, id);
         this.targetAltitude = this.body.position.y;
         this.config = config;
+        this.collisionManager = collisionManager;
+        const boxShape = new CANNON.Box(new CANNON.Vec3(0.5, 0.25, 0.5));
+        this.body.addShape(boxShape);
+        // Register collision callback
+        this.collisionManager.registerCollisionCallback(id, this.handleCollision.bind(this));
+    }
+
+    /**
+     * Handles collision events specific to drones.
+     * @param event - The enhanced collision event
+     */
+    protected handleCollision(event: EnhancedCollisionEvent): void {
+        // Call base class collision handler
+        super.handleCollision(event);
+
+        // Drone-specific collision responses
+        if (event.type === CollisionType.VehicleEnvironment) {
+            // Add extra stabilization after environment collision
+            if (event.severity === CollisionSeverity.Heavy) {
+                this.applyStabilization(0.1); // Apply strong stabilization
+            }
+        } else if (event.type === CollisionType.VehicleVehicle) {
+            // Add extra momentum damping after vehicle collision
+            if (event.severity === CollisionSeverity.Heavy) {
+                this.momentumDamping = 0.95; // Increase damping temporarily
+                setTimeout(() => {
+                    this.momentumDamping = 0.99; // Reset after 1 second
+                }, 1000);
+            }
+        }
     }
 
     /**
@@ -115,8 +149,8 @@ export class DronePhysicsController extends BasePhysicsController {
         const currentSpeed = velocity.length();
 
         // Strong upward thrust to counteract gravity
-        const gravity = this.world.gravity;
-        const gravityForce = new Vector3(-gravity.x, -gravity.y, -gravity.z);
+        // const gravity = this.world.gravity;
+        // const gravityForce = new Vector3(-gravity.x, -gravity.y, -gravity.z);
         
         // Calculate altitude error
         const currentAltitude = this.body.position.y;
@@ -146,7 +180,9 @@ export class DronePhysicsController extends BasePhysicsController {
         
         // Apply thrust in the up direction
         this.body.velocity.x += thrust.x * deltaTime;
-        this.body.velocity.y += thrust.y * deltaTime;
+        if (!input.down) {
+            this.body.velocity.y += thrust.y * deltaTime;
+        }
         this.body.velocity.z += thrust.z * deltaTime;
 
         // Get forward direction ignoring pitch and roll (only yaw)

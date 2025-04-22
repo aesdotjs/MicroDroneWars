@@ -3,7 +3,7 @@ import * as CANNON from 'cannon-es';
 import type { Body as CannonBody } from 'cannon-es';
 import { CollisionGroups, collisionMasks } from './CollisionGroups';
 import { CollisionEvent, VehicleCollisionEvent, PhysicsState, PhysicsConfig } from './types';
-
+import { CollisionManager, CollisionCallback, EnhancedCollisionEvent } from './CollisionManager';
 
 let stepCount = 0;
 let lastStepLog = performance.now();
@@ -18,7 +18,7 @@ export class PhysicsWorld {
     private bodies: Map<string, CannonBody> = new Map();
     private groundBody!: CannonBody;
     private groundMesh!: Mesh;
-    private collisionCallbacks: Map<string, (event: CollisionEvent) => void> = new Map();
+    private collisionManager: CollisionManager;
     private currentTick: number = 0;
 
     /**
@@ -54,13 +54,19 @@ export class PhysicsWorld {
         );
         this.world.addContactMaterial(groundVehicleContactMaterial);
 
+        // Configure vehicle vehicle contact material
+        const vehicleVehicleContactMaterial = new CANNON.ContactMaterial(
+            vehicleMaterial,
+            vehicleMaterial,
+            { friction: 0.5, restitution: 0.3 }
+        );
+        this.world.addContactMaterial(vehicleVehicleContactMaterial);
+
         // Create ground
         this.createGround(groundMaterial);
         
-        // Add collision event listeners
-        this.world.addEventListener('beginContact', (event: CollisionEvent) => {
-            this.handleCollision(event);
-        });
+        // Initialize collision manager
+        this.collisionManager = new CollisionManager(this.world, this.groundBody);
     }
 
     /**
@@ -129,18 +135,6 @@ export class PhysicsWorld {
             this.groundMesh.checkCollisions = true;
             this.groundMesh.receiveShadows = true;
 
-            // // Add collision shape to mesh
-            // this.groundMesh.physicsImpostor = new PhysicsImpostor(
-            //     this.groundMesh,
-            //     PhysicsImpostor.BoxImpostor,
-            //     { 
-            //         mass: 0, 
-            //         restitution: 0.3, 
-            //         friction: 0.5
-            //     },
-            //     this.scene
-            // );
-
             console.log('Ground mesh created:', {
                 size: { width: 200, height: 200 },
                 position: this.groundMesh.position,
@@ -151,71 +145,37 @@ export class PhysicsWorld {
     }
 
     /**
-     * Handles collision events between physics bodies.
-     * Processes ground collisions and vehicle-vehicle collisions.
-     * @param event - The collision event data
-     */
-    private handleCollision(event: CollisionEvent): void {
-        const bodyA = event.bodyA;
-        const bodyB = event.bodyB;
-        
-        // Check if either body is the ground
-        const isGroundCollision = bodyA === this.groundBody || bodyB === this.groundBody;
-        const vehicleBody = isGroundCollision ? 
-            (bodyA === this.groundBody ? bodyB : bodyA) : 
-            null;
-        if (isGroundCollision && vehicleBody) {
-            const impactVelocity = event.target.contacts[0]?.getImpactVelocityAlongNormal();
-            console.log('Ground collision:', {
-                vehicleId: vehicleBody.id,
-                impactVelocity,
-                vehiclePosition: vehicleBody.position,
-                groundPosition: this.groundBody.position,
-                vehicleVelocity: vehicleBody.velocity,
-                contactPoint: event.target.contacts[0].ri
-            });
-            
-            // Apply bounce and friction
-            if (Math.abs(impactVelocity) > 5) {
-                // Find the vehicle ID for this body
-                for (const [id, body] of this.bodies.entries()) {
-                    if (body === vehicleBody) {
-                        const callback = this.collisionCallbacks.get(id);
-                        if (callback) {
-                            callback(event);
-                        }
-                        break;
-                    }
-                }
-            }
-        } else {
-            // Handle vehicle-vehicle collisions
-            for (const [id, body] of this.bodies.entries()) {
-                if (body === bodyA || body === bodyB) {
-                    const callback = this.collisionCallbacks.get(id);
-                    if (callback) {
-                        callback(event);
-                    }
-                }
-            }
-        }
-    }
-
-    /**
-     * Registers a callback function for collision events for a specific body.
+     * Registers a callback for collision events for a specific body.
      * @param id - The ID of the body to register the callback for
      * @param callback - The function to call when a collision occurs
      */
-    public registerCollisionCallback(id: string, callback: (event: CollisionEvent) => void): void {
-        this.collisionCallbacks.set(id, callback);
+    public registerCollisionCallback(id: string, callback: CollisionCallback): void {
+        this.collisionManager.registerCollisionCallback(id, callback);
     }
 
     /**
      * Removes a collision callback for a specific body.
      * @param id - The ID of the body to remove the callback for
+     * @param callback - The callback function to remove
      */
-    public unregisterCollisionCallback(id: string): void {
-        this.collisionCallbacks.delete(id);
+    public unregisterCollisionCallback(id: string, callback: CollisionCallback): void {
+        this.collisionManager.unregisterCollisionCallback(id, callback);
+    }
+
+    /**
+     * Registers a global callback for all collision events.
+     * @param callback - The function to call when any collision occurs
+     */
+    public registerGlobalCollisionCallback(callback: CollisionCallback): void {
+        this.collisionManager.registerGlobalCollisionCallback(callback);
+    }
+
+    /**
+     * Removes a global collision callback.
+     * @param callback - The global callback function to remove
+     */
+    public unregisterGlobalCollisionCallback(callback: CollisionCallback): void {
+        this.collisionManager.unregisterGlobalCollisionCallback(callback);
     }
 
     /**
@@ -230,21 +190,13 @@ export class PhysicsWorld {
 
     /**
      * Updates the physics simulation by one step.
+     * @param fixedTimeStep - The fixed time step in seconds
      * @param deltaTime - The time step in seconds
+     * @param maxSubsteps - Maximum number of substeps to take
      */
     public update(fixedTimeStep: number, deltaTime: number, maxSubsteps: number): void {
-        // const t0 = performance.now();
         this.world.step(fixedTimeStep, deltaTime, maxSubsteps);
         this.currentTick++;
-        // const t1 = performance.now();
-        // const cost = t1 - t0;
-        // stepCount++;
-        // const now = performance.now();
-        // if (now - lastStepLog > 1000) {
-        //     console.log(`[Physics] Step count: ${stepCount} cost: ${cost.toFixed(2)} ms`);
-        //     stepCount = 0;
-        //     lastStepLog = now;
-        // }
     }
 
     /**
@@ -270,104 +222,6 @@ export class PhysicsWorld {
         body.angularVelocity.set(state.angularVelocity.x, state.angularVelocity.y, state.angularVelocity.z);
     }
 
-    /**
-     * Creates a new vehicle physics body.
-     * @param id - The unique identifier for the vehicle
-     * @param config - Configuration for the vehicle including type and physics properties
-     * @returns The created CANNON.js body
-     */
-    public createVehicle(id: string, config: any): CANNON.Body {
-        
-        // Create vehicle body with proper collision filters
-        const vehicleGroup = config.vehicleType === 'drone' ? CollisionGroups.Drones : CollisionGroups.Planes;
-        const vehicleMask = collisionMasks[config.vehicleType === 'drone' ? 'Drone' : 'Plane'];
-        
-        console.log('Creating vehicle body:', {
-            id,
-            type: config.vehicleType,
-            collisionGroup: vehicleGroup,
-            collisionMask: vehicleMask,
-            spawnPoint: { x: 0, y: 10, z: 0 }
-        });
-
-        const body = new CANNON.Body({
-            mass: config.mass || 50,
-            position: new CANNON.Vec3(0, 10, 0),
-            shape: new CANNON.Box(new CANNON.Vec3(0.5, 0.15, 0.5)),
-            material: new CANNON.Material('vehicleMaterial'),
-            collisionFilterGroup: vehicleGroup,
-            collisionFilterMask: vehicleMask,
-            fixedRotation: false,
-            linearDamping: 0.5,
-            angularDamping: 0.5,
-            type: CANNON.Body.DYNAMIC
-        });
-
-        // Add collision event listeners for this vehicle
-        body.addEventListener('collide', (event: VehicleCollisionEvent) => {
-            const impactVelocity = event.target.contacts[0].getImpactVelocityAlongNormal();
-            const isGroundCollision = event.body === this.groundBody;
-            
-            console.log(`Vehicle ${id} collision detected:`, {
-                withBody: isGroundCollision ? 'ground' : 'other',
-                impactVelocity,
-                contactPoint: event.target.contacts[0].ri,
-                vehiclePosition: body.position,
-                vehicleVelocity: body.velocity
-            });
-
-            if (isGroundCollision) {
-                // Calculate collision normal from contact points
-                const normal = new CANNON.Vec3();
-                normal.set(event.target.contacts[0].ri.x, event.target.contacts[0].ri.y, event.target.contacts[0].ri.z);
-                normal.normalize();
-                
-                // Calculate reflection vector
-                const dot = body.velocity.dot(normal);
-                const reflection = body.velocity.vsub(normal.scale(2 * dot));
-                
-                // Apply collision response with damping
-                body.velocity.copy(reflection.scale(0.5));
-                
-                // Add some random torque for visual effect
-                const randomTorque = new CANNON.Vec3(
-                    (Math.random() - 0.5) * impactVelocity,
-                    (Math.random() - 0.5) * impactVelocity,
-                    (Math.random() - 0.5) * impactVelocity
-                );
-                body.angularVelocity.vadd(randomTorque, body.angularVelocity);
-            }
-        });
-
-        this.world.addBody(body);
-        this.bodies.set(id, body);
-
-        console.log('Vehicle body added to world:', {
-            id,
-            position: body.position,
-            collisionGroup: body.collisionFilterGroup,
-            collisionMask: body.collisionFilterMask,
-            hasCollisionListener: true
-        });
-
-        return body;
-    }
-
-    /**
-     * Handles vehicle-specific collision events.
-     * @param id - The ID of the vehicle involved in the collision
-     * @param event - The collision event data
-     */
-    private handleVehicleCollision(id: string, event: VehicleCollisionEvent): void {
-        const body = this.bodies.get(id);
-        if (!body) return;
-
-        const impactVelocity = event.target.contacts[0].getImpactVelocityAlongNormal();
-        if (Math.abs(impactVelocity) > 5) {
-            // TODO: Emit collision event to game logic
-            console.log(`Vehicle ${id} collision with velocity: ${impactVelocity}`);
-        }
-    }
 
     /**
      * Cleans up physics resources and removes all bodies.
@@ -386,6 +240,13 @@ export class PhysicsWorld {
         if (this.scene && this.groundMesh) {
             this.groundMesh.dispose();
         }
+
+        // Clean up collision manager
+        this.collisionManager.cleanup();
+    }
+
+    public getCollisionManager(): CollisionManager {
+        return this.collisionManager;
     }
 
     /**

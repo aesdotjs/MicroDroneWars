@@ -1,7 +1,8 @@
 import * as CANNON from 'cannon-es';
 import { Vector3, Quaternion } from 'babylonjs';
-import { VehiclePhysicsConfig, PhysicsInput } from './types';
+import { VehiclePhysicsConfig, PhysicsInput, CollisionType, CollisionSeverity } from './types';
 import { BasePhysicsController } from './BasePhysicsController';
+import { CollisionManager, EnhancedCollisionEvent } from './CollisionManager';
 
 /**
  * Physics controller for plane vehicles.
@@ -17,15 +18,47 @@ export class PlanePhysicsController extends BasePhysicsController {
     protected config: VehiclePhysicsConfig;
     protected enginePower: number = 0;
     protected lastDrag: number = 0;
+    private collisionManager: CollisionManager;
 
     /**
      * Creates a new PlanePhysicsController instance.
      * @param world - The CANNON.js physics world
      * @param config - Configuration for the plane physics
+     * @param id - Unique identifier for the plane
+     * @param collisionManager - The collision manager instance
      */
-    constructor(world: CANNON.World, config: VehiclePhysicsConfig) {
-        super(world, config);
+    constructor(world: CANNON.World, config: VehiclePhysicsConfig, id: string, collisionManager: CollisionManager) {
+        super(world, config, id);
         this.config = config;
+        this.collisionManager = collisionManager;
+        
+        // Register collision callback
+        this.collisionManager.registerCollisionCallback(id, this.handleCollision.bind(this));
+    }
+
+    /**
+     * Handles collision events specific to planes.
+     * @param event - The enhanced collision event
+     */
+    protected handleCollision(event: EnhancedCollisionEvent): void {
+        // Call base class collision handler
+        super.handleCollision(event);
+
+        // Plane-specific collision responses
+        if (event.type === CollisionType.VehicleEnvironment) {
+            // Reduce engine power after environment collision
+            if (event.severity === CollisionSeverity.Heavy) {
+                this.enginePower *= 0.5; // Halve engine power
+            }
+        } else if (event.type === CollisionType.VehicleVehicle) {
+            // Add extra drag after vehicle collision
+            if (event.severity === CollisionSeverity.Heavy) {
+                this.lastDrag *= 2; // Double drag temporarily
+                setTimeout(() => {
+                    this.lastDrag /= 2; // Reset after 1 second
+                }, 1000);
+            }
+        }
     }
 
     /**

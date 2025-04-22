@@ -45,7 +45,9 @@ export class ServerPhysicsWorld {
     public createVehicle(id: string, vehicle: Vehicle): void {
         const controller = PhysicsControllerFactory.createController(
             this.physicsWorld.getWorld(),
-            vehicle.vehicleType === 'drone' ? DroneSettings : PlaneSettings
+            vehicle.vehicleType === 'drone' ? DroneSettings : PlaneSettings,
+            id,
+            this.physicsWorld.getCollisionManager()
         );
         this.controllers.set(id, controller);
         this.inputBuffers.set(id, []);

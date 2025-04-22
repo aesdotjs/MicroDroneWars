@@ -5,9 +5,8 @@
 // GENERATED USING @colyseus/schema 2.0.36
 // 
 
-import { Schema, type, ArraySchema, MapSchema, SetSchema, DataChange } from '@colyseus/schema';
+import { type } from '@colyseus/schema';
 import { Vehicle } from './Vehicle'
-import { PhysicsState } from './PhysicsState'
 
 /**
  * Represents a plane vehicle in the game.

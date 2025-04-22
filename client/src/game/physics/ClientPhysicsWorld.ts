@@ -90,9 +90,9 @@ export class ClientPhysicsWorld {
         let controller: BasePhysicsController;
 
         if (type === 'drone') {
-            controller = new DronePhysicsController(this.physicsWorld.getWorld(), DroneSettings);
+            controller = new DronePhysicsController(this.physicsWorld.getWorld(), DroneSettings, id, this.physicsWorld.getCollisionManager());
         } else {
-            controller = new PlanePhysicsController(this.physicsWorld.getWorld(), PlaneSettings);
+            controller = new PlanePhysicsController(this.physicsWorld.getWorld(), PlaneSettings, id, this.physicsWorld.getCollisionManager());
         }
 
         // Set initial state
@@ -209,50 +209,7 @@ export class ClientPhysicsWorld {
             // const positionError = state.position.subtract(clientState.position).length();
             // const dot = Math.abs(Quaternion.Dot(clientState.quaternion, state.quaternion));
             // const rotationError = Math.acos(Math.min(1, dot));  // direct angle
-            // if (currentState) {
-                // Check if either error exceeds threshold
-                // if (positionError > this.RECONCILIATION_POSITION_THRESHOLD) {
-                
-                // console.log("reconciling:", {
-                //     posError: positionError.toFixed(3),
-                //     lastProcessed: state.lastProcessedInputTimestamp,
-                //     pending: this.pendingInputs.length
-                // });
-
-                // // Apply smooth corrections instead of hard snap
-     
-                //     const newPosition = Vector3.Lerp(
-                //         currentState.position,
-                //         state.position,
-                //         this.RECONCILIATION_POSITION_SMOOTHING
-                //     );
-
-                //     // Update controller with smoothed state
-                //     controller.setState({
-                //         ...state,
-                //         position: newPosition,
-                //     });
-                //     return;
-                // }
-                // if (rotationError > this.RECONCILIATION_ROTATION_THRESHOLD) {
-                //     console.log("reconciling rotation:", {
-                //         rotError: rotationError.toFixed(3),
-                //         lastProcessed: state.lastProcessedInputTimestamp,
-                //         pending: this.pendingInputs.length
-                //     });
-                //     const newQuaternion = Quaternion.Slerp(
-                //         currentState.quaternion,
-                //         state.quaternion,
-                //         this.RECONCILIATION_ROTATION_SMOOTHING
-                //     );
-                //     controller.setState({
-                //         ...state,
-                //         quaternion: newQuaternion
-                //     });
-                //     return;
-                // }
-                // controller.setState(state);
-            // }
+            
             const lastProcessedInputTick = state.lastProcessedInputTick ?? state.tick;
             controller.setState(state);
             // if (this.pendingInputs.length > 0) console.log(`[Client][addVehicleState] lastprocessedInputTick=${lastProcessedInputTick}, pending.ticks=${this.pendingInputs.map(i => i.tick).join(', ')}`);
@@ -358,23 +315,6 @@ export class ClientPhysicsWorld {
      */
     public getGroundMesh(): any {
         return this.physicsWorld.getGroundMesh();
-    }
-
-    /**
-     * Registers a callback for collision events.
-     * @param id - ID of the vehicle
-     * @param callback - Function to call on collision
-     */
-    public registerCollisionCallback(id: string, callback: (event: CollisionEvent) => void): void {
-        this.physicsWorld.registerCollisionCallback(id, callback);
-    }
-
-    /**
-     * Unregisters a collision callback.
-     * @param id - ID of the vehicle
-     */
-    public unregisterCollisionCallback(id: string): void {
-        this.physicsWorld.unregisterCollisionCallback(id);
     }
 
     /**
