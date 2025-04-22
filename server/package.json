@@ -10,7 +10,6 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
-    "@babylonjs/core": "^6.35.0",
     "@colyseus/auth": "^0.16.0",
     "@colyseus/core": "^0.16.0",
     "@colyseus/loadtest": "^0.16.0",
@@ -21,7 +20,7 @@
     "@colyseus/tools": "^0.16.0",
     "@colyseus/uwebsockets-transport": "^0.16.0",
     "@colyseus/ws-transport": "^0.16.4",
-    "babylonjs": "^8.2.0",
+    "babylonjs": "^8.1.1",
     "babylonjs-loaders": "^8.2.0",
     "cannon-es": "^0.20.0",
     "colyseus": "^0.16.0",

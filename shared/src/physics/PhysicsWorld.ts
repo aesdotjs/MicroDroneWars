@@ -37,19 +37,25 @@ export class PhysicsWorld {
         // Configure physics world
         this.world = new CANNON.World();
         this.world.gravity.set(0, -config.gravity, 0);
-        this.world.broadphase = new CANNON.NaiveBroadphase();
+        
+        // Use SAP broadphase for better performance
+        this.world.broadphase = new CANNON.SAPBroadphase(this.world);
+        
         
         // Create materials
         const groundMaterial = new CANNON.Material('groundMaterial');
         const vehicleMaterial = new CANNON.Material('vehicleMaterial');
+        const projectileMaterial = new CANNON.Material('projectileMaterial');
         
-        // Configure contact materials
+        // Configure contact materials with optimized parameters
         const groundVehicleContactMaterial = new CANNON.ContactMaterial(
             groundMaterial,
             vehicleMaterial,
             {
                 friction: 0.5,
-                restitution: 0.3
+                restitution: 0.3,
+                contactEquationStiffness: 1e6,
+                contactEquationRelaxation: 3
             }
         );
         this.world.addContactMaterial(groundVehicleContactMaterial);
@@ -58,9 +64,40 @@ export class PhysicsWorld {
         const vehicleVehicleContactMaterial = new CANNON.ContactMaterial(
             vehicleMaterial,
             vehicleMaterial,
-            { friction: 0.5, restitution: 0.3 }
+            { 
+                friction: 0.5, 
+                restitution: 0.3,
+                contactEquationStiffness: 1e6,
+                contactEquationRelaxation: 3
+            }
         );
         this.world.addContactMaterial(vehicleVehicleContactMaterial);
+
+        // Configure projectile-vehicle contact material
+        const projectileVehicleContactMaterial = new CANNON.ContactMaterial(
+            projectileMaterial,
+            vehicleMaterial,
+            {
+                friction: 0.0,
+                restitution: 0.0,
+                contactEquationStiffness: 1e9,
+                contactEquationRelaxation: 4
+            }
+        );
+        this.world.addContactMaterial(projectileVehicleContactMaterial);
+
+        // Configure projectile-environment contact material
+        const projectileEnvironmentContactMaterial = new CANNON.ContactMaterial(
+            projectileMaterial,
+            groundMaterial,
+            {
+                friction: 0.0,
+                restitution: 0.0,
+                contactEquationStiffness: 1e9,
+                contactEquationRelaxation: 4
+            }
+        );
+        this.world.addContactMaterial(projectileEnvironmentContactMaterial);
 
         // Create ground
         this.createGround(groundMaterial);

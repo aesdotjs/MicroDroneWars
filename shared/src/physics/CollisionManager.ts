@@ -36,6 +36,18 @@ export class CollisionManager {
         heavy: 15    // m/s
     };
 
+    private readonly tempVec3 = new CANNON.Vec3();
+    private readonly tempEvent: EnhancedCollisionEvent = {
+        type: CollisionType.VehicleEnvironment,
+        severity: CollisionSeverity.Light,
+        bodyA: null as any,
+        bodyB: null as any,
+        impactVelocity: 0,
+        contactPoint: new CANNON.Vec3(),
+        normal: new CANNON.Vec3(),
+        timestamp: 0
+    };
+
     /**
      * Creates a new CollisionManager instance.
      * @param world - The CANNON.js physics world
@@ -71,26 +83,27 @@ export class CollisionManager {
         
         // Get collision type and severity
         const collisionType = this.determineCollisionType(bodyA, bodyB);
+        
+        // Reuse tempVec3 for impact velocity calculation
+        this.tempVec3.set(contact.ni.x, contact.ni.y, contact.ni.z);
         const impactVelocity = Math.abs(
-            bodyA.velocity.dot(new CANNON.Vec3(contact.ni.x, contact.ni.y, contact.ni.z)) -
-            bodyB.velocity.dot(new CANNON.Vec3(contact.ni.x, contact.ni.y, contact.ni.z))
+            bodyA.velocity.dot(this.tempVec3) -
+            bodyB.velocity.dot(this.tempVec3)
         );
         const severity = this.determineCollisionSeverity(impactVelocity);
 
-        // Create enhanced collision event with proper Vec3 instances
-        const enhancedEvent: EnhancedCollisionEvent = {
-            type: collisionType,
-            severity,
-            bodyA,
-            bodyB,
-            impactVelocity,
-            contactPoint: new CANNON.Vec3(contact.ri.x, contact.ri.y, contact.ri.z),
-            normal: new CANNON.Vec3(contact.ni.x, contact.ni.y, contact.ni.z),
-            timestamp: Date.now()
-        };
+        // Update temp event object
+        this.tempEvent.type = collisionType;
+        this.tempEvent.severity = severity;
+        this.tempEvent.bodyA = bodyA;
+        this.tempEvent.bodyB = bodyB;
+        this.tempEvent.impactVelocity = impactVelocity;
+        this.tempEvent.contactPoint.set(contact.ri.x, contact.ri.y, contact.ri.z);
+        this.tempEvent.normal.set(contact.ni.x, contact.ni.y, contact.ni.z);
+        this.tempEvent.timestamp = Date.now();
 
         // Dispatch to appropriate callbacks
-        this.dispatchCollisionEvent(enhancedEvent);
+        this.dispatchCollisionEvent(this.tempEvent);
     }
 
     /**

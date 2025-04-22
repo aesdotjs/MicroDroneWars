@@ -2,23 +2,17 @@
 // THIS FILE HAS BEEN GENERATED AUTOMATICALLY
 // DO NOT CHANGE IT MANUALLY UNLESS YOU KNOW WHAT YOU'RE DOING
 // 
-// GENERATED USING @colyseus/schema 2.0.36
+// GENERATED USING @colyseus/schema 3.0.33
 // 
 
 import { Schema, type, ArraySchema, MapSchema, SetSchema, DataChange } from '@colyseus/schema';
 import { Vehicle } from './Vehicle'
 import { Flag } from './Flag'
+import { Projectile } from './Projectile'
 
-/**
- * Represents the complete game state.
- * Contains all vehicles, flags, and server synchronization information.
- * Used for network synchronization between server and clients.
- */
 export class State extends Schema {
-    /** Map of all vehicles in the game, keyed by player session ID */
     @type({ map: Vehicle }) public vehicles: MapSchema<Vehicle> = new MapSchema<Vehicle>();
-    /** Map of all flags in the game, keyed by flag ID */
     @type({ map: Flag }) public flags: MapSchema<Flag> = new MapSchema<Flag>();
-    /** Current server simulation tick number */
-    @type("number") public serverTick: number = 0;
+    @type({ map: Projectile }) public projectiles: MapSchema<Projectile> = new MapSchema<Projectile>();
+    @type("number") public serverTick!: number;
 }

@@ -1,4 +1,4 @@
-import { Scene, Engine, Vector3, HemisphericLight, UniversalCamera, Color4, Quaternion, MeshBuilder, StandardMaterial, Color3, DirectionalLight, ShadowGenerator } from 'babylonjs';
+import { Scene, Engine, Vector3, HemisphericLight, UniversalCamera, Color4, Quaternion, MeshBuilder, StandardMaterial, Color3, DirectionalLight, ShadowGenerator, Texture, ParticleSystem } from 'babylonjs';
 import { Vehicle } from './vehicles/Vehicle';
 import { Flag } from './Flag';
 import { InputManager } from './InputManager';
@@ -6,10 +6,13 @@ import { Game } from './Game';
 import { ClientPhysicsWorld } from './physics/ClientPhysicsWorld';
 import * as CANNON from 'cannon-es';
 import { useGameDebug } from '@/composables/useGameDebug';
-import { Vehicle as VehicleSchema } from './schemas/Vehicle';
+import { Vehicle as VehicleSchema } from './schemas';
 import { PhysicsState } from '@shared/physics/types';
 import { Drone } from './vehicles/Drone';
 import { Plane } from './vehicles/Plane';
+import { Projectile as ProjectileSchema } from './schemas';
+import { WeaponEffects } from './effects/WeaponEffects';
+// import { Inspector } from '@babylonjs/inspector';
 const { log } = useGameDebug();
 window.CANNON = CANNON;
 
@@ -27,7 +30,9 @@ export class GameScene {
     /** Map of vehicles in the scene */
     private vehicles: Map<string, Vehicle> = new Map();
     /** Map of flags in the scene */
-    private flags: Map<number, Flag> = new Map();
+    private flags: Map<string, Flag> = new Map();
+    /** Map of projectiles in the scene */
+    private projectiles: Map<string, WeaponEffects> = new Map();
     /** Reference to the main game instance */
     private game: Game;
     /** The local player's vehicle */
@@ -63,7 +68,7 @@ export class GameScene {
         this.setupLights();
         this.setupCamera();
         this.setupEnvironment();
-        
+        // Inspector.Show(this.scene, {});
         // Start the render loop
         console.log('Registering beforeRender callback...');
         this.scene.registerBeforeRender(() => {
@@ -336,6 +341,7 @@ export class GameScene {
         this.physicsWorld.update(this.engine.getDeltaTime() / 1000);
         log('FPS', Math.round(this.engine.getFps()));
         this.physicsWorld.interpolateRemotes();
+
         // Update all vehicles' meshes with their physics states
         this.vehicles.forEach(vehicle => {
             const controller = this.physicsWorld.controllers.get(vehicle.id);
@@ -345,6 +351,11 @@ export class GameScene {
                     vehicle.updateState(state);
                 }
             }
+        });
+
+        // Update projectiles
+        this.projectiles.forEach((effects, id) => {
+            effects.update(this.engine.getDeltaTime() / 1000);
         });
         
         // Update camera to follow local player
@@ -385,32 +396,32 @@ export class GameScene {
     }
 
     /**
-     * Adds a flag to the scene.
-     * @param team - The team number of the flag
+     * Adds a flag to the scene
+     * @param team - Team number of the flag
      * @param flag - The flag to add
      */
     public addFlag(team: number, flag: Flag): void {
-        this.flags.set(team, flag);
+        this.flags.set(team.toString(), flag);
     }
 
     /**
-     * Removes a flag from the scene.
-     * @param team - The team number of the flag to remove
+     * Removes a flag from the scene
+     * @param team - Team number of the flag to remove
      */
     public removeFlag(team: number): void {
-        const flag = this.flags.get(team);
+        const flag = this.flags.get(team.toString());
         if (flag) {
-            this.flags.delete(team);
+            this.flags.delete(team.toString());
         }
     }
 
     /**
-     * Gets a flag by team number.
-     * @param team - The team number of the flag
-     * @returns The flag for the specified team, or undefined if not found
+     * Gets a flag by team number
+     * @param team - Team number of the flag to get
+     * @returns The flag if found, undefined otherwise
      */
     public getFlag(team: number): Flag | undefined {
-        return this.flags.get(team);
+        return this.flags.get(team.toString());
     }
 
     /**
@@ -424,8 +435,41 @@ export class GameScene {
      * Disposes of scene resources.
      */
     public dispose(): void {
-        this.physicsWorld.cleanup();
-        this.scene.dispose();
+        // Clean up vehicles
+        this.vehicles.forEach(vehicle => {
+            vehicle.dispose();
+        });
+        this.vehicles.clear();
+
+        // Clean up flags
+        this.flags.forEach(flag => {
+            flag.dispose();
+        });
+        this.flags.clear();
+
+        // Clean up projectiles
+        this.projectiles.forEach(projectile => {
+            projectile.dispose();
+        });
+        this.projectiles.clear();
+
+        // Clean up physics world
+        if (this.physicsWorld) {
+            this.physicsWorld.cleanup();
+        }
+
+        // Clean up input manager
+        if (this.inputManager) {
+            this.inputManager.cleanup();
+        }
+
+        // Clean up scene
+        if (this.scene) {
+            this.scene.dispose();
+        }
+
+        // Reset state
+        this.localPlayer = null;
     }
 
     /**
@@ -493,5 +537,52 @@ export class GameScene {
      */
     public getInputManager(): InputManager {
         return this.inputManager;
+    }
+
+    /**
+     * Adds a projectile to the scene
+     * @param projectile - The projectile to add
+     */
+    public addProjectile(projectile: ProjectileSchema): void {
+        console.log('Adding projectile:', projectile);
+        const weaponEffects = new WeaponEffects(this.scene);
+        
+        // Create projectile mesh and effects
+        const projectileData = {
+            id: projectile.id,
+            type: projectile.type as 'bullet' | 'missile',
+            position: new Vector3(projectile.positionX, projectile.positionY, projectile.positionZ),
+            direction: new Vector3(projectile.directionX, projectile.directionY, projectile.directionZ),
+            speed: projectile.speed,
+            damage: projectile.damage,
+            range: projectile.range,
+            distanceTraveled: 0,
+            sourceId: projectile.sourceId,
+            timestamp: projectile.timestamp,
+            tick: projectile.tick
+        };
+
+        // Create visual effects
+        weaponEffects.createProjectileMesh(projectileData);
+        weaponEffects.createMuzzleFlash(
+            new Vector3(projectile.positionX, projectile.positionY, projectile.positionZ),
+            new Vector3(projectile.directionX, projectile.directionY, projectile.directionZ),
+            projectile.sourceId
+        );
+
+        this.projectiles.set(projectile.id, weaponEffects);
+    }
+
+    /**
+     * Removes a projectile from the scene
+     * @param id - ID of the projectile to remove
+     */
+    public removeProjectile(id: string): void {
+        console.log('Removing projectile:', id);
+        const projectile = this.projectiles.get(id);
+        if (projectile) {
+            projectile.dispose();
+            this.projectiles.delete(id);
+        }
     }
 } 

@@ -9,8 +9,8 @@
     "watch": "tsc -w"
   },
   "dependencies": {
-    "@babylonjs/core": "^6.35.0",
-    "babylonjs": "^8.2.0",
+    "@colyseus/schema": "^3.0.0",
+    "babylonjs": "^8.1.1",
     "cannon-es": "^0.20.0"
   },
   "devDependencies": {

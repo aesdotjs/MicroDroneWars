@@ -102,6 +102,20 @@ export interface PhysicsInput {
     rollLeft: boolean;
     /** Roll right input */
     rollRight: boolean;
+    /** Fire weapon input */
+    fire: boolean;
+    /** Zoom input */
+    zoom: boolean;
+    /** Switch to next weapon input */
+    nextWeapon: boolean;
+    /** Switch to previous weapon input */
+    previousWeapon: boolean;
+    /** Switch to weapon 1 */
+    weapon1: boolean;
+    /** Switch to weapon 2 */
+    weapon2: boolean;
+    /** Switch to weapon 3 */
+    weapon3: boolean;
     /** Mouse movement delta */
     mouseDelta?: { x: number; y: number };
     /** Current simulation tick */
@@ -207,4 +221,58 @@ export interface InterpolationConfig {
     maxBufferSize: number;
     /** Interpolation factor (0-1) */
     interpolationFactor: number;
+}
+
+/**
+ * Represents a weapon that can be equipped on vehicles
+ */
+export interface Weapon {
+    /** Unique identifier for the weapon type */
+    id: string;
+    /** Display name of the weapon */
+    name: string;
+    /** Type of projectile this weapon fires */
+    projectileType: 'bullet' | 'missile';
+    /** Damage dealt by the weapon */
+    damage: number;
+    /** Fire rate in rounds per second */
+    fireRate: number;
+    /** Speed of the projectile in m/s */
+    projectileSpeed: number;
+    /** Cooldown time between shots in seconds */
+    cooldown: number;
+    /** Maximum range of the weapon in meters */
+    range: number;
+    /** Whether the weapon is currently on cooldown */
+    isOnCooldown: boolean;
+    /** Last time the weapon was fired */
+    lastFireTime: number;
+}
+
+/**
+ * Represents a projectile in the game
+ */
+export interface Projectile {
+    /** Unique identifier for the projectile */
+    id: string;
+    /** Type of projectile */
+    type: 'bullet' | 'missile';
+    /** Position of the projectile */
+    position: Vector3;
+    /** Direction the projectile is moving */
+    direction: Vector3;
+    /** Speed of the projectile in m/s */
+    speed: number;
+    /** Damage dealt by the projectile */
+    damage: number;
+    /** Range of the projectile in meters */
+    range: number;
+    /** Distance traveled so far */
+    distanceTraveled: number;
+    /** ID of the vehicle that fired the projectile */
+    sourceId: string;
+    /** Timestamp when the projectile was created */
+    timestamp: number;
+    /** Current physics tick */
+    tick: number;
 }

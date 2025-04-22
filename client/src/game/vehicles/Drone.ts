@@ -1,7 +1,7 @@
 import { Vehicle } from "./Vehicle";
 import { MeshBuilder, Vector3, StandardMaterial, Color3, MultiMaterial, Color4, Quaternion, Scene, Mesh, ParticleSystem, Texture, Matrix } from 'babylonjs';
 import { InputManager } from '../InputManager';
-import { Vehicle as VehicleSchema } from '../schemas/Vehicle';
+import { Vehicle as VehicleSchema } from '../schemas';
 
 /**
  * Represents a drone vehicle in the game.

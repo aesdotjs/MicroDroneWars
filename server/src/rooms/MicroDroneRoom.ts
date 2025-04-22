@@ -1,7 +1,10 @@
 import { Room, Client } from "colyseus";
-import { State, Drone, Plane, Flag } from "../schemas";
+import { ArraySchema } from "@colyseus/schema";
+import { State, Drone, Plane, Flag, Weapon, Projectile, Vehicle } from "../schemas/index";
 import { ServerPhysicsWorld } from "../physics/ServerPhysicsWorld";
 import { VehiclePhysicsConfig, PhysicsInput } from "@shared/physics/types";
+import { DefaultWeapons } from "@shared/physics/WeaponSystem";
+import { Vector3 } from "babylonjs";
 
 /**
  * Represents a game room for MicroDroneWars multiplayer matches.
@@ -52,7 +55,7 @@ export class MicroDroneRoom extends Room<State> {
         this.state.flags.set("teamB", teamBFlag);
 
         // Set up message handlers
-        this.onMessage("movement", (client, input: PhysicsInput) => {
+        this.onMessage("command", (client, input: PhysicsInput) => {
             const vehicle = this.state.vehicles.get(client.sessionId);
             if (vehicle) {
                 // Validate input timestamp - convert to milliseconds if needed
@@ -66,6 +69,25 @@ export class MicroDroneRoom extends Room<State> {
                     console.log(`Dropping old input from ${client.sessionId}, age: ${now - inputTime}ms`);
                     return;
                 }
+
+                // Handle weapon switching
+                if (input.nextWeapon) {
+                    vehicle.activeWeaponIndex = (vehicle.activeWeaponIndex + 1) % vehicle.weapons.length;
+                } else if (input.previousWeapon) {
+                    vehicle.activeWeaponIndex = (vehicle.activeWeaponIndex - 1 + vehicle.weapons.length) % vehicle.weapons.length;
+                } else if (input.weapon1) {
+                    vehicle.activeWeaponIndex = 0;
+                } else if (input.weapon2) {
+                    vehicle.activeWeaponIndex = 1;
+                } else if (input.weapon3) {
+                    vehicle.activeWeaponIndex = 2;
+                }
+
+                // Handle weapon firing
+                if (input.fire) {
+                    this.handleFire(vehicle, client);
+                }
+
                 // Store input for processing
                 this.physicsWorld.addInput(client.sessionId, input);
             }
@@ -87,7 +109,6 @@ export class MicroDroneRoom extends Room<State> {
             console.log(`Player ${client.sessionId} left the game`);
             this.onLeave(client);
         });
-
     }
 
     /**
@@ -118,6 +139,25 @@ export class MicroDroneRoom extends Room<State> {
         vehicle.lastProcessedInputTick = this.physicsWorld.getCurrentTick();
         vehicle.tick = this.physicsWorld.getCurrentTick();
         
+        // Initialize weapons
+        const weapons = new ArraySchema<Weapon>();
+        Object.values(DefaultWeapons).forEach(weapon => {
+            const w = new Weapon();
+            w.id = weapon.id;
+            w.name = weapon.name;
+            w.projectileType = weapon.projectileType;
+            w.damage = weapon.damage;
+            w.fireRate = weapon.fireRate;
+            w.projectileSpeed = weapon.projectileSpeed;
+            w.cooldown = weapon.cooldown;
+            w.range = weapon.range;
+            w.isOnCooldown = false;
+            w.lastFireTime = 0;
+            weapons.push(w);
+        });
+        vehicle.weapons = weapons;
+        vehicle.activeWeaponIndex = 0;
+        
         // Create vehicle and add to state
         this.physicsWorld.createVehicle(client.sessionId, vehicle);
         this.state.serverTick = this.physicsWorld.getCurrentTick();
@@ -141,7 +181,7 @@ export class MicroDroneRoom extends Room<State> {
         // If vehicle was carrying a flag, return it to base
         const vehicle = this.state.vehicles.get(client.sessionId);
         if (vehicle && vehicle.hasFlag) {
-            const flag = Array.from(this.state.flags.values()).find(f => f.carriedBy === client.sessionId);
+            const flag = Array.from(this.state.flags.values()).find((f: Flag) => f.carriedBy === client.sessionId);
             if (flag) {
                 flag.carriedBy = null;
                 flag.atBase = true;
@@ -172,10 +212,83 @@ export class MicroDroneRoom extends Room<State> {
         this.physicsWorld.update(deltaTime, this.state);
         // Update server tick in state
         this.state.serverTick = this.physicsWorld.getCurrentTick();
-        // // Update last processed input ticks for each vehicle (attention ???)
-        // this.state.vehicles.forEach((vehicle, id) => {
-        //     vehicle.lastProcessedInputTimestamp = Date.now();
-        //     vehicle.lastProcessedInputTick = this.physicsWorld.getCurrentTick();
-        // });
+
+        // Update weapon cooldowns
+        this.state.vehicles.forEach((vehicle: Vehicle) => {
+            vehicle.weapons.forEach((weapon: Weapon) => {
+                if (weapon.isOnCooldown) {
+                    const timeSinceLastFire = Date.now() - weapon.lastFireTime;
+                    if (timeSinceLastFire >= weapon.cooldown * 1000) {
+                        weapon.isOnCooldown = false;
+                    }
+                }
+            });
+        });
+
+        // Update projectiles
+        this.state.projectiles.forEach((projectile: Projectile, id: string) => {
+            // Move projectile
+            const direction = new Vector3(
+                projectile.directionX,
+                projectile.directionY,
+                projectile.directionZ
+            ).normalize();
+            
+            projectile.positionX += direction.x * projectile.speed * deltaTime;
+            projectile.positionY += direction.y * projectile.speed * deltaTime;
+            projectile.positionZ += direction.z * projectile.speed * deltaTime;
+            
+            // Update distance traveled
+            projectile.distanceTraveled += projectile.speed * deltaTime;
+            
+            // Remove projectile if it exceeds range
+            if (projectile.distanceTraveled >= projectile.range) {
+                this.state.projectiles.delete(id);
+            }
+        });
+    }
+
+    private handleFire(vehicle: Vehicle, client: Client): void {
+        const activeWeapon = vehicle.weapons[vehicle.activeWeaponIndex];
+        if (activeWeapon && !activeWeapon.isOnCooldown) {
+            // Calculate spread based on weapon type
+            const spread = activeWeapon.projectileType === 'bullet' ? 0.05 : 0;
+            const spreadX = (Math.random() - 0.5) * spread;
+            const spreadY = (Math.random() - 0.5) * spread;
+            const spreadZ = (Math.random() - 0.5) * spread;
+
+            // Create projectile
+            const projectile = new Projectile();
+            projectile.id = `${client.sessionId}_${Date.now()}`;
+            projectile.type = activeWeapon.projectileType;
+            projectile.positionX = vehicle.positionX;
+            projectile.positionY = vehicle.positionY;
+            projectile.positionZ = vehicle.positionZ;
+            projectile.directionX = spreadX;
+            projectile.directionY = spreadY;
+            projectile.directionZ = 1 + spreadZ;
+            projectile.speed = activeWeapon.projectileSpeed;
+            projectile.damage = activeWeapon.damage;
+            projectile.range = activeWeapon.range;
+            projectile.sourceId = client.sessionId;
+            projectile.timestamp = Date.now();
+            projectile.tick = this.physicsWorld.getCurrentTick();
+
+            // Add projectile to state
+            this.state.projectiles.set(projectile.id, projectile);
+
+            // Set weapon cooldown
+            activeWeapon.isOnCooldown = true;
+            activeWeapon.lastFireTime = Date.now();
+
+            // Log fire event
+            console.log('Fire event:', {
+                weapon: activeWeapon.name,
+                projectile: projectile.id,
+                position: { x: projectile.positionX, y: projectile.positionY, z: projectile.positionZ },
+                direction: { x: projectile.directionX, y: projectile.directionY, z: projectile.directionZ },
+                spread: { x: spreadX, y: spreadY, z: spreadZ }
+            });
+        }
     }
 }

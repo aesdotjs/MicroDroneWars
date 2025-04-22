@@ -1,10 +1,11 @@
 import { PhysicsWorld } from '@shared/physics/PhysicsWorld';
 import { PhysicsControllerFactory } from '@shared/physics/PhysicsControllerFactory';
-import { PhysicsState, PhysicsInput } from '@shared/physics/types';
+import { PhysicsState, PhysicsInput, Weapon as SharedWeapon } from '@shared/physics/types';
 import { Engine, Scene, NullEngine, Vector3, Quaternion } from 'babylonjs';
-import { State, Vehicle } from '../schemas';
+import { State, Vehicle, Weapon as SchemaWeapon } from '../schemas/';
 import { DroneSettings, PlaneSettings } from '@shared/physics/VehicleSettings';
 import { BasePhysicsController } from '@shared/physics/BasePhysicsController';
+import { WeaponSystem } from '@shared/physics/WeaponSystem';
 
 /**
  * Handles server-side physics simulation for the game.
@@ -24,6 +25,7 @@ export class ServerPhysicsWorld {
     private lastProcessedInputTicks: Map<string, number> = new Map();
     private inputBuffers: Map<string, PhysicsInput[]> = new Map();
     private readonly MAX_INPUT_BUFFER_SIZE = 60; // 1 second worth of inputs at 60fps
+    private weaponSystems: Map<string, WeaponSystem> = new Map();
 
     /**
      * Creates a new ServerPhysicsWorld instance.
@@ -35,6 +37,26 @@ export class ServerPhysicsWorld {
         this.physicsWorld = new PhysicsWorld(this.engine, this.scene, {
             gravity: 9.81
         });
+    }
+
+    /**
+     * Converts a Colyseus Weapon schema to a shared Weapon type
+     * @param weapon - The Colyseus Weapon schema
+     * @returns The shared Weapon type
+     */
+    private convertWeapon(weapon: SchemaWeapon): SharedWeapon {
+        return {
+            id: weapon.id,
+            name: weapon.name,
+            projectileType: weapon.projectileType as 'bullet' | 'missile',
+            damage: weapon.damage,
+            fireRate: weapon.fireRate,
+            projectileSpeed: weapon.projectileSpeed,
+            cooldown: weapon.cooldown,
+            range: weapon.range,
+            isOnCooldown: weapon.isOnCooldown,
+            lastFireTime: weapon.lastFireTime
+        };
     }
 
     /**
@@ -54,6 +76,11 @@ export class ServerPhysicsWorld {
         const lastProcessedInputTimestamp = Date.now();
         this.lastProcessedInputTimestamps.set(id, lastProcessedInputTimestamp);
         this.lastProcessedInputTicks.set(id, this.physicsWorld.getCurrentTick());
+
+        // Initialize weapon system through the controller
+        const weapons = Array.from(vehicle.weapons).map(w => this.convertWeapon(w));
+        controller.initializeWeapons(weapons);
+
         const initialState = {
             position: new Vector3(vehicle.positionX, vehicle.positionY, vehicle.positionZ),
             quaternion: new Quaternion(0, 0, 0, 1),
@@ -116,11 +143,17 @@ export class ServerPhysicsWorld {
                 yawRight: false,
                 rollLeft: false,
                 rollRight: false,
+                fire: false,
+                zoom: false,
+                nextWeapon: false,
+                previousWeapon: false,
+                weapon1: false,
+                weapon2: false,
+                weapon3: false,
                 mouseDelta: {
                     x: 0,
                     y: 0
                 },
-                            
                 tick: this.physicsWorld.getCurrentTick(),
                 timestamp: Date.now(),
             };
@@ -129,12 +162,11 @@ export class ServerPhysicsWorld {
                 // Get all unprocessed inputs
                 let lastProcessedTick = this.lastProcessedInputTicks.get(id) ?? 0;
                 const buffer = inputBuffer.sort((a, b) => a.tick - b.tick);
-                // // Process each input in order
+                // Process each input in order
                 let processedCount = 0;
                 for (const input of buffer) {
                     if (input.tick > lastProcessedTick) {
                         controller.update(this.FIXED_TIME_STEP, input);
-                        // console.log(`[Server] [update] processed input tick=${input.tick} lastProcessedTick=${lastProcessedTick}`)
                         lastProcessedTick = input.tick;
                     }
                     processedCount++;
@@ -148,14 +180,8 @@ export class ServerPhysicsWorld {
                 }           
 
                 buffer.splice(0, processedCount);
-
-                // const nextInput = unprocessedInputs.length > 0 ? unprocessedInputs.shift()! : idleInput;
-                // controller.update(this.FIXED_TIME_STEP, nextInput);
-                // this.lastProcessedInputTicks.set(id, nextInput.tick);
-                // this.lastProcessedInputTimestamps.set(id, nextInput.timestamp);
-                
-                // this.inputBuffers.set(id, unprocessedInputs);
                 this.inputBuffers.set(id, buffer);
+
                 const physicsState = controller.getState();
                 if (physicsState) {
                     vehicle.positionX = physicsState.position.x;

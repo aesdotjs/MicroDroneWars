@@ -19,7 +19,6 @@ export class DronePhysicsController extends BasePhysicsController {
     private rollStabilizationStrength: number = 5.0; // Strength of auto-stabilization
     private maxRollAngle: number = Math.PI / 4; // Maximum allowed roll angle (45 degrees)
     private maxPitchAngle: number = Math.PI / 2.5; // Maximum pitch angle (about 72 degrees)
-    private collisionManager: CollisionManager;
 
     /**
      * Creates a new DronePhysicsController instance.
@@ -27,12 +26,12 @@ export class DronePhysicsController extends BasePhysicsController {
      * @param config - Configuration for the drone physics
      * @param id - Unique identifier for the drone
      * @param collisionManager - The collision manager instance
+     * @param isGhost - Whether the drone is a ghost (default: false)
      */
-    constructor(world: CANNON.World, config: VehiclePhysicsConfig, id: string, collisionManager: CollisionManager) {
-        super(world, config, id);
+    constructor(world: CANNON.World, config: VehiclePhysicsConfig, id: string, collisionManager: CollisionManager, isGhost: boolean = false) {
+        super(world, config, id, collisionManager, isGhost);
         this.targetAltitude = this.body.position.y;
         this.config = config;
-        this.collisionManager = collisionManager;
         const boxShape = new CANNON.Box(new CANNON.Vec3(0.5, 0.25, 0.5));
         this.body.addShape(boxShape);
         // Register collision callback
@@ -143,6 +142,28 @@ export class DronePhysicsController extends BasePhysicsController {
         
         // Apply stabilization first
         this.applyStabilization(deltaTime);
+
+        // Handle weapon controls
+        if (input.nextWeapon) {
+            this.nextWeapon();
+        }
+        if (input.previousWeapon) {
+            this.previousWeapon();
+        }
+        if (input.weapon1) {
+            this.switchWeapon(0);
+        }
+        if (input.weapon2) {
+            this.switchWeapon(1);
+        }
+        if (input.weapon3) {
+            this.switchWeapon(2);
+        }
+        
+        this.fireWeapon(input);
+
+        // Update weapons
+        this.updateWeapons(deltaTime);
 
         // Calculate velocity and speed
         const velocity = new Vector3(this.body.velocity.x, this.body.velocity.y, this.body.velocity.z);

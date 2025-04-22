@@ -1,6 +1,4 @@
-import { State } from './schemas/State';
-import { Flag as FlagSchema } from './schemas/Flag';
-import { Vehicle as VehicleSchema } from './schemas/Vehicle';
+import { State, Vehicle as VehicleSchema, Flag as FlagSchema, Weapon as WeaponSchema, Projectile as ProjectileSchema } from './schemas';
 import { PhysicsState, PhysicsInput } from '@shared/physics/types';
 import * as Colyseus from 'colyseus.js';
 import { Engine, Vector3, Quaternion } from 'babylonjs';
@@ -189,11 +187,30 @@ export class Game {
                 // Add vehicle state to the physics world
                 this.gameScene.getPhysicsWorld().addVehicleState(sessionId, updatedState);
             });
+
+            const weapons = Array.from(vehicle.weapons);
+            this.gameScene.getPhysicsWorld().updateVehicleWeapons(sessionId, weapons);
+
+            $(vehicle).weapons.onChange(() => {
+                const weapons = Array.from(vehicle.weapons);
+                this.gameScene.getPhysicsWorld().updateVehicleWeapons(sessionId, weapons);
+            });
         });
 
         $(this.room.state).vehicles.onRemove((_vehicle: VehicleSchema, sessionId: string) => {
             console.log('Vehicle removed:', sessionId);
             this.gameScene.removeVehicle(sessionId);
+        });
+
+        // Handle projectile updates
+        $(this.room.state).projectiles.onAdd((projectile: ProjectileSchema, id: string) => {
+            console.log('Projectile added:', id, projectile);
+            this.gameScene.addProjectile(projectile);
+        });
+
+        $(this.room.state).projectiles.onRemove((_projectile: ProjectileSchema, id: string) => {
+            console.log('Projectile removed:', id);
+            this.gameScene.removeProjectile(id);
         });
 
         // Handle flag updates
@@ -225,10 +242,10 @@ export class Game {
      * Sends movement input to the server.
      * @param input - The physics input to send
      */
-    public sendMovementUpdate(input: PhysicsInput): void {
+    public sendCommandUpdate(input: PhysicsInput): void {
         if (!this.room) return;
         input.timestamp = Date.now();
-        this.room.send('movement', input);
+        this.room.send('command', input);
     }
 
     /**

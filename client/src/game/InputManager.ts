@@ -27,8 +27,14 @@ export class InputManager {
         rollLeft: KeyBinding;
         rollRight: KeyBinding;
         
-        // Other controls
+        // Weapon controls
         fire: KeyBinding;
+        nextWeapon: KeyBinding;
+        previousWeapon: KeyBinding;
+        weapon1: KeyBinding;
+        weapon2: KeyBinding;
+        weapon3: KeyBinding;
+        // Other controls
         zoom: KeyBinding;
     };
     /** Current mouse movement delta */
@@ -62,8 +68,15 @@ export class InputManager {
             rollLeft: new KeyBinding('KeyQ'),
             rollRight: new KeyBinding('KeyE'),
             
-            // Other controls
+            // Weapon controls
             fire: new KeyBinding('MouseLeft'),
+            // mouse wheel  
+            nextWeapon: new KeyBinding('MouseWheelUp'),
+            previousWeapon: new KeyBinding('MouseWheelDown'),
+            weapon1: new KeyBinding('1'),
+            weapon2: new KeyBinding('2'),
+            weapon3: new KeyBinding('3'),
+            // Other controls
             zoom: new KeyBinding('MouseRight')
         };
         this.mouseDelta = { x: 0, y: 0 };
@@ -262,6 +275,12 @@ export class InputManager {
             yawRight: this.keys.yawRight.getIsPressed(),
             rollLeft: this.keys.rollLeft.getIsPressed(),
             rollRight: this.keys.rollRight.getIsPressed(),
+            fire: this.keys.fire.getIsPressed(),
+            nextWeapon: this.keys.nextWeapon.getIsPressed(),
+            previousWeapon: this.keys.previousWeapon.getIsPressed(),
+            weapon1: this.keys.weapon1.getIsPressed(),
+            weapon2: this.keys.weapon2.getIsPressed(),
+            weapon3: this.keys.weapon3.getIsPressed(),
             mouseDelta: currentMouseDelta,
         };
 
@@ -291,6 +310,11 @@ export class InputManager {
                !this.keys.down.getIsPressed() &&
                !this.keys.fire.getIsPressed() &&
                !this.keys.zoom.getIsPressed() &&
+               !this.keys.nextWeapon.getIsPressed() &&
+               !this.keys.previousWeapon.getIsPressed() &&
+               !this.keys.weapon1.getIsPressed() &&
+               !this.keys.weapon2.getIsPressed() &&
+               !this.keys.weapon3.getIsPressed() &&
                this.mouseDelta.x === 0 && 
                this.mouseDelta.y === 0;
     }

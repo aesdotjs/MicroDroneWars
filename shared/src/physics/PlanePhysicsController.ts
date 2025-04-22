@@ -18,7 +18,6 @@ export class PlanePhysicsController extends BasePhysicsController {
     protected config: VehiclePhysicsConfig;
     protected enginePower: number = 0;
     protected lastDrag: number = 0;
-    private collisionManager: CollisionManager;
 
     /**
      * Creates a new PlanePhysicsController instance.
@@ -26,11 +25,11 @@ export class PlanePhysicsController extends BasePhysicsController {
      * @param config - Configuration for the plane physics
      * @param id - Unique identifier for the plane
      * @param collisionManager - The collision manager instance
+     * @param isGhost - Whether the plane is a ghost (default: false)
      */
-    constructor(world: CANNON.World, config: VehiclePhysicsConfig, id: string, collisionManager: CollisionManager) {
-        super(world, config, id);
+    constructor(world: CANNON.World, config: VehiclePhysicsConfig, id: string, collisionManager: CollisionManager, isGhost: boolean = false) {
+        super(world, config, id, collisionManager, isGhost);
         this.config = config;
-        this.collisionManager = collisionManager;
         
         // Register collision callback
         this.collisionManager.registerCollisionCallback(id, this.handleCollision.bind(this));
@@ -76,6 +75,28 @@ export class PlanePhysicsController extends BasePhysicsController {
         this.updateEnginePower(input);
         const { right, up, forward } = this.getOrientationVectors();
         
+        // Handle weapon controls
+        if (input.nextWeapon) {
+            this.nextWeapon();
+        }
+        if (input.previousWeapon) {
+            this.previousWeapon();
+        }
+        if (input.weapon1) {
+            this.switchWeapon(0);
+        }
+        if (input.weapon2) {
+            this.switchWeapon(1);
+        }
+        if (input.weapon3) {
+            this.switchWeapon(2);
+        }
+        
+        this.fireWeapon(input);
+
+        // Update weapons
+        this.updateWeapons(deltaTime);
+
         // Calculate velocity and speed
         const velocity = new Vector3(this.body.velocity.x, this.body.velocity.y, this.body.velocity.z);
         const currentSpeed = Vector3.Dot(velocity, new Vector3(forward.x, forward.y, forward.z));

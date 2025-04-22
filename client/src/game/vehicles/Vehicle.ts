@@ -1,8 +1,9 @@
 import { Vector3, Quaternion, Mesh, Scene } from 'babylonjs';
 import { InputManager } from '../InputManager';
-import { PhysicsState, PhysicsInput } from '@shared/physics/types';
+import { PhysicsState, PhysicsInput, Projectile } from '@shared/physics/types';
 import { BasePhysicsController } from '@shared/physics/BasePhysicsController';
-import { Vehicle as VehicleSchema } from '../schemas/Vehicle';
+import { Vehicle as VehicleSchema } from '../schemas';
+import { WeaponEffects } from '../effects/WeaponEffects';
 
 /**
  * Base class for all vehicles in the game.
@@ -40,6 +41,13 @@ export abstract class Vehicle {
         yawRight: false,
         rollLeft: false,
         rollRight: false,
+        fire: false,
+        zoom: false,
+        nextWeapon: false,
+        previousWeapon: false,
+        weapon1: false,
+        weapon2: false,
+        weapon3: false,
         mouseDelta: { x: 0, y: 0 },
         timestamp: Date.now(),
         tick: 0
@@ -50,6 +58,7 @@ export abstract class Vehicle {
     public health: number = 100;
     /** Maximum health points of the vehicle */
     public maxHealth: number = 100;
+    protected weaponEffects: WeaponEffects;
 
     /**
      * Creates a new Vehicle instance.
@@ -68,6 +77,9 @@ export abstract class Vehicle {
         this.inputManager = inputManager;
         this.isLocalPlayer = isLocalPlayer;
         this.id = id;
+
+        // Initialize weapon effects
+        this.weaponEffects = new WeaponEffects(scene);
 
         // Initialize collision sphere
         this.collisionSphere = {
@@ -112,6 +124,19 @@ export abstract class Vehicle {
         if (this.isLocalPlayer && this.inputManager) {
             this.input = this.inputManager.getInput();
         }
+
+        // Update weapon effects
+        if (this.physicsController) {
+            const projectiles = new Map<string, Vector3>();
+            const weaponSystem = (this.physicsController as any).weaponSystem;
+            if (weaponSystem) {
+                // Get all active projectiles and their positions
+                weaponSystem.getProjectiles().forEach((projectile: Projectile) => {
+                    projectiles.set(projectile.id, projectile.position);
+                });
+            }
+            this.weaponEffects.updateProjectiles(projectiles);
+        }
     }
 
     /**
@@ -138,18 +163,72 @@ export abstract class Vehicle {
     }
 
     /**
+     * Creates a muzzle flash effect
+     * @param position - Position of the muzzle flash
+     * @param direction - Direction the weapon is facing
+     */
+    protected createMuzzleFlash(position: Vector3, direction: Vector3): void {
+        this.weaponEffects.createMuzzleFlash(position, direction, this.id);
+    }
+
+    /**
+     * Creates a projectile mesh
+     * @param projectile - The projectile data
+     */
+    protected createProjectileMesh(projectile: Projectile): void {
+        this.weaponEffects.createProjectileMesh(projectile);
+    }
+
+    /**
      * Cleans up resources when the vehicle is destroyed or removed.
      * Disposes of mesh, input manager, and physics controller.
      */
     public dispose(): void {
+        // Clean up mesh
         if (this.mesh) {
             this.mesh.dispose();
         }
+
+        // Clean up input manager
         if (this.inputManager) {
             this.inputManager.cleanup();
         }
+
+        // Clean up physics controller
         if (this.physicsController) {
             this.physicsController.cleanup();
         }
+
+        // Clean up weapon effects
+        if (this.weaponEffects) {
+            this.weaponEffects.cleanup();
+        }
+
+        // Reset state
+        this.health = this.maxHealth;
+        this.input = {
+            forward: false,
+            backward: false,
+            left: false,
+            right: false,
+            up: false,
+            down: false,
+            pitchUp: false,
+            pitchDown: false,
+            yawLeft: false,
+            yawRight: false,
+            rollLeft: false,
+            rollRight: false,
+            fire: false,
+            zoom: false,
+            nextWeapon: false,
+            previousWeapon: false,
+            weapon1: false,
+            weapon2: false,
+            weapon3: false,
+            mouseDelta: { x: 0, y: 0 },
+            timestamp: Date.now(),
+            tick: 0
+        };
     }
 } 

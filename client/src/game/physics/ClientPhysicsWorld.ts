@@ -1,14 +1,15 @@
 import { Vector3, Quaternion, Engine, Scene } from 'babylonjs';
-import { PhysicsState, PhysicsInput, VehiclePhysicsConfig, StateBuffer, InterpolationConfig, PhysicsConfig } from '@shared/physics/types';
+import { PhysicsState, PhysicsInput, StateBuffer, InterpolationConfig, Weapon as SharedWeapon } from '@shared/physics/types';
 import { BasePhysicsController } from '@shared/physics/BasePhysicsController';
 import { DronePhysicsController } from '@shared/physics/DronePhysicsController';
 import { PlanePhysicsController } from '@shared/physics/PlanePhysicsController';
 import { PhysicsWorld } from '@shared/physics/PhysicsWorld';
-import { CollisionEvent } from '@shared/physics/types';
 import { DroneSettings, PlaneSettings } from '@shared/physics/VehicleSettings';
 import { Game } from '../Game';
 import { useGameDebug } from '@/composables/useGameDebug';
 import * as CANNON from 'cannon-es';
+import { WeaponSystem } from '@shared/physics/WeaponSystem';
+import { Weapon as SchemaWeapon } from '../schemas/Weapon';
 
 const { log, logPerformance, clearVehicleLogs } = useGameDebug();
 /**
@@ -53,6 +54,7 @@ export class ClientPhysicsWorld {
     private readonly RECONCILIATION_ROTATION_THRESHOLD = Math.PI * (10/180); // Threshold for rotation reconciliation in radians
     private readonly RECONCILIATION_POSITION_SMOOTHING = 0.2; // Smoothing factor for corrections
     private readonly RECONCILIATION_ROTATION_SMOOTHING = 0.3; // Smoothing factor for corrections
+
     /**
      * Creates a new ClientPhysicsWorld instance.
      * @param engine - The Babylon.js engine
@@ -79,6 +81,24 @@ export class ClientPhysicsWorld {
     }
 
     /**
+     * Converts a Colyseus Weapon schema to a shared Weapon type
+     */
+    private convertWeapon(weapon: SchemaWeapon): SharedWeapon {
+        return {
+            id: weapon.id,
+            name: weapon.name,
+            projectileType: weapon.projectileType as 'bullet' | 'missile',
+            damage: weapon.damage,
+            fireRate: weapon.fireRate,
+            projectileSpeed: weapon.projectileSpeed,
+            cooldown: weapon.cooldown,
+            range: weapon.range,
+            isOnCooldown: weapon.isOnCooldown,
+            lastFireTime: weapon.lastFireTime
+        };
+    }
+
+    /**
      * Creates a new vehicle physics controller.
      * @param id - Unique identifier for the vehicle
      * @param type - Type of vehicle ('drone' or 'plane')
@@ -89,10 +109,25 @@ export class ClientPhysicsWorld {
         console.log('Creating vehicle:', { id, initialState});
         let controller: BasePhysicsController;
 
+        // Check if this is a remote player
+        const isRemotePlayer = id !== this.localPlayerId;
+
         if (type === 'drone') {
-            controller = new DronePhysicsController(this.physicsWorld.getWorld(), DroneSettings, id, this.physicsWorld.getCollisionManager());
+            controller = new DronePhysicsController(
+                this.physicsWorld.getWorld(), 
+                DroneSettings, 
+                id, 
+                this.physicsWorld.getCollisionManager(),
+                isRemotePlayer
+            );
         } else {
-            controller = new PlanePhysicsController(this.physicsWorld.getWorld(), PlaneSettings, id, this.physicsWorld.getCollisionManager());
+            controller = new PlanePhysicsController(
+                this.physicsWorld.getWorld(), 
+                PlaneSettings, 
+                id, 
+                this.physicsWorld.getCollisionManager(),
+                isRemotePlayer
+            );
         }
 
         // Set initial state
@@ -103,9 +138,89 @@ export class ClientPhysicsWorld {
         
         console.log('Vehicle created successfully:', { 
             id, 
-            controller 
+            controller,
+            isRemotePlayer
         });
         return controller;
+    }
+
+    /**
+     * Updates the physics simulation.
+     * @param deltaTime - Time elapsed since last update in seconds
+     */
+    public update(deltaTime: number): void {
+        this.accumulatedTime += deltaTime;
+        while (this.accumulatedTime >= this.fixedTimeStep) {
+            this.step(this.fixedTimeStep);
+            this.accumulatedTime -= this.fixedTimeStep;
+        }
+    }
+
+    /**
+     * Updates physics simulation and handles state interpolation.
+     * @param deltaTime - Time elapsed since last update in milliseconds
+     */
+    public step(deltaTime: number): void {
+        const startTime = performance.now();
+        this.physicsWorld.update(this.fixedTimeStep, this.fixedTimeStep, 1);
+
+        // Get and process local input
+        const isIdle = this.game.getGameScene().getInputManager().isIdle();
+        const input = this.game.getGameScene().getInputManager().getInput();
+        if (input) {
+            const currentTick = this.physicsWorld.getCurrentTick();
+            if (currentTick === this.lastProcessedInputTick) {
+                return;
+            }
+            const finalInput: PhysicsInput = {
+                ...input,
+                timestamp: Date.now(),
+                tick: this.physicsWorld.getCurrentTick()
+            }
+
+            // Update local player immediately
+            const localController = this.controllers.get(this.localPlayerId);
+            if (localController) {
+                localController.update(this.fixedTimeStep, finalInput);
+            }
+
+            if (!isIdle) {
+                this.game.sendCommandUpdate(finalInput);
+                this.pendingInputs.push(finalInput);
+                this.lastProcessedInputTick = currentTick;
+            }
+
+            const MAX_PENDING_INPUTS = 60;
+            if (this.pendingInputs.length > MAX_PENDING_INPUTS) {
+                this.pendingInputs.splice(0, this.pendingInputs.length - MAX_PENDING_INPUTS);
+            }
+        }
+
+        // Update weapon systems
+        this.controllers.forEach(controller => {
+            const weaponSystem = controller.getWeaponSystem();
+            if (weaponSystem) {
+                weaponSystem.update(deltaTime);
+            }
+        });
+
+        log('Tick', this.physicsWorld.getCurrentTick());
+
+        const endTime = performance.now();
+        logPerformance('Total Physics Update', endTime - startTime);
+    }
+
+    /**
+     * Updates a vehicle's weapons
+     * @param id - Vehicle ID
+     * @param weapons - Array of weapons to update
+     */
+    public updateVehicleWeapons(id: string, weapons: SchemaWeapon[]): void {
+        const controller = this.controllers.get(id);
+        if (controller) {
+            const sharedWeapons = weapons.map(w => this.convertWeapon(w));
+            controller.initializeWeapons(sharedWeapons);
+        }
     }
 
     /**
@@ -127,66 +242,6 @@ export class ClientPhysicsWorld {
     //         this.step(this.engine.getDeltaTime() / 1000);
     //     }, 1000 / 60);
     // }
-
-    public update(deltaTime: number): void {
-        this.accumulatedTime += deltaTime;
-        while (this.accumulatedTime >= this.fixedTimeStep) {
-            this.step(this.fixedTimeStep);
-            this.accumulatedTime -= this.fixedTimeStep;
-        }
-    }
-
-    /**
-     * Updates physics simulation and handles state interpolation.
-     * @param deltaTime - Time elapsed since last update in milliseconds
-     * @param input - Current input state
-     */
-    public step(deltaTime: number): void {
-        const startTime = performance.now();
-        this.physicsWorld.update(this.fixedTimeStep, this.fixedTimeStep, 1);
-        // Get and process local input
-        const isIdle = this.game.getGameScene().getInputManager().isIdle();
-        const input = this.game.getGameScene().getInputManager().getInput();
-        if (input) {
-            // Scale mouse delta by fixed timestep
-            // if (input.mouseDelta) {
-            //     input.mouseDelta.x *= this.fixedTimeStep;
-            //     input.mouseDelta.y *= this.fixedTimeStep;
-            // }
-            const currentTick = this.physicsWorld.getCurrentTick();
-            if (currentTick === this.lastProcessedInputTick) {
-                // we already processed an input for this tick
-                return;
-            }
-            const finalInput: PhysicsInput = {
-                ...input,
-                timestamp: Date.now(),
-                tick: this.physicsWorld.getCurrentTick()
-            }
-            // Update local player immediately
-            const localController = this.controllers.get(this.localPlayerId);
-            if (localController) {
-                localController.update(this.fixedTimeStep, finalInput);
-            }
-            if (!isIdle) {
-                this.game.sendMovementUpdate(finalInput);
-                this.pendingInputs.push(finalInput);
-                this.lastProcessedInputTick = currentTick;
-                // console.log(`[Client] [step] queuing and sending input=${finalInput.tick}`);
-            }
-            const MAX_PENDING_INPUTS = 60;
-            if (this.pendingInputs.length > MAX_PENDING_INPUTS) {
-                this.pendingInputs.splice(0, this.pendingInputs.length - MAX_PENDING_INPUTS);
-            }
-            
-            // console.log(`[Client] pendingInputs.length before send: ${this.pendingInputs.length}`);
-        }
-
-        log('Tick', this.physicsWorld.getCurrentTick());
-
-        const endTime = performance.now();
-        logPerformance('Total Physics Update', endTime - startTime);
-    }
 
     /**
      * Adds a new physics state to the buffer for interpolation
@@ -276,7 +331,6 @@ export class ClientPhysicsWorld {
             }
         });
     }
-
 
     /**
      * Initializes the tick value.

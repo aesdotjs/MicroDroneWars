@@ -1,9 +1,10 @@
 import * as CANNON from 'cannon-es';
 import { Vector3, Quaternion, Matrix } from 'babylonjs';
-import { PhysicsState, VehiclePhysicsConfig, PhysicsInput, CollisionType, CollisionSeverity } from './types';
+import { PhysicsState, VehiclePhysicsConfig, PhysicsInput, CollisionType, CollisionSeverity, Weapon, Projectile } from './types';
 import { SpringSimulator } from '../utils/SpringSimulator';
 import { CollisionGroups, collisionMasks } from './CollisionGroups';
 import { CollisionManager, EnhancedCollisionEvent } from './CollisionManager';
+import { WeaponSystem, DefaultWeapons, DamageEvent, DamageCallback } from './WeaponSystem';
 
 /**
  * Base class for vehicle physics controllers.
@@ -45,6 +46,11 @@ export abstract class BasePhysicsController {
     protected lastProcessedInputTick: number = 0;
     /** ID of the vehicle */
     protected id: string;
+    /** Weapon system for the vehicle */
+    protected weaponSystem: WeaponSystem;
+    /** Collision manager for handling collisions */
+    protected collisionManager: CollisionManager;
+    private damageCallbacks: DamageCallback[] = [];
 
     /**
      * Creates a new BasePhysicsController instance.
@@ -52,11 +58,14 @@ export abstract class BasePhysicsController {
      * @param world - The CANNON.js physics world
      * @param config - Configuration for the vehicle physics
      * @param id - Unique identifier for the vehicle
+     * @param collisionManager - Collision manager for handling collisions
+     * @param isGhost - Whether the vehicle is a ghost
      */
-    constructor(world: CANNON.World, config: VehiclePhysicsConfig, id: string) {
+    constructor(world: CANNON.World, config: VehiclePhysicsConfig, id: string, collisionManager: CollisionManager, isGhost: boolean = false) {
         this.world = world;
         this.config = config;
         this.id = id;
+        this.collisionManager = collisionManager;
         
         // Get collision group and mask based on vehicle type
         const vehicleGroup = config.vehicleType === 'drone' ? CollisionGroups.Drones : CollisionGroups.Planes;
@@ -64,14 +73,14 @@ export abstract class BasePhysicsController {
         
         // Initialize physics body with proper collision filters
         this.body = new CANNON.Body({
-            mass: config.mass,
+            mass: isGhost ? 0 : config.mass, // Use mass 0 for ghost bodies
             material: new CANNON.Material('vehicleMaterial'),
             collisionFilterGroup: vehicleGroup,
             collisionFilterMask: vehicleMask,
-            fixedRotation: false,
+            fixedRotation: isGhost, // Fix rotation for ghost bodies
             linearDamping: config.vehicleType === 'drone' ? 0.1 : 0.5, // Lower damping for drones
             angularDamping: 0.5,
-            type: CANNON.Body.DYNAMIC
+            type: isGhost ? CANNON.Body.STATIC : CANNON.Body.DYNAMIC // Use static body for ghosts
         });
 
         // Add collision shape based on vehicle type
@@ -93,6 +102,16 @@ export abstract class BasePhysicsController {
         this.rudderSimulator = new SpringSimulator(60, 0.1, 0.3);
         this.steeringSimulator = new SpringSimulator(60, 0.1, 0.3);
 
+        // Initialize weapon system with default weapons
+        this.weaponSystem = new WeaponSystem(
+            this.world,
+            this.collisionManager,
+            [DefaultWeapons.chaingun, DefaultWeapons.missile]
+        );
+
+        // Register damage callback
+        this.weaponSystem.registerDamageCallback(id, this.handleDamage.bind(this));
+
         console.log('Physics body created:', {
             type: config.vehicleType,
             collisionGroup: vehicleGroup,
@@ -100,6 +119,22 @@ export abstract class BasePhysicsController {
             hasShape: this.body.shapes.length > 0,
             shapeType: this.body.shapes[0]?.type
         });
+    }
+
+    /**
+     * Initializes the weapon system with the given weapons
+     * @param weapons - Array of weapons to initialize with
+     */
+    public initializeWeapons(weapons: Weapon[]): void {
+        if (this.weaponSystem) {
+            this.weaponSystem.cleanup();
+        }
+        this.weaponSystem = new WeaponSystem(
+            this.world,
+            this.collisionManager,
+            weapons
+        );
+        this.weaponSystem.registerDamageCallback(this.id, this.handleDamage.bind(this));
     }
 
     /**
@@ -190,6 +225,9 @@ export abstract class BasePhysicsController {
         if (this.body) {
             this.world.removeBody(this.body);
         }
+        this.weaponSystem.cleanup();
+        this.weaponSystem.unregisterDamageCallback(this.id, this.handleDamage.bind(this));
+        this.damageCallbacks = [];
     }
 
     /**
@@ -359,9 +397,67 @@ export abstract class BasePhysicsController {
      * @param event - The collision event
      */
     protected handleProjectileCollision(event: EnhancedCollisionEvent): void {
-        // Projectiles always cause damage regardless of severity
-        const damage = event.impactVelocity * 0.1; // Scale damage based on impact velocity
-        // TODO: Emit damage event to game logic
+        // Get the projectile from the collision event
+        const projectile = this.weaponSystem.getProjectileById(event.bodyA.id.toString()) || 
+                         this.weaponSystem.getProjectileById(event.bodyB.id.toString());
+        
+        if (!projectile) return;
+
+        // Calculate damage based on impact velocity and projectile type
+        const impactVelocity = event.impactVelocity;
+        let damage = projectile.damage;
+
+        // Scale damage based on impact velocity
+        if (projectile.type === 'bullet') {
+            // Bullets do more damage at higher velocities
+            damage *= Math.min(1.5, impactVelocity / projectile.speed);
+        } else {
+            // Missiles do more damage at lower velocities (explosive)
+            damage *= Math.max(0.5, 1 - (impactVelocity / projectile.speed));
+        }
+
+        // Apply damage to the vehicle
+        this.takeDamage(damage);
+    }
+
+    /**
+     * Handles damage events
+     * @param event - The damage event
+     */
+    private handleDamage(event: DamageEvent): void {
+        // Apply damage to the vehicle
+        this.takeDamage(event.damage);
+
+        // Notify all registered callbacks
+        this.damageCallbacks.forEach(callback => callback(event));
+    }
+
+    /**
+     * Registers a callback for damage events
+     * @param callback - The function to call when damage occurs
+     */
+    public registerDamageCallback(callback: DamageCallback): void {
+        this.damageCallbacks.push(callback);
+    }
+
+    /**
+     * Unregisters a damage callback
+     * @param callback - The callback function to remove
+     */
+    public unregisterDamageCallback(callback: DamageCallback): void {
+        const index = this.damageCallbacks.indexOf(callback);
+        if (index !== -1) {
+            this.damageCallbacks.splice(index, 1);
+        }
+    }
+
+    /**
+     * Applies damage to the vehicle.
+     * @param amount - Amount of damage to apply
+     */
+    protected takeDamage(amount: number): void {
+        // TODO: Implement damage system
+        console.log(`Vehicle ${this.id} took ${amount} damage`);
     }
 
     /**
@@ -371,5 +467,67 @@ export abstract class BasePhysicsController {
     protected handleFlagCollision(event: EnhancedCollisionEvent): void {
         // Flag collisions are handled by the game logic
         // TODO: Emit flag collision event to game logic
+    }
+
+    /**
+     * Fires the active weapon
+     * @param input - Physics input from the player
+     * @returns The created projectile if successful, null otherwise
+     */
+    protected fireWeapon(input: PhysicsInput): Projectile | null {
+        if (!input.fire) return null;
+
+        const { forward } = this.getOrientationVectors();
+        return this.weaponSystem.fire(
+            new Vector3(this.body.position.x, this.body.position.y, this.body.position.z),
+            forward,
+            this.id,
+            this.tick
+        );
+    }
+
+    /**
+     * Switches to the next weapon
+     */
+    protected nextWeapon(): void {
+        this.weaponSystem.nextWeapon();
+    }
+
+    /**
+     * Switches to the previous weapon
+     */
+    protected previousWeapon(): void {
+        this.weaponSystem.previousWeapon();
+    }
+
+    /**
+     * Gets the currently active weapon
+     */
+    public getActiveWeapon(): Weapon {
+        return this.weaponSystem.getActiveWeapon();
+    }
+
+    /**
+     * Updates the weapon system
+     * @param deltaTime - Time elapsed since last update in seconds
+     */
+    protected updateWeapons(deltaTime: number): void {
+        this.weaponSystem.update(deltaTime);
+    }
+
+    /**
+     * Switches to a specific weapon
+     * @param index - The index of the weapon to switch to
+     */
+    protected switchWeapon(index: number): void {
+        this.weaponSystem.switchWeapon(index);
+    }
+
+    /**
+     * Gets the weapon system for this controller
+     * @returns The weapon system
+     */
+    public getWeaponSystem(): WeaponSystem {
+        return this.weaponSystem;
     }
 } 

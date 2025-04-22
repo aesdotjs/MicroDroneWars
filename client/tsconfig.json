@@ -1,9 +1,8 @@
 {
     "compilerOptions": {
-        "target": "ES2020",
-        "useDefineForClassFields": true,
+        "target": "es2019",
         "module": "ESNext",
-        "lib": ["ES2020", "DOM", "DOM.Iterable"],
+        "lib": ["es2019", "DOM", "DOM.Iterable"],
         "skipLibCheck": true,
         "moduleResolution": "bundler",
         "allowImportingTsExtensions": true,
@@ -16,13 +15,15 @@
         "noUnusedParameters": true,
         "noFallthroughCasesInSwitch": true,
         "experimentalDecorators": true,
+        "useDefineForClassFields": false,
         "emitDecoratorMetadata": true,
+        "esModuleInterop": true,
         "baseUrl": ".",
         "paths": {
             "@/*": ["src/*"],
             "@shared/*": ["../shared/src/*"]
         }
     },
-    "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue", "src/*.vue","../shared/src/**/*"],
-    "references": [{ "path": "./tsconfig.node.json" }]
+    "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue", "src/*.vue","../shared/src/**/*", "../server/src/schemas"],
+    "references": [{ "path": "./tsconfig.node.json" }, { "path": "../shared/tsconfig.json" }]
 } 
