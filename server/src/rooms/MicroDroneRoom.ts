@@ -4,7 +4,7 @@ import { State, Drone, Plane, Flag, Weapon, Projectile, Vehicle } from "../schem
 import { ServerPhysicsWorld } from "../physics/ServerPhysicsWorld";
 import { VehiclePhysicsConfig, PhysicsInput } from "@shared/physics/types";
 import { DefaultWeapons } from "@shared/physics/WeaponSystem";
-import { Vector3 } from "babylonjs";
+import { Vector3, Quaternion } from "babylonjs";
 
 /**
  * Represents a game room for MicroDroneWars multiplayer matches.
@@ -227,6 +227,9 @@ export class MicroDroneRoom extends Room<State> {
 
         // Update projectiles
         this.state.projectiles.forEach((projectile: Projectile, id: string) => {
+            // Convert deltaTime to seconds
+            const deltaTimeSeconds = deltaTime / 1000;
+            
             // Move projectile
             const direction = new Vector3(
                 projectile.directionX,
@@ -234,12 +237,12 @@ export class MicroDroneRoom extends Room<State> {
                 projectile.directionZ
             ).normalize();
             
-            projectile.positionX += direction.x * projectile.speed * deltaTime;
-            projectile.positionY += direction.y * projectile.speed * deltaTime;
-            projectile.positionZ += direction.z * projectile.speed * deltaTime;
+            projectile.positionX += direction.x * projectile.speed * deltaTimeSeconds;
+            projectile.positionY += direction.y * projectile.speed * deltaTimeSeconds;
+            projectile.positionZ += direction.z * projectile.speed * deltaTimeSeconds;
             
             // Update distance traveled
-            projectile.distanceTraveled += projectile.speed * deltaTime;
+            projectile.distanceTraveled += projectile.speed * deltaTimeSeconds;
             
             // Remove projectile if it exceeds range
             if (projectile.distanceTraveled >= projectile.range) {
@@ -252,10 +255,20 @@ export class MicroDroneRoom extends Room<State> {
         const activeWeapon = vehicle.weapons[vehicle.activeWeaponIndex];
         if (activeWeapon && !activeWeapon.isOnCooldown) {
             // Calculate spread based on weapon type
-            const spread = activeWeapon.projectileType === 'bullet' ? 0.05 : 0;
+            const spread = activeWeapon.projectileType === 'bullet' ? 0.01 : 0;
             const spreadX = (Math.random() - 0.5) * spread;
             const spreadY = (Math.random() - 0.5) * spread;
             const spreadZ = (Math.random() - 0.5) * spread;
+
+            // Get vehicle's forward direction from quaternion
+            const forward = new Vector3(0, 0, 1);
+            const rotation = new Quaternion(
+                vehicle.quaternionX,
+                vehicle.quaternionY,
+                vehicle.quaternionZ,
+                vehicle.quaternionW
+            );
+            forward.rotateByQuaternionToRef(rotation, forward);
 
             // Create projectile
             const projectile = new Projectile();
@@ -264,9 +277,9 @@ export class MicroDroneRoom extends Room<State> {
             projectile.positionX = vehicle.positionX;
             projectile.positionY = vehicle.positionY;
             projectile.positionZ = vehicle.positionZ;
-            projectile.directionX = spreadX;
-            projectile.directionY = spreadY;
-            projectile.directionZ = 1 + spreadZ;
+            projectile.directionX = forward.x + spreadX;
+            projectile.directionY = forward.y + spreadY;
+            projectile.directionZ = forward.z + spreadZ;
             projectile.speed = activeWeapon.projectileSpeed;
             projectile.damage = activeWeapon.damage;
             projectile.range = activeWeapon.range;
@@ -280,15 +293,6 @@ export class MicroDroneRoom extends Room<State> {
             // Set weapon cooldown
             activeWeapon.isOnCooldown = true;
             activeWeapon.lastFireTime = Date.now();
-
-            // Log fire event
-            console.log('Fire event:', {
-                weapon: activeWeapon.name,
-                projectile: projectile.id,
-                position: { x: projectile.positionX, y: projectile.positionY, z: projectile.positionZ },
-                direction: { x: projectile.directionX, y: projectile.directionY, z: projectile.directionZ },
-                spread: { x: spreadX, y: spreadY, z: spreadZ }
-            });
         }
     }
 }

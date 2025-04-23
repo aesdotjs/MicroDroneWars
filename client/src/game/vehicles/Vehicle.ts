@@ -2,7 +2,7 @@ import { Vector3, Quaternion, Mesh, Scene } from 'babylonjs';
 import { InputManager } from '../InputManager';
 import { PhysicsState, PhysicsInput, Projectile } from '@shared/physics/types';
 import { BasePhysicsController } from '@shared/physics/BasePhysicsController';
-import { Vehicle as VehicleSchema } from '../schemas';
+import { Vehicle as VehicleSchema, Projectile as ProjectileSchema } from '../schemas';
 import { WeaponEffects } from '../effects/WeaponEffects';
 
 /**
@@ -125,18 +125,18 @@ export abstract class Vehicle {
             this.input = this.inputManager.getInput();
         }
 
-        // Update weapon effects
-        if (this.physicsController) {
-            const projectiles = new Map<string, Vector3>();
-            const weaponSystem = (this.physicsController as any).weaponSystem;
-            if (weaponSystem) {
-                // Get all active projectiles and their positions
-                weaponSystem.getProjectiles().forEach((projectile: Projectile) => {
-                    projectiles.set(projectile.id, projectile.position);
-                });
-            }
-            this.weaponEffects.updateProjectiles(projectiles);
-        }
+        // // Update weapon effects
+        // if (this.physicsController) {
+        //     const projectiles = new Map<string, Vector3>();
+        //     const weaponSystem = (this.physicsController as any).weaponSystem;
+        //     if (weaponSystem) {
+        //         // Get all active projectiles and their positions
+        //         weaponSystem.getProjectiles().forEach((projectile: Projectile) => {
+        //             projectiles.set(projectile.id, projectile.position);
+        //         });
+        //     }
+        //     this.weaponEffects.updateProjectiles(projectiles);
+        // }
     }
 
     /**
@@ -177,6 +177,69 @@ export abstract class Vehicle {
      */
     protected createProjectileMesh(projectile: Projectile): void {
         this.weaponEffects.createProjectileMesh(projectile);
+    }
+
+    /**
+     * Handles a new projectile being added
+     * @param projectile - The projectile data
+     */
+    public handleProjectileAdd(projectile: ProjectileSchema): void {
+        const projectileData = {
+            id: projectile.id,
+            type: projectile.type as 'bullet' | 'missile',
+            position: new Vector3(projectile.positionX, projectile.positionY, projectile.positionZ),
+            direction: new Vector3(projectile.directionX, projectile.directionY, projectile.directionZ),
+            speed: projectile.speed,
+            damage: projectile.damage,
+            range: projectile.range,
+            distanceTraveled: 0,
+            sourceId: projectile.sourceId,
+            timestamp: projectile.timestamp,
+            tick: projectile.tick
+        };
+
+        // Create visual effects
+        this.weaponEffects.createProjectileMesh(projectileData);
+        
+        // Calculate muzzle flash position and direction
+        if (this.mesh) {
+            const forward = this.mesh.getDirection(Vector3.Forward());
+            const up = this.mesh.getDirection(Vector3.Up());
+            const right = this.mesh.getDirection(Vector3.Right());
+            
+            // Calculate world position based on vehicle's position and rotation
+            const localPosition = new Vector3(0, 0.2, 0.7);
+            const worldPosition = this.mesh.position.add(
+                forward.scale(localPosition.z)
+            ).add(
+                up.scale(localPosition.y)
+            ).add(
+                right.scale(localPosition.x)
+            );
+            
+            this.weaponEffects.createMuzzleFlash(
+                worldPosition,
+                forward,
+                this.id
+            );
+        }
+    }
+
+    /**
+     * Handles a projectile being removed
+     * @param id - ID of the projectile to remove
+     */
+    public handleProjectileRemove(id: string): void {
+        this.weaponEffects.removeProjectileMesh(id);
+    }
+
+    /**
+     * Handles a projectile position update
+     * @param id - ID of the projectile
+     * @param position - New position of the projectile
+     */
+    public handleProjectileUpdate(id: string, position: Vector3): void {
+        this.weaponEffects.updateProjectilePosition(id, position);
     }
 
     /**

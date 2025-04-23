@@ -204,14 +204,47 @@ export class Game {
 
         // Handle projectile updates
         $(this.room.state).projectiles.onAdd((projectile: ProjectileSchema, id: string) => {
-            console.log('Projectile added:', id, projectile);
-            this.gameScene.addProjectile(projectile);
+            // Find the vehicle that fired this projectile
+            const sourceVehicle = this.gameScene.getVehicle(projectile.sourceId);
+            if (sourceVehicle) {
+                sourceVehicle.handleProjectileAdd(projectile);
+            }
+            $(projectile).onChange(() => {
+                if (!projectile) return;
+                // Find the vehicle that fired this projectile
+                const sourceVehicle = this.gameScene.getVehicle(projectile.sourceId);
+                if (sourceVehicle) {
+                    sourceVehicle.handleProjectileUpdate(id, new Vector3(
+                        projectile.positionX,
+                        projectile.positionY,
+                        projectile.positionZ
+                    ));
+                }
+            });
         });
 
         $(this.room.state).projectiles.onRemove((_projectile: ProjectileSchema, id: string) => {
-            console.log('Projectile removed:', id);
-            this.gameScene.removeProjectile(id);
+            // Find the vehicle that fired this projectile
+            const sourceVehicle = this.gameScene.getVehicle(id.split('_')[0]); // Extract vehicle ID from projectile ID
+            if (sourceVehicle) {
+                sourceVehicle.handleProjectileRemove(id);
+            }
         });
+
+        // // Handle projectile position updates
+        // $(this.room.state).projectiles.onChange((projectile: ProjectileSchema, id: string) => {
+        //     if (!projectile) return;
+        //     console.log('Projectile changed:', id, projectile);
+        //     // Find the vehicle that fired this projectile
+        //     const sourceVehicle = this.gameScene.getVehicle(projectile.sourceId);
+        //     if (sourceVehicle) {
+        //         sourceVehicle.handleProjectileUpdate(id, new Vector3(
+        //             projectile.positionX,
+        //             projectile.positionY,
+        //             projectile.positionZ
+        //         ));
+        //     }
+        // });
 
         // Handle flag updates
         $(this.room.state).flags.onAdd((flag: FlagSchema, flagId: string) => {

@@ -1,6 +1,5 @@
-import { Scene, Vector3, Mesh, StandardMaterial, Color3, Color4, ParticleSystem, Texture, MeshBuilder, Quaternion } from 'babylonjs';
-import { Weapon, Projectile } from '@shared/physics/types';
-import { Projectile as ProjectileSchema } from "../schemas/Projectile";
+import { Scene, Vector3, Mesh, StandardMaterial, Color3, Color4, ParticleSystem, Texture, MeshBuilder, Quaternion, Camera, TrailMesh, TransformNode } from 'babylonjs';
+import { Projectile } from '@shared/physics/types';
 
 /**
  * Manages visual effects for weapons and projectiles
@@ -11,15 +10,15 @@ export class WeaponEffects {
     private bulletMaterial!: StandardMaterial;
     private missileMaterial!: StandardMaterial;
     private trailMaterial!: StandardMaterial;
+    private impactMaterial!: StandardMaterial;
     private muzzleFlashTexture!: Texture;
     private trailTexture!: Texture;
+    private impactTexture!: Texture;
     private activeMuzzleFlashes: Map<string, Mesh> = new Map();
     private activeProjectiles: Map<string, Mesh> = new Map();
-    private activeTrails: Map<string, ParticleSystem> = new Map();
-    private projectileMesh: any;
-    private particleSystem!: ParticleSystem;
-    private muzzleFlash!: ParticleSystem;
-    private impactEffect!: ParticleSystem;
+    private activeTrails: Map<string, TrailMesh> = new Map();
+    private activeImpacts: Map<string, ParticleSystem> = new Map();
+    private muzzleFlashTimeouts: Map<string, NodeJS.Timeout> = new Map();
 
     /**
      * Creates a new WeaponEffects instance
@@ -28,7 +27,6 @@ export class WeaponEffects {
     constructor(scene: Scene) {
         this.scene = scene;
         this.initializeMaterials();
-        this.setupParticleSystems();
     }
 
     /**
@@ -37,129 +35,86 @@ export class WeaponEffects {
     private initializeMaterials(): void {
         // Muzzle flash material
         this.muzzleFlashMaterial = new StandardMaterial('muzzleFlashMaterial', this.scene);
-        this.muzzleFlashMaterial.emissiveColor = new Color3(1, 0.7, 0.3);
+        this.muzzleFlashMaterial.diffuseColor = new Color3(1, 1, 1); // White base color
+        this.muzzleFlashMaterial.specularColor = new Color3(0, 0, 0); // No specular
+        this.muzzleFlashMaterial.emissiveColor = new Color3(1, 0.7, 0.3); // Orange glow
         this.muzzleFlashMaterial.alpha = 0.8;
-        this.muzzleFlashTexture = new Texture('assets/textures/muzzle_flash.png', this.scene);
+        this.muzzleFlashTexture = new Texture('/assets/textures/muzzle_flash.png', this.scene);
         this.muzzleFlashMaterial.diffuseTexture = this.muzzleFlashTexture;
+        this.muzzleFlashMaterial.diffuseTexture.hasAlpha = true;
+        this.muzzleFlashMaterial.useAlphaFromDiffuseTexture = true;
+        this.muzzleFlashMaterial.backFaceCulling = false;
+        this.muzzleFlashMaterial.separateCullingPass = true;
 
         // Bullet material
         this.bulletMaterial = new StandardMaterial('bulletMaterial', this.scene);
         this.bulletMaterial.emissiveColor = new Color3(1, 1, 0.3);
+        this.bulletMaterial.diffuseColor = new Color3(1, 1, 0.3);
+        this.bulletMaterial.specularColor = new Color3(0, 0, 0);
         this.bulletMaterial.alpha = 0.8;
 
         // Missile material
         this.missileMaterial = new StandardMaterial('missileMaterial', this.scene);
         this.missileMaterial.emissiveColor = new Color3(1, 0.3, 0.3);
+        this.missileMaterial.diffuseColor = new Color3(1, 0.3, 0.3);
+        this.missileMaterial.specularColor = new Color3(0, 0, 0);
         this.missileMaterial.alpha = 0.8;
 
         // Trail material
         this.trailMaterial = new StandardMaterial('trailMaterial', this.scene);
+        this.trailMaterial.disableLighting = true;
         this.trailMaterial.emissiveColor = new Color3(1, 0.5, 0.2);
-        this.trailMaterial.alpha = 0.6;
-        this.trailTexture = new Texture('assets/textures/trail.png', this.scene);
-        this.trailMaterial.diffuseTexture = this.trailTexture;
-    }
+        this.trailMaterial.diffuseColor = new Color3(1, 0.5, 0.2);
+        this.trailMaterial.specularColor = new Color3(0, 0, 0);
+        this.trailMaterial.alpha = 0.8;
+        this.trailMaterial.backFaceCulling = false;
 
-    private setupParticleSystems() {
-        // Projectile trail particles
-        this.particleSystem = new ParticleSystem("projectileTrail", 2000, this.scene);
-        this.particleSystem.particleTexture = new Texture("textures/flare.png", this.scene);
-        this.particleSystem.emitter = new Vector3(0, 0, 0);
-        this.particleSystem.minEmitBox = new Vector3(-0.1, -0.1, -0.1);
-        this.particleSystem.maxEmitBox = new Vector3(0.1, 0.1, 0.1);
-        this.particleSystem.color1 = new Color4(1, 0.5, 0, 1);
-        this.particleSystem.color2 = new Color4(1, 0.5, 0, 0.5);
-        this.particleSystem.colorDead = new Color4(0, 0, 0, 0);
-        this.particleSystem.minSize = 0.1;
-        this.particleSystem.maxSize = 0.3;
-        this.particleSystem.minLifeTime = 0.1;
-        this.particleSystem.maxLifeTime = 0.3;
-        this.particleSystem.emitRate = 100;
-        this.particleSystem.blendMode = ParticleSystem.BLENDMODE_ONEONE;
-        this.particleSystem.gravity = new Vector3(0, 0, 0);
-        this.particleSystem.direction1 = new Vector3(-1, -1, -1);
-        this.particleSystem.direction2 = new Vector3(1, 1, 1);
-        this.particleSystem.minAngularSpeed = 0;
-        this.particleSystem.maxAngularSpeed = Math.PI;
-        this.particleSystem.minEmitPower = 1;
-        this.particleSystem.maxEmitPower = 3;
-        this.particleSystem.updateSpeed = 0.01;
-
-        // Muzzle flash particles
-        this.muzzleFlash = new ParticleSystem("muzzleFlash", 100, this.scene);
-        this.muzzleFlash.particleTexture = new Texture("textures/flare.png", this.scene);
-        this.muzzleFlash.emitter = new Vector3(0, 0, 0);
-        this.muzzleFlash.minEmitBox = new Vector3(-0.1, -0.1, -0.1);
-        this.muzzleFlash.maxEmitBox = new Vector3(0.1, 0.1, 0.1);
-        this.muzzleFlash.color1 = new Color4(1, 0.8, 0, 1);
-        this.muzzleFlash.color2 = new Color4(1, 0.8, 0, 0.5);
-        this.muzzleFlash.colorDead = new Color4(0, 0, 0, 0);
-        this.muzzleFlash.minSize = 0.2;
-        this.muzzleFlash.maxSize = 0.5;
-        this.muzzleFlash.minLifeTime = 0.05;
-        this.muzzleFlash.maxLifeTime = 0.1;
-        this.muzzleFlash.emitRate = 1000;
-        this.muzzleFlash.blendMode = ParticleSystem.BLENDMODE_ONEONE;
-        this.muzzleFlash.gravity = new Vector3(0, 0, 0);
-        this.muzzleFlash.direction1 = new Vector3(-1, -1, -1);
-        this.muzzleFlash.direction2 = new Vector3(1, 1, 1);
-        this.muzzleFlash.minAngularSpeed = 0;
-        this.muzzleFlash.maxAngularSpeed = Math.PI;
-        this.muzzleFlash.minEmitPower = 1;
-        this.muzzleFlash.maxEmitPower = 3;
-        this.muzzleFlash.updateSpeed = 0.01;
-
-        // Impact effect particles
-        this.impactEffect = new ParticleSystem("impactEffect", 500, this.scene);
-        this.impactEffect.particleTexture = new Texture("textures/flare.png", this.scene);
-        this.impactEffect.emitter = new Vector3(0, 0, 0);
-        this.impactEffect.minEmitBox = new Vector3(-0.2, -0.2, -0.2);
-        this.impactEffect.maxEmitBox = new Vector3(0.2, 0.2, 0.2);
-        this.impactEffect.color1 = new Color4(1, 0.5, 0, 1);
-        this.impactEffect.color2 = new Color4(1, 0.5, 0, 0.5);
-        this.impactEffect.colorDead = new Color4(0, 0, 0, 0);
-        this.impactEffect.minSize = 0.2;
-        this.impactEffect.maxSize = 0.5;
-        this.impactEffect.minLifeTime = 0.1;
-        this.impactEffect.maxLifeTime = 0.3;
-        this.impactEffect.emitRate = 1000;
-        this.impactEffect.blendMode = ParticleSystem.BLENDMODE_ONEONE;
-        this.impactEffect.gravity = new Vector3(0, 0, 0);
-        this.impactEffect.direction1 = new Vector3(-1, -1, -1);
-        this.impactEffect.direction2 = new Vector3(1, 1, 1);
-        this.impactEffect.minAngularSpeed = 0;
-        this.impactEffect.maxAngularSpeed = Math.PI;
-        this.impactEffect.minEmitPower = 1;
-        this.impactEffect.maxEmitPower = 3;
-        this.impactEffect.updateSpeed = 0.01;
+        // Impact material
+        this.impactMaterial = new StandardMaterial('impactMaterial', this.scene);
+        this.impactMaterial.emissiveColor = new Color3(1, 0.3, 0.1);
+        this.impactMaterial.alpha = 0.8;
+        this.impactTexture = new Texture('/assets/textures/impact.png', this.scene);
+        this.impactMaterial.diffuseTexture = this.impactTexture;
+        this.impactMaterial.useAlphaFromDiffuseTexture = true;
     }
 
     /**
      * Creates a muzzle flash effect
-     * @param position - Position of the muzzle flash
+     * @param position - World position of the muzzle flash
      * @param direction - Direction the weapon is facing
      * @param weaponId - ID of the weapon
      */
     public createMuzzleFlash(position: Vector3, direction: Vector3, weaponId: string): void {
+        // Clear any existing timeout for this weapon
+        const existingTimeout = this.muzzleFlashTimeouts.get(weaponId);
+        if (existingTimeout) {
+            clearTimeout(existingTimeout);
+            this.muzzleFlashTimeouts.delete(weaponId);
+        }
+
         // Remove existing muzzle flash if any
         this.removeMuzzleFlash(weaponId);
 
         // Create muzzle flash mesh
-        const muzzleFlash = MeshBuilder.CreatePlane('muzzleFlash', { size: 0.5 }, this.scene);
+        const muzzleFlash = MeshBuilder.CreatePlane('muzzleFlash', { size: 1.0 }, this.scene);
         muzzleFlash.position = position;
         muzzleFlash.material = this.muzzleFlashMaterial;
 
-        // Orient muzzle flash to face camera
-        const camera = this.scene.activeCamera;
-        if (camera) {
-            muzzleFlash.lookAt(camera.position);
-        }
+        // Use billboard mode for better visibility from all angles
+        muzzleFlash.billboardMode = Mesh.BILLBOARDMODE_ALL;
+        muzzleFlash.rotation.y = Math.PI; // Flip the texture to face forward
 
         // Store reference
         this.activeMuzzleFlashes.set(weaponId, muzzleFlash);
 
-        // Remove after short duration
-        setTimeout(() => this.removeMuzzleFlash(weaponId), 50);
+        // Set timeout to remove the muzzle flash if it hasn't been replaced
+        const timeout = setTimeout(() => {
+            // Only remove if this is still the current muzzle flash
+            if (this.activeMuzzleFlashes.get(weaponId) === muzzleFlash) {
+                this.removeMuzzleFlash(weaponId);
+            }
+        }, 50);
+        this.muzzleFlashTimeouts.set(weaponId, timeout);
     }
 
     /**
@@ -173,16 +128,21 @@ export class WeaponEffects {
         // Create projectile mesh based on type
         let projectileMesh: Mesh;
         if (projectile.type === 'bullet') {
-            projectileMesh = MeshBuilder.CreateSphere('bullet', { diameter: 0.2 }, this.scene);
+            // Create a small box for bullets
+            projectileMesh = MeshBuilder.CreateBox('bullet', { 
+                width: 0.05,  // Small width
+                height: 0.05, // Small height
+                depth: 0.4   // Longer depth for bullet shape
+            }, this.scene);
             projectileMesh.material = this.bulletMaterial;
         } else {
-            projectileMesh = MeshBuilder.CreateBox('missile', { size: 0.4 }, this.scene);
+            projectileMesh = MeshBuilder.CreateBox('missile', { size: 0.2 }, this.scene);
             projectileMesh.material = this.missileMaterial;
         }
 
         // Set position and rotation
         projectileMesh.position = projectile.position;
-        const direction = projectile.direction;
+        const direction = projectile.direction.normalize();
         const rotation = Quaternion.FromLookDirectionLH(direction, Vector3.Up());
         projectileMesh.rotationQuaternion = rotation;
 
@@ -190,53 +150,46 @@ export class WeaponEffects {
         this.activeProjectiles.set(projectile.id, projectileMesh);
 
         // Create trail effect
-        this.createTrailEffect(projectile);
+        this.createTrailEffect(projectile, projectileMesh);
     }
 
     /**
      * Creates a trail effect for a projectile
      * @param projectile - The projectile data
+     * @param sourceMesh - The mesh to follow
      */
-    private createTrailEffect(projectile: Projectile): void {
-        const trail = new ParticleSystem('trail', 100, this.scene);
-        trail.particleTexture = this.trailTexture;
-        trail.emitter = this.activeProjectiles.get(projectile.id)!;
-        trail.minEmitBox = new Vector3(-0.1, -0.1, -0.1);
-        trail.maxEmitBox = new Vector3(0.1, 0.1, 0.1);
-        trail.color1 = new Color4(1, 0.5, 0.2, 1);
-        trail.color2 = new Color4(1, 0.2, 0.1, 1);
-        trail.colorDead = new Color4(0, 0, 0, 0);
-        trail.minSize = 0.1;
-        trail.maxSize = 0.3;
-        trail.minLifeTime = 0.1;
-        trail.maxLifeTime = 0.3;
-        trail.emitRate = 100;
-        trail.blendMode = ParticleSystem.BLENDMODE_ONEONE;
-        trail.gravity = new Vector3(0, 0, 0);
-        trail.direction1 = new Vector3(-0.5, -0.5, -0.5);
-        trail.direction2 = new Vector3(0.5, 0.5, 0.5);
-        trail.minAngularSpeed = 0;
-        trail.maxAngularSpeed = Math.PI;
-        trail.minEmitPower = 0.1;
-        trail.maxEmitPower = 0.5;
-        trail.updateSpeed = 0.01;
-        trail.start();
+    private createTrailEffect(projectile: Projectile, sourceMesh: Mesh): void {
+        // Remove existing trail if any
+        sourceMesh.computeWorldMatrix();
+        this.removeTrailEffect(projectile.id);
+        // Create trail mesh with simpler parameters
+        const trail = new TrailMesh(
+            `trail_${projectile.id}`,
+            sourceMesh,  // Use the projectile mesh directly
+            this.scene,
+            0.1,  // diameter
+            15,   // length
+            true  // autoStart
+        );
 
+        // Use the shared trail material
+        trail.material = this.trailMaterial;
         // Store reference
         this.activeTrails.set(projectile.id, trail);
     }
 
     /**
-     * Updates projectile positions
-     * @param projectiles - Map of projectile IDs to their positions
+     * Updates a single projectile's position
+     * @param id - ID of the projectile to update
+     * @param position - New position of the projectile
      */
-    public updateProjectiles(projectiles: Map<string, Vector3>): void {
-        projectiles.forEach((position, id) => {
-            const mesh = this.activeProjectiles.get(id);
-            if (mesh) {
-                mesh.position = position;
-            }
-        });
+    public updateProjectilePosition(id: string, position: Vector3): void {
+        const projectile = this.activeProjectiles.get(id);
+        if (projectile) {
+            // Update projectile position
+            projectile.position = position;
+            // Trail will automatically follow since it's parented
+        }
     }
 
     /**
@@ -262,11 +215,69 @@ export class WeaponEffects {
             this.activeProjectiles.delete(projectileId);
         }
 
+        this.removeTrailEffect(projectileId);
+    }
+
+    /**
+     * Removes a trail effect
+     * @param projectileId - ID of the projectile
+     */
+    private removeTrailEffect(projectileId: string): void {
         const trail = this.activeTrails.get(projectileId);
         if (trail) {
-            trail.stop();
             trail.dispose();
             this.activeTrails.delete(projectileId);
+        }
+    }
+
+    /**
+     * Creates an impact effect at the specified position
+     * @param position - Position of the impact
+     * @param type - Type of projectile that caused the impact
+     */
+    public createImpactEffect(position: Vector3, type: 'bullet' | 'missile'): void {
+        const impactId = `impact_${Date.now()}`;
+        const impact = new ParticleSystem('impact', 100, this.scene);
+        impact.particleTexture = this.impactTexture;
+        impact.emitter = position;
+        impact.minEmitBox = new Vector3(-0.2, -0.2, -0.2);
+        impact.maxEmitBox = new Vector3(0.2, 0.2, 0.2);
+        impact.color1 = new Color4(1, 0.5, 0.2, 1);
+        impact.color2 = new Color4(1, 0.2, 0.1, 1);
+        impact.colorDead = new Color4(0, 0, 0, 0);
+        impact.minSize = 0.2;
+        impact.maxSize = 0.5;
+        impact.minLifeTime = 0.1;
+        impact.maxLifeTime = 0.3;
+        impact.emitRate = 1000;
+        impact.blendMode = ParticleSystem.BLENDMODE_ONEONE;
+        impact.gravity = new Vector3(0, 0, 0);
+        impact.direction1 = new Vector3(-1, -1, -1);
+        impact.direction2 = new Vector3(1, 1, 1);
+        impact.minAngularSpeed = 0;
+        impact.maxAngularSpeed = Math.PI;
+        impact.minEmitPower = 1;
+        impact.maxEmitPower = 3;
+        impact.updateSpeed = 0.01;
+        impact.start();
+
+        // Store reference
+        this.activeImpacts.set(impactId, impact);
+
+        // Remove after short duration
+        setTimeout(() => this.removeImpactEffect(impactId), 300);
+    }
+
+    /**
+     * Removes an impact effect
+     * @param impactId - ID of the impact effect to remove
+     */
+    private removeImpactEffect(impactId: string): void {
+        const impact = this.activeImpacts.get(impactId);
+        if (impact) {
+            impact.stop();
+            impact.dispose();
+            this.activeImpacts.delete(impactId);
         }
     }
 
@@ -282,14 +293,24 @@ export class WeaponEffects {
             projectile.dispose();
         });
         this.activeTrails.forEach(trail => {
-            trail.stop();
             trail.dispose();
+        });
+        this.activeImpacts.forEach(impact => {
+            impact.stop();
+            impact.dispose();
+        });
+
+        // Clear all timeouts
+        this.muzzleFlashTimeouts.forEach(timeout => {
+            clearTimeout(timeout);
         });
 
         // Clear all maps
         this.activeMuzzleFlashes.clear();
         this.activeProjectiles.clear();
         this.activeTrails.clear();
+        this.activeImpacts.clear();
+        this.muzzleFlashTimeouts.clear();
 
         // Dispose of materials
         if (this.muzzleFlashMaterial) {
@@ -304,6 +325,9 @@ export class WeaponEffects {
         if (this.trailMaterial) {
             this.trailMaterial.dispose();
         }
+        if (this.impactMaterial) {
+            this.impactMaterial.dispose();
+        }
 
         // Dispose of textures
         if (this.muzzleFlashTexture) {
@@ -312,46 +336,9 @@ export class WeaponEffects {
         if (this.trailTexture) {
             this.trailTexture.dispose();
         }
-
-        // Dispose of particle systems
-        if (this.particleSystem) {
-            this.particleSystem.dispose();
+        if (this.impactTexture) {
+            this.impactTexture.dispose();
         }
-        if (this.muzzleFlash) {
-            this.muzzleFlash.dispose();
-        }
-        if (this.impactEffect) {
-            this.impactEffect.dispose();
-        }
-    }
-
-    public updateProjectilePosition(position: Vector3) {
-        if (this.projectileMesh) {
-            this.projectileMesh.position = position;
-        }
-    }
-
-    public playMuzzleFlash(position: Vector3) {
-        this.muzzleFlash.emitter = position;
-        this.muzzleFlash.start();
-        setTimeout(() => {
-            this.muzzleFlash.stop();
-        }, 100);
-    }
-
-    public playImpactEffect(position: Vector3) {
-        this.impactEffect.emitter = position;
-        this.impactEffect.start();
-        setTimeout(() => {
-            this.impactEffect.stop();
-        }, 300);
-    }
-
-    public update(deltaTime: number) {
-        // Update particle systems
-        this.particleSystem.updateSpeed = deltaTime;
-        this.muzzleFlash.updateSpeed = deltaTime;
-        this.impactEffect.updateSpeed = deltaTime;
     }
 
     public dispose() {

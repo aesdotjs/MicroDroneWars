@@ -231,7 +231,9 @@ export class InputManager {
      */
     private handleMouseDown(event: MouseEvent): void {
         this.handleClick();
-        if (event.button === 2) { // Right click
+        if (event.button === 0) { // Left click
+            this.keys.fire.setPressed(true);
+        } else if (event.button === 2) { // Right click
             this.keys.zoom.setPressed(true);
         }
     }
@@ -242,7 +244,9 @@ export class InputManager {
      * @param event - The mouse event
      */
     private handleMouseUp(event: MouseEvent): void {
-        if (event.button === 2) { // Right click
+        if (event.button === 0) { // Left click
+            this.keys.fire.setPressed(false);
+        } else if (event.button === 2) { // Right click
             this.keys.zoom.setPressed(false);
         }
     }

@@ -86,17 +86,14 @@ export class Plane extends Vehicle {
         // Create materials for each side
         const frontMaterial = new StandardMaterial("frontMaterial", this.scene);
         frontMaterial.diffuseColor = new Color3(1, 0, 0);
-        frontMaterial.emissiveColor = new Color3(0.2, 0, 0);
         frontMaterial.backFaceCulling = false;
 
         const backMaterial = new StandardMaterial("backMaterial", this.scene);
         backMaterial.diffuseColor = new Color3(0, 0, 1);
-        backMaterial.emissiveColor = new Color3(0, 0, 0.2);
         backMaterial.backFaceCulling = false;
 
         const bodyMaterial = new StandardMaterial("bodyMaterial", this.scene);
         bodyMaterial.diffuseColor = new Color3(0.5, 0.5, 0.5);
-        bodyMaterial.emissiveColor = new Color3(0.1, 0.1, 0.1);
         bodyMaterial.backFaceCulling = false;
 
         // Create a multi-material

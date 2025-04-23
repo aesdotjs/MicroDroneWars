@@ -83,32 +83,26 @@ export class Drone extends Vehicle {
         // Create materials for each side
         const frontMaterial = new StandardMaterial("frontMaterial", this.scene);
         frontMaterial.diffuseColor = new Color3(1, 0, 0);
-        frontMaterial.emissiveColor = new Color3(0.2, 0, 0);
         frontMaterial.backFaceCulling = false;
 
         const backMaterial = new StandardMaterial("backMaterial", this.scene);
         backMaterial.diffuseColor = new Color3(0, 0, 1);
-        backMaterial.emissiveColor = new Color3(0, 0, 0.2);
         backMaterial.backFaceCulling = false;
 
         const topMaterial = new StandardMaterial("topMaterial", this.scene);
         topMaterial.diffuseColor = new Color3(0, 1, 0);
-        topMaterial.emissiveColor = new Color3(0, 0.2, 0);
         topMaterial.backFaceCulling = false;
 
         const bottomMaterial = new StandardMaterial("bottomMaterial", this.scene);
         bottomMaterial.diffuseColor = new Color3(1, 1, 0);
-        bottomMaterial.emissiveColor = new Color3(0.2, 0.2, 0);
         bottomMaterial.backFaceCulling = false;
 
         const leftMaterial = new StandardMaterial("leftMaterial", this.scene);
         leftMaterial.diffuseColor = new Color3(1, 0, 1);
-        leftMaterial.emissiveColor = new Color3(0.2, 0, 0.2);
         leftMaterial.backFaceCulling = false;
 
         const rightMaterial = new StandardMaterial("rightMaterial", this.scene);
         rightMaterial.diffuseColor = new Color3(0, 1, 1);
-        rightMaterial.emissiveColor = new Color3(0, 0.2, 0.2);
         rightMaterial.backFaceCulling = false;
 
         // Create a multi-material

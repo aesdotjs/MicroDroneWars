@@ -1,4 +1,4 @@
-import { Scene, Engine, Vector3, HemisphericLight, UniversalCamera, Color4, Quaternion, MeshBuilder, StandardMaterial, Color3, DirectionalLight, ShadowGenerator, Texture, ParticleSystem } from 'babylonjs';
+import { Scene, Engine, Vector3, HemisphericLight, UniversalCamera, Color4, Quaternion, MeshBuilder, StandardMaterial, Color3, DirectionalLight, ShadowGenerator, Texture, ParticleSystem, GlowLayer, Mesh } from 'babylonjs';
 import { Vehicle } from './vehicles/Vehicle';
 import { Flag } from './Flag';
 import { InputManager } from './InputManager';
@@ -31,8 +31,6 @@ export class GameScene {
     private vehicles: Map<string, Vehicle> = new Map();
     /** Map of flags in the scene */
     private flags: Map<string, Flag> = new Map();
-    /** Map of projectiles in the scene */
-    private projectiles: Map<string, WeaponEffects> = new Map();
     /** Reference to the main game instance */
     private game: Game;
     /** The local player's vehicle */
@@ -43,6 +41,7 @@ export class GameScene {
     private physicsWorld!: ClientPhysicsWorld;
     /** Shadow generator for rendering shadows */
     private shadowGenerator!: ShadowGenerator;
+    private glowLayer!: GlowLayer;
 
     /**
      * Creates a new GameScene instance.
@@ -64,6 +63,7 @@ export class GameScene {
         // Initialize managers first
         this.setupInputManager();
         this.setupPhysicsWorld();
+        this.setupGlowLayer();
         
         this.setupLights();
         this.setupCamera();
@@ -102,6 +102,10 @@ export class GameScene {
         console.log('Physics world created:', this.physicsWorld);
     }
 
+    private setupGlowLayer(): void {
+        this.glowLayer = new GlowLayer('glow', this.scene);
+        this.glowLayer.intensity = 0.5;
+    }
 
     /**
      * Sets up the lighting for the scene.
@@ -352,11 +356,6 @@ export class GameScene {
                 }
             }
         });
-
-        // Update projectiles
-        this.projectiles.forEach((effects, id) => {
-            effects.update(this.engine.getDeltaTime() / 1000);
-        });
         
         // Update camera to follow local player
         if (this.localPlayer && this.localPlayer.mesh && this.camera) {
@@ -447,12 +446,6 @@ export class GameScene {
         });
         this.flags.clear();
 
-        // Clean up projectiles
-        this.projectiles.forEach(projectile => {
-            projectile.dispose();
-        });
-        this.projectiles.clear();
-
         // Clean up physics world
         if (this.physicsWorld) {
             this.physicsWorld.cleanup();
@@ -540,49 +533,11 @@ export class GameScene {
     }
 
     /**
-     * Adds a projectile to the scene
-     * @param projectile - The projectile to add
+     * Gets a vehicle by ID
+     * @param id - ID of the vehicle to get
+     * @returns The vehicle if found, undefined otherwise
      */
-    public addProjectile(projectile: ProjectileSchema): void {
-        console.log('Adding projectile:', projectile);
-        const weaponEffects = new WeaponEffects(this.scene);
-        
-        // Create projectile mesh and effects
-        const projectileData = {
-            id: projectile.id,
-            type: projectile.type as 'bullet' | 'missile',
-            position: new Vector3(projectile.positionX, projectile.positionY, projectile.positionZ),
-            direction: new Vector3(projectile.directionX, projectile.directionY, projectile.directionZ),
-            speed: projectile.speed,
-            damage: projectile.damage,
-            range: projectile.range,
-            distanceTraveled: 0,
-            sourceId: projectile.sourceId,
-            timestamp: projectile.timestamp,
-            tick: projectile.tick
-        };
-
-        // Create visual effects
-        weaponEffects.createProjectileMesh(projectileData);
-        weaponEffects.createMuzzleFlash(
-            new Vector3(projectile.positionX, projectile.positionY, projectile.positionZ),
-            new Vector3(projectile.directionX, projectile.directionY, projectile.directionZ),
-            projectile.sourceId
-        );
-
-        this.projectiles.set(projectile.id, weaponEffects);
-    }
-
-    /**
-     * Removes a projectile from the scene
-     * @param id - ID of the projectile to remove
-     */
-    public removeProjectile(id: string): void {
-        console.log('Removing projectile:', id);
-        const projectile = this.projectiles.get(id);
-        if (projectile) {
-            projectile.dispose();
-            this.projectiles.delete(id);
-        }
+    public getVehicle(id: string): Vehicle | undefined {
+        return this.vehicles.get(id);
     }
 } 
