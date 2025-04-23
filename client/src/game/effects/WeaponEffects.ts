@@ -6,6 +6,7 @@ import { Projectile } from '@shared/physics/types';
  */
 export class WeaponEffects {
     private scene: Scene;
+    private camera: Camera;
     private muzzleFlashMaterial!: StandardMaterial;
     private bulletMaterial!: StandardMaterial;
     private missileMaterial!: StandardMaterial;
@@ -26,6 +27,7 @@ export class WeaponEffects {
      */
     constructor(scene: Scene) {
         this.scene = scene;
+        this.camera = scene.activeCamera!;
         this.initializeMaterials();
     }
 
@@ -168,7 +170,7 @@ export class WeaponEffects {
             sourceMesh,  // Use the projectile mesh directly
             this.scene,
             0.1,  // diameter
-            15,   // length
+            5,   // length
             true  // autoStart
         );
 
