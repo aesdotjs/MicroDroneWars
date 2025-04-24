@@ -1,6 +1,5 @@
 import { world as ecsWorld } from '../world';
-import { GameEntity } from '../types';
-import { PhysicsInput } from '../../physics/types';
+import { GameEntity, PhysicsInput } from '../types';
 
 const MAX_INPUT_BUFFER_SIZE = 60; // 1 second worth of inputs at 60fps
 

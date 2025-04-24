@@ -2,7 +2,7 @@ import * as CANNON from 'cannon-es';
 import { Vector3, Quaternion, Matrix } from 'babylonjs';
 import { world as ecsWorld } from '../world';
 import { GameEntity } from '../types';
-import { DroneSettings, PlaneSettings } from '../../physics/VehicleSettings';
+import { DroneSettings, PlaneSettings } from '../types';
 
 /**
  * Creates a system that handles drone-specific physics

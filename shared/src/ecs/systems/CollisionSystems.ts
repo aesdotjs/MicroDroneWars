@@ -1,8 +1,7 @@
-import { GameEntity } from '../types';
+import { GameEntity, CollisionType, CollisionSeverity } from '../types';
 import { Body, ContactEquation, World, Vec3, Quaternion } from 'cannon-es';
-import { CollisionType, CollisionSeverity } from '../../physics/types';
 import { world as ecsWorld } from '../world';
-import { CollisionGroups } from '../../physics/CollisionGroups';
+import { CollisionGroups } from '../CollisionGroups';
 
 /**
  * Creates a collision system that handles all collision events in the game

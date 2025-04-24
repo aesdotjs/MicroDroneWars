@@ -2,7 +2,7 @@ import * as CANNON from 'cannon-es';
 import { Vector3, Quaternion } from 'babylonjs';
 import { world as ecsWorld } from '../world';
 import { GameEntity } from '../types';
-import { CollisionGroups, collisionMasks } from '../../physics/CollisionGroups';
+import { CollisionGroups, collisionMasks } from '../CollisionGroups';
 
 // Define weapon type for better type safety
 type Weapon = {

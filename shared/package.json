@@ -6,18 +6,23 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "watch": "tsc -w"
+    "watch": "tsc -w",
+    "test": "vitest",
+    "test:watch": "vitest watch",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@colyseus/schema": "^3.0.0",
-    "colyseus": "^0.16.0",
     "babylonjs": "^8.1.1",
     "cannon-es": "^0.20.0",
+    "colyseus": "^0.16.0",
     "miniplex": "^2.0.0"
   },
   "devDependencies": {
     "@types/babylon": "^6.16.9",
     "@types/cannon": "^0.1.13",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "vitest": "^1.2.2",
+    "@vitest/coverage-v8": "^1.2.2"
   }
 }

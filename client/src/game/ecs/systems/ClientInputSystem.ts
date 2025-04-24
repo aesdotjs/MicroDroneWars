@@ -1,6 +1,5 @@
 import { world as ecsWorld } from '@shared/ecs/world';
-import { GameEntity } from '@shared/ecs/types';
-import { PhysicsInput } from '@shared/physics/types';
+import { GameEntity, PhysicsInput } from '@shared/ecs/types';
 
 /**
  * Creates a system that handles client-side input processing

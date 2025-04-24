@@ -1,4 +1,3 @@
-export * from './PhysicsSystems';
 export * from './WeaponSystems';
 export * from './VehicleSystems'; 
 export * from './StateSyncSystem';

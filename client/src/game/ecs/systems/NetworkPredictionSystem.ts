@@ -1,6 +1,6 @@
 import { world as ecsWorld } from '@shared/ecs/world';
 import { GameEntity } from '@shared/ecs/types';
-import { PhysicsState, PhysicsInput, StateBuffer, InterpolationConfig } from '@shared/physics/types';
+import { PhysicsState, PhysicsInput, StateBuffer, InterpolationConfig } from '@shared/ecs/types';
 import { Vector3, Quaternion } from 'babylonjs';
 import { Room } from 'colyseus.js';
 import { State } from '../../schemas/State';

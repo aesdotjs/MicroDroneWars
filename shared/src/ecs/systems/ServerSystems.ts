@@ -1,8 +1,8 @@
 import { GameEntity } from '../types';
 import { Vector3, Quaternion } from 'babylonjs';
 import * as CANNON from 'cannon-es';
-import { DroneSettings, PlaneSettings } from '../../physics/VehicleSettings';
-import { CollisionGroups } from '../../physics/CollisionGroups';
+import { DroneSettings, PlaneSettings } from '../types';
+import { CollisionGroups } from '../CollisionGroups';
 
 /**
  * Creates a vehicle entity in the ECS world

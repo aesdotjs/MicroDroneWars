@@ -2,7 +2,7 @@ import { Room, Client } from "colyseus";
 import { ArraySchema } from "@colyseus/schema";
 import { State, EntitySchema, Weapon } from "@shared/types/schemas";
 import { createPhysicsWorldSystem } from "@shared/ecs/systems/PhysicsWorldSystem";
-import { VehiclePhysicsConfig, PhysicsInput } from "@shared/physics/types";
+import { VehiclePhysicsConfig, PhysicsInput } from "@shared/ecs/types";
 import { DefaultWeapons } from "@shared/physics/WeaponSystem";
 import { Vector3, Quaternion } from "babylonjs";
 import { world as ecsWorld } from "@shared/ecs/world";

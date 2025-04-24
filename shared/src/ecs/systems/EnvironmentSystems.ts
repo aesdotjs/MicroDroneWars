@@ -2,7 +2,7 @@ import * as CANNON from 'cannon-es';
 import { Vector3, Quaternion, Mesh, MeshBuilder, StandardMaterial, Color3 } from 'babylonjs';
 import { world as ecsWorld } from '../world';
 import { GameEntity } from '../types';
-import { CollisionGroups } from '../../physics/CollisionGroups';
+import { CollisionGroups } from '../CollisionGroups';
 
 /**
  * Creates a system that handles ground and environment physics

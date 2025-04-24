@@ -1,12 +1,9 @@
-import { State } from './schemas/State';
-import { EntitySchema } from './schemas/EntitySchema';
-import { PhysicsState, PhysicsInput } from '@shared/physics/types';
+import { State } from './schemas/';
+import { PhysicsInput } from '@shared/ecs/types';
 import * as Colyseus from 'colyseus.js';
-import { Engine, Vector3, Quaternion, UniversalCamera } from 'babylonjs';
+import { Engine } from 'babylonjs';
 import { useGameDebug } from '@/composables/useGameDebug';
 import { createGameSystems } from './ecs/systems/GameSystems';
-import { world as ecsWorld } from '@shared/ecs/world';
-import { GameEntity } from '@shared/ecs/types';
 
 const { log } = useGameDebug();
 

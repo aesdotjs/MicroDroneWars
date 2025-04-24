@@ -1,7 +1,7 @@
 import { world as ecsWorld } from '@shared/ecs/world';
 import { GameEntity } from '@shared/ecs/types';
 import { Vector3, Quaternion, Mesh, Scene, MeshBuilder, StandardMaterial, Color3, MultiMaterial, Color4, ParticleSystem, Texture, Matrix } from 'babylonjs';
-import { CollisionGroups } from '@shared/physics/CollisionGroups';
+import { CollisionGroups } from '@shared/ecs/CollisionGroups';
 
 /**
  * Creates a system that handles vehicle creation and management
