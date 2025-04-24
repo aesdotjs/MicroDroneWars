@@ -6,21 +6,21 @@ import type { Body as CannonBody } from 'cannon-es';
  */
 export interface PhysicsState {
     /** Current position in 3D space */
-    position: Vector3;
+    position: { x: number; y: number; z: number };
     /** Current orientation as a quaternion */
-    quaternion: Quaternion;
+    quaternion: { x: number; y: number; z: number; w: number };
     /** Current linear velocity */
-    linearVelocity: Vector3;
+    linearVelocity: { x: number; y: number; z: number };
     /** Current angular velocity */
-    angularVelocity: Vector3;
+    angularVelocity: { x: number; y: number; z: number };
     /** Current tick */
     tick: number;
     /** Timestamp of the state in milliseconds */
     timestamp: number;
     /** Last processed input timestamp */
-    lastProcessedInputTimestamp: number;
+    lastProcessedInputTimestamp?: number;
     /** Last processed input tick */
-    lastProcessedInputTick: number;
+    lastProcessedInputTick?: number;
 }
 
 /**
@@ -117,7 +117,7 @@ export interface PhysicsInput {
     /** Switch to weapon 3 */
     weapon3: boolean;
     /** Mouse movement delta */
-    mouseDelta?: { x: number; y: number };
+    mouseDelta: { x: number; y: number };
     /** Current simulation tick */
     tick: number;
     /** Timestamp of the input in milliseconds */

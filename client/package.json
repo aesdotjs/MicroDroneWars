@@ -18,6 +18,7 @@
     "babylonjs": "^8.1.1",
     "cannon-es": "^0.20.0",
     "colyseus.js": "^0.16.0",
+    "miniplex": "^2.0.0",
     "vue": "^3.4.15"
   },
   "devDependencies": {
