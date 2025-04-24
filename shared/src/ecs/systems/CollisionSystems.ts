@@ -65,7 +65,7 @@ export function createCollisionSystem(cannonWorld: World) {
 /**
  * Determines the type of collision based on the colliding bodies
  */
-function determineCollisionType(bodyA: Body, bodyB: Body): CollisionType {
+export function determineCollisionType(bodyA: Body, bodyB: Body): CollisionType {
     const isGroundCollision = 
         (bodyA.collisionFilterGroup & CollisionGroups.Environment) !== 0 ||
         (bodyB.collisionFilterGroup & CollisionGroups.Environment) !== 0;
@@ -90,7 +90,7 @@ function determineCollisionType(bodyA: Body, bodyB: Body): CollisionType {
 /**
  * Determines the severity of a collision based on impact velocity
  */
-function determineCollisionSeverity(impactVelocity: number): CollisionSeverity {
+export function determineCollisionSeverity(impactVelocity: number): CollisionSeverity {
     const absVelocity = Math.abs(impactVelocity);
     if (absVelocity >= 15) return CollisionSeverity.Heavy;
     if (absVelocity >= 10) return CollisionSeverity.Medium;
@@ -134,7 +134,7 @@ function handleCollisionEvent(event: any) {
 /**
  * Handles collision events for vehicles
  */
-function handleVehicleCollision(vehicle: GameEntity, other: GameEntity, event: any) {
+export function handleVehicleCollision(vehicle: GameEntity, other: GameEntity, event: any) {
     if (!vehicle.health) return;
 
     // Calculate damage based on impact velocity and collision severity
@@ -169,7 +169,7 @@ function handleVehicleCollision(vehicle: GameEntity, other: GameEntity, event: a
 /**
  * Handles collision events for projectiles
  */
-function handleProjectileCollision(projectile: GameEntity, other: GameEntity, event: any) {
+export function handleProjectileCollision(projectile: GameEntity, other: GameEntity, event: any) {
     // Apply damage to hit entity
     if (other.health !== undefined) {
         const damage = projectile.damage || 20; // Use projectile damage or default
@@ -183,7 +183,7 @@ function handleProjectileCollision(projectile: GameEntity, other: GameEntity, ev
 /**
  * Handles collision events for flags
  */
-function handleFlagCollision(flag: GameEntity, other: GameEntity, event: any) {
+export function handleFlagCollision(flag: GameEntity, other: GameEntity, event: any) {
     // Only drones can pick up flags
     if (other.drone && !flag.carriedBy) {
         flag.carriedBy = other.id;

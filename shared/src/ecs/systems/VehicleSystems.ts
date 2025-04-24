@@ -135,6 +135,22 @@ export function createDroneSystem(cannonWorld: CANNON.World) {
                     body.quaternion = yawQuat.mult(body.quaternion);
                 }
 
+                // Apply mouse control
+                if (input.mouseDelta) {
+                    const yawAmount = -input.mouseDelta.x * mouseSensitivity;
+                    const pitchAmount = -input.mouseDelta.y * mouseSensitivity;
+                    
+                    // Apply yaw (horizontal mouse movement)
+                    const yawQuat = new CANNON.Quaternion();
+                    yawQuat.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), yawAmount);
+                    body.quaternion = yawQuat.mult(body.quaternion);
+                    
+                    // Apply pitch (vertical mouse movement)
+                    const pitchQuat = new CANNON.Quaternion();
+                    pitchQuat.setFromAxisAngle(new CANNON.Vec3(right.x, right.y, right.z), pitchAmount);
+                    body.quaternion = pitchQuat.mult(body.quaternion);
+                }
+
                 // Apply momentum damping
                 body.velocity.x *= momentumDamping;
                 body.velocity.y *= momentumDamping;
@@ -275,6 +291,22 @@ export function createPlaneSystem(cannonWorld: CANNON.World) {
                     body.angularVelocity.x -= forward.x * 0.055 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
                     body.angularVelocity.y -= forward.y * 0.055 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
                     body.angularVelocity.z -= forward.z * 0.055 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
+                }
+
+                // Apply mouse control
+                if (input.mouseDelta) {
+                    const yawAmount = -input.mouseDelta.x * 0.02 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
+                    const pitchAmount = -input.mouseDelta.y * 0.02 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
+                    
+                    // Apply yaw (horizontal mouse movement)
+                    body.angularVelocity.x += up.x * yawAmount;
+                    body.angularVelocity.y += up.y * yawAmount;
+                    body.angularVelocity.z += up.z * yawAmount;
+                    
+                    // Apply pitch (vertical mouse movement)
+                    body.angularVelocity.x += right.x * pitchAmount;
+                    body.angularVelocity.y += right.y * pitchAmount;
+                    body.angularVelocity.z += right.z * pitchAmount;
                 }
 
                 // Thrust
