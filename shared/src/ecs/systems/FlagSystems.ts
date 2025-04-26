@@ -9,7 +9,7 @@ const FLAG_RETURN_RADIUS = 10;
  * Flag system that handles flag capture and scoring
  */
 export function createFlagSystem() {
-    const flags = ecsWorld.with("gameState", "transform");
+    const flags = ecsWorld.with("gameState", "transform", "type").where(({type}) => type === "flag");
     const vehicles = ecsWorld.with("vehicle", "transform", "gameState");
 
     return {

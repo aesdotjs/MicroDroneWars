@@ -9,30 +9,30 @@ export function createHealthSystem() {
 
     return {
         update: (dt: number) => {
-            for (const entity of damageableEntities) {
-                // Check for destruction
-                if (entity.gameState!.health <= 0) {
-                    // Handle vehicle destruction
-                    if (entity.vehicle) {
-                        // TODO: Trigger destruction effects
-                        // For now, just remove the entity
-                        ecsWorld.remove(entity);
-                    }
-                    // Handle projectile destruction
-                    else if (entity.projectile) {
-                        ecsWorld.remove(entity);
-                    }
-                }
+            // for (const entity of damageableEntities) {
+            //     // Check for destruction
+            //     if (entity.gameState!.health <= 0) {
+            //         // Handle vehicle destruction
+            //         if (entity.vehicle) {
+            //             // TODO: Trigger destruction effects
+            //             // For now, just remove the entity
+            //             ecsWorld.remove(entity);
+            //         }
+            //         // Handle projectile destruction
+            //         else if (entity.projectile) {
+            //             ecsWorld.remove(entity);
+            //         }
+            //     }
 
-                // Regenerate health if below max
-                if (entity.gameState!.health < entity.gameState!.maxHealth) {
-                    // Regenerate 1 health per second
-                    entity.gameState!.health = Math.min(
-                        entity.gameState!.maxHealth,
-                        entity.gameState!.health + dt
-                    );
-                }
-            }
+            //     // Regenerate health if below max
+            //     if (entity.gameState!.health < entity.gameState!.maxHealth) {
+            //         // Regenerate 1 health per second
+            //         entity.gameState!.health = Math.min(
+            //             entity.gameState!.maxHealth,
+            //             entity.gameState!.health + dt
+            //         );
+            //     }
+            // }
         }
     };
 } 

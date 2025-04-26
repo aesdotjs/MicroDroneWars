@@ -7,14 +7,14 @@ import { GameEntity, InputComponent } from "@shared/ecs/types";
 import { DefaultWeapons } from "@shared/ecs/types";
 import { Vector3, Quaternion } from "babylonjs";
 import { world as ecsWorld } from "@shared/ecs/world";
-import { createVehicleEntity, createFlagEntity } from "@shared/ecs/utils/EntityHelpers";
 import { createStateSyncSystem } from "src/ecs/systems/StateSyncSystem";
 import { createHealthSystem } from "@shared/ecs/systems/HealthSystems";
 import { createFlagSystem } from "@shared/ecs/systems/FlagSystems";
 import { createInputSystem } from "../ecs/systems/InputSystems";
 import { createCollisionSystem } from "@shared/ecs/systems/CollisionSystems";
 import { createEnvironmentSystem } from "@shared/ecs/systems/EnvironmentSystems";
-import { createGameModeSystem, GameMode, GameModeConfig } from "@shared/ecs/systems/GameModeSystem";
+import { createGameModeSystem, GameMode, GameModeConfig } from "../ecs/systems/GameModeSystem";
+import { createClientSystem } from "../ecs/systems/ClientSystem";
 
 /**
  * Represents a game room for MicroDroneWars multiplayer matches.
@@ -34,6 +34,7 @@ export class MicroDroneRoom extends Room<State> {
     private collisionSystem!: ReturnType<typeof createCollisionSystem>;
     private environmentSystem!: ReturnType<typeof createEnvironmentSystem>;
     private gameModeSystem!: ReturnType<typeof createGameModeSystem>;
+    private clientSystem!: ReturnType<typeof createClientSystem>;
 
     /**
      * Initializes the game room when it's created.
@@ -46,6 +47,15 @@ export class MicroDroneRoom extends Room<State> {
 
         this.autoDispose = false; // Keep room alive even when empty
         this.maxClients = 20; // Set a reasonable max clients
+
+        /**
+         * Generates a unique entity ID
+         * @returns A unique entity ID
+         */
+        const generateEntityId = (): string => {
+            const id = `entity_${this.state.nextEntityId++}`;
+            return id;
+        }
 
         // Initialize physics world system
         this.physicsWorldSystem = createPhysicsWorldSystem();
@@ -61,6 +71,7 @@ export class MicroDroneRoom extends Room<State> {
         this.inputSystem = createInputSystem(this.physicsSystem);
         this.collisionSystem = createCollisionSystem(this.physicsWorldSystem.getWorld());
         this.environmentSystem = createEnvironmentSystem(this.physicsWorldSystem.getWorld());
+        this.clientSystem = createClientSystem(this.physicsWorldSystem, this.stateSyncSystem, this.inputSystem, generateEntityId);
 
         // Initialize game mode system
         const gameModeConfig: GameModeConfig = {
@@ -78,7 +89,7 @@ export class MicroDroneRoom extends Room<State> {
                 new Vector3(20, 0, 0)
             ]
         };
-        this.gameModeSystem = createGameModeSystem(gameModeConfig);
+        this.gameModeSystem = createGameModeSystem(this.physicsWorldSystem, this.stateSyncSystem, generateEntityId, gameModeConfig);
         this.gameModeSystem.initialize();
 
         // Set room options for faster connection
@@ -86,21 +97,6 @@ export class MicroDroneRoom extends Room<State> {
         this.setSimulationInterval((deltaTime) => {
             this.update(deltaTime);
         }, 1000 / this.TICK_RATE);
-
-        // Initialize flags
-        const teamAFlag = createFlagEntity(this.generateEntityId(), 0, new Vector3(-20, 0, 0));
-        const teamBFlag = createFlagEntity(this.generateEntityId(), 1, new Vector3(20, 0, 0));
-        
-        // Add flags to ECS world
-        ecsWorld.add(teamAFlag);
-        ecsWorld.add(teamBFlag);
-
-        // Add flags to physics world
-        this.physicsWorldSystem.addBody(teamAFlag);
-        this.physicsWorldSystem.addBody(teamBFlag);
-
-        this.stateSyncSystem.addEntity(teamAFlag);
-        this.stateSyncSystem.addEntity(teamBFlag);
 
         // Set up message handlers
         this.onMessage("command", (client, input: InputComponent) => {
@@ -138,62 +134,16 @@ export class MicroDroneRoom extends Room<State> {
     }
 
     /**
-     * Generates a unique entity ID
-     * @returns A unique entity ID
-     */
-    private generateEntityId(): string {
-        const id = `entity_${this.state.nextEntityId++}`;
-        return id;
-    }
-
-    /**
      * Handles a new player joining the room.
      * Creates a vehicle based on the player's chosen type and team.
      * @param client - The client joining the room
      * @param options - Player options including vehicle type and team
      */
     onJoin(client: Client, options: { vehicleType: "drone" | "plane", team: number }) {
-        console.log(`Client ${client.sessionId} joining with options:`, options);
-        
-        // Create vehicle entity in ECS world
-        const spawnPos = new Vector3(0, 10, 0);
-        const vehicleId = this.generateEntityId();
-        const vehicleEntity: GameEntity = createVehicleEntity(
-            vehicleId,
-            options.vehicleType,
-            spawnPos,
-            new Quaternion(),
-            options.team
-        );
-        vehicleEntity.owner = {
-            id: client.sessionId,
-            isLocal: false
-        };
-        // Initialize tick component
-        vehicleEntity.tick!.tick = this.physicsWorldSystem.getCurrentTick();
-        vehicleEntity.tick!.timestamp = Date.now();
-        vehicleEntity.tick!.lastProcessedInputTimestamp = Date.now();
-        vehicleEntity.tick!.lastProcessedInputTick = this.physicsWorldSystem.getCurrentTick();
-        ecsWorld.add(vehicleEntity);
-
-        // Add physics body to world
-        this.physicsWorldSystem.addBody(vehicleEntity);
-
-        // Add vehicle to state
-        this.stateSyncSystem.addEntity(vehicleEntity);
-        
-        console.log(`Vehicle created for ${client.sessionId}:`, {
-            id: vehicleId,
-            type: options.vehicleType,
-            team: options.team,
-            position: { 
-                x: vehicleEntity.transform!.position.x, 
-                y: vehicleEntity.transform!.position.y, 
-                z: vehicleEntity.transform!.position.z 
-            }
-        });
-        console.log(`There are ${this.state.entities.size} entities in the room`);
+        this.clientSystem.handleJoin(client, options);
     }
+
+
 
     /**
      * Handles a player leaving the room.
@@ -201,32 +151,7 @@ export class MicroDroneRoom extends Room<State> {
      * @param client - The client leaving the room
      */
     onLeave(client: Client) {
-        // If vehicle was carrying a flag, return it to base
-        // const entity = this.state.entities.get(client.sessionId);
-        // if (entity && entity.gameState.hasFlag) {
-        //     const flag = Array.from(this.state.entities.values()).find((e: EntitySchema) => 
-        //         e.gameState.carriedBy === client.sessionId
-        //     );
-        //     if (flag) {
-        //         flag.gameState.carriedBy = "";
-        //         flag.gameState.atBase = true;
-        //         flag.transform.positionX = flag.gameState.team === 0 ? -20 : 20;
-        //         flag.transform.positionY = 0;
-        //         flag.transform.positionZ = 0;
-        //     }
-        // }
-
-        this.inputSystem.cleanup(client.sessionId);
-
-        // Remove every entities whose owner.id matches the client.sessionId
-        const ecsEntities = ecsWorld.entities.filter(e => e.owner?.id === client.sessionId);
-        for (const entity of ecsEntities) {
-            this.physicsWorldSystem.removeBody(entity.id);
-            ecsWorld.remove(entity);
-            this.stateSyncSystem.removeEntity(entity);
-        }
-        this.clientLatencies.delete(client.sessionId);
-        console.log(`Vehicle left: ${client.sessionId}`);
+        this.clientSystem.handleLeave(client);
     }
 
     /**
@@ -240,18 +165,17 @@ export class MicroDroneRoom extends Room<State> {
 
     private update(deltaTime: number) {
         // Run ECS systems in the correct order
-        this.inputSystem.update(deltaTime);
-        this.physicsWorldSystem.update(deltaTime);
-        this.collisionSystem.update(deltaTime);
-        this.healthSystem.update(deltaTime);
-        this.flagSystem.update(deltaTime);
-        this.environmentSystem.update(deltaTime);
-        this.gameModeSystem.update(deltaTime);
+        this.inputSystem.update(1 / this.TICK_RATE);
+        this.physicsWorldSystem.update(1 / this.TICK_RATE);
+        // Update server tick in state
+        this.state.serverTick = this.physicsWorldSystem.getCurrentTick();
+        this.collisionSystem.update(1 / this.TICK_RATE);
+        this.healthSystem.update(1 / this.TICK_RATE);
+        this.flagSystem.update(1 / this.TICK_RATE);
+        this.environmentSystem.update(1 / this.TICK_RATE);
+        this.gameModeSystem.update(1 / this.TICK_RATE);
         
         // Sync ECS state to Colyseus state
         this.stateSyncSystem.update(Array.from(ecsWorld.entities));
-
-        // Update server tick in state
-        this.state.serverTick = this.physicsWorldSystem.getCurrentTick();
     }
 }

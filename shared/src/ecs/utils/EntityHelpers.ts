@@ -306,7 +306,8 @@ export function createDroneMesh(entity: GameEntity, scene: Scene) {
     arrow.parent = mesh;
 
     // Set initial position and make visible
-    mesh.position = new Vector3(0, 10, 0);
+    mesh.position = new Vector3(entity.transform!.position.x, entity.transform!.position.y, entity.transform!.position.z);
+    mesh.rotationQuaternion = new Quaternion(entity.transform!.rotation.x, entity.transform!.rotation.y, entity.transform!.rotation.z, entity.transform!.rotation.w);
     mesh.isVisible = true;
     mesh.checkCollisions = true;
     mesh.receiveShadows = true;
@@ -408,7 +409,8 @@ export function createPlaneMesh(entity: GameEntity, scene: Scene) {
     arrow.parent = mesh;
 
     // Set initial position and make visible
-    mesh.position = new Vector3(0, 50, 0);
+    mesh.position = new Vector3(entity.transform!.position.x, entity.transform!.position.y, entity.transform!.position.z);
+    mesh.rotationQuaternion = new Quaternion(entity.transform!.rotation.x, entity.transform!.rotation.y, entity.transform!.rotation.z, entity.transform!.rotation.w);
     mesh.isVisible = true;
     mesh.checkCollisions = true;
 

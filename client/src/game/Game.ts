@@ -100,9 +100,6 @@ export class Game {
             this.room,
             this.canvas
         );
-
-        // Initialize game mode
-        this.gameSystems.gameModeSystem.initialize();
     }
 
     /**

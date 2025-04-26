@@ -15,7 +15,7 @@ export function createPhysicsWorldSystem() {
     let currentTick = 0;
     const TICK_RATE = 60;
     const TIME_STEP = 1 / TICK_RATE;
-    const MAX_SUB_STEPS = 3;
+    const MAX_SUB_STEPS = 1;
 
     // Map to track which bodies belong to which entities
     const entityBodies = new Map<string, CANNON.Body>();

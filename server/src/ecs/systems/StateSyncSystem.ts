@@ -103,6 +103,7 @@ export function createStateSyncSystem(state: State) {
         },
 
         removeEntity: (entity: GameEntity) => {
+            console.log(`Removing entity:`, entity.id, state.entities.get(entity.id));
             state.entities.delete(entity.id);
         },
         

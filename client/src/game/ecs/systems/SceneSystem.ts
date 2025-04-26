@@ -31,6 +31,11 @@ export function createSceneSystem(engine: Engine) {
     setupEnvironment(scene, shadowGenerator);
     console.log('Environment setup complete');
 
+    console.log('Setting up render loop...');
+    engine.runRenderLoop(() => {
+        scene.render();
+    });
+
     // Find entities with render and transform components
     const renderables = ecsWorld.with("render", "transform");
 
@@ -108,7 +113,7 @@ function setupCamera(scene: Scene): UniversalCamera {
     
     // Remove default inputs and disable camera controls
     camera.inputs.clear();
-    camera.attachControl();
+    camera.detachControl();
     
     return camera;
 }

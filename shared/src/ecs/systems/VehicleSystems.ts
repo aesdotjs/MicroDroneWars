@@ -4,6 +4,16 @@ import { world as ecsWorld } from '../world';
 import { GameEntity, InputComponent } from '../types';
 import { DroneSettings, PlaneSettings } from '../types';
 
+function applyBodyTransform(entity: GameEntity, body: CANNON.Body) {
+    entity.transform!.position.x = body.position.x;
+    entity.transform!.position.y = body.position.y;
+    entity.transform!.position.z = body.position.z;
+    entity.transform!.rotation.x = body.quaternion.x;
+    entity.transform!.rotation.y = body.quaternion.y;
+    entity.transform!.rotation.z = body.quaternion.z;
+    entity.transform!.rotation.w = body.quaternion.w;
+}
+
 /**
  * Creates a system that handles drone-specific physics
  */
@@ -22,142 +32,143 @@ export function createDroneSystem(cannonWorld: CANNON.World) {
     return {
         update: (dt: number, entity: GameEntity, input: InputComponent) => {
             const body = entity.physics!.body;
-                const settings = DroneSettings;
+            const settings = DroneSettings;
 
-                // Initialize altitude tracking if needed
-                if (!targetAltitude.has(entity.id)) {
-                    targetAltitude.set(entity.id, body.position.y);
-                }
+            // Initialize altitude tracking if needed
+            if (!targetAltitude.has(entity.id)) {
+                targetAltitude.set(entity.id, body.position.y);
+            }
 
-                // Get orientation vectors
-                const { right, up, forward } = getOrientationVectors(body);
+            // Get orientation vectors
+            const { right, up, forward } = getOrientationVectors(body);
 
-                // Apply stabilization
-                applyStabilization(entity, body, dt);
+            // Apply stabilization
+            applyStabilization(entity, body, dt);
 
-                // Calculate velocity and speed
-                const velocity = new Vector3(body.velocity.x, body.velocity.y, body.velocity.z);
-                const currentSpeed = velocity.length();
+            // Calculate velocity and speed
+            const velocity = new Vector3(body.velocity.x, body.velocity.y, body.velocity.z);
+            const currentSpeed = velocity.length();
 
-                // Calculate altitude error
-                const currentAltitude = body.position.y;
-                const altitudeError = targetAltitude.get(entity.id)! - currentAltitude;
+            // Calculate altitude error
+            const currentAltitude = body.position.y;
+            const altitudeError = targetAltitude.get(entity.id)! - currentAltitude;
+            
+            // PID controller for altitude stabilization
+            const kP = 2.0;
+            const kI = 0.5;
+            const kD = 0.5;
+            
+            // Calculate altitude control forces
+            const proportionalForce = altitudeError * kP;
+            const derivativeForce = -body.velocity.y * kD;
+            const integralForce = (integralError.get(entity.id) || 0) * kI;
+            
+            // Update integral error with anti-windup
+            integralError.set(entity.id, 
+                Math.max(-20, Math.min(20, (integralError.get(entity.id) || 0) + altitudeError * dt))
+            );
+            
+            // Combine forces with stronger base thrust
+            const baseThrust = 25.0;
+            const altitudeControlForce = proportionalForce + derivativeForce + integralForce;
+            
+            // Apply thrust and stabilization
+            const thrust = new Vector3(0, 1, 0);
+            thrust.scaleInPlace(baseThrust + altitudeControlForce);
+            
+            // Apply thrust in the up direction
+            body.velocity.x += thrust.x * dt;
+            if (!input.down) {
+                body.velocity.y += thrust.y * dt;
+            }
+            body.velocity.z += thrust.z * dt;
+
+            // Get forward direction ignoring pitch and roll (only yaw)
+            const forwardDirection = new Vector3(forward.x, 0, forward.z).normalize();
+            const rightDirection = new Vector3(right.x, 0, right.z).normalize();
+            
+            // Movement controls relative to vehicle orientation
+            const moveSpeed = settings.forceMultiplier * dt * 60;
+            
+            // Forward/backward movement
+            if (input.forward) {
+                body.velocity.x += forwardDirection.x * moveSpeed;
+                body.velocity.z += forwardDirection.z * moveSpeed;
+            }
+            if (input.backward) {
+                body.velocity.x -= forwardDirection.x * moveSpeed;
+                body.velocity.z -= forwardDirection.z * moveSpeed;
+            }
+
+            // Left/right strafing
+            if (input.left) {
+                body.velocity.x -= rightDirection.x * moveSpeed;
+                body.velocity.z -= rightDirection.z * moveSpeed;
+            }
+            if (input.right) {
+                body.velocity.x += rightDirection.x * moveSpeed;
+                body.velocity.z += rightDirection.z * moveSpeed;
+            }
+
+            // Vertical movement
+            if (input.up) {
+                body.velocity.y += moveSpeed;
+                targetAltitude.set(entity.id, body.position.y + body.velocity.y * dt);
+            }
+            if (input.down) {
+                body.velocity.y -= moveSpeed;
+                targetAltitude.set(entity.id, body.position.y - body.velocity.y * dt);
+            }
+
+            // Apply pitch control
+            if (input.pitchUp || input.pitchDown) {
+                const currentPitch = Math.asin(2 * (
+                    body.quaternion.w * body.quaternion.x -
+                    body.quaternion.y * body.quaternion.z
+                ));
                 
-                // PID controller for altitude stabilization
-                const kP = 2.0;
-                const kI = 0.5;
-                const kD = 0.5;
-                
-                // Calculate altitude control forces
-                const proportionalForce = altitudeError * kP;
-                const derivativeForce = -body.velocity.y * kD;
-                const integralForce = (integralError.get(entity.id) || 0) * kI;
-                
-                // Update integral error with anti-windup
-                integralError.set(entity.id, 
-                    Math.max(-20, Math.min(20, (integralError.get(entity.id) || 0) + altitudeError * dt))
-                );
-                
-                // Combine forces with stronger base thrust
-                const baseThrust = 25.0;
-                const altitudeControlForce = proportionalForce + derivativeForce + integralForce;
-                
-                // Apply thrust and stabilization
-                const thrust = new Vector3(0, 1, 0);
-                thrust.scaleInPlace(baseThrust + altitudeControlForce);
-                
-                // Apply thrust in the up direction
-                body.velocity.x += thrust.x * dt;
-                if (!input.down) {
-                    body.velocity.y += thrust.y * dt;
-                }
-                body.velocity.z += thrust.z * dt;
-
-                // Get forward direction ignoring pitch and roll (only yaw)
-                const forwardDirection = new Vector3(forward.x, 0, forward.z).normalize();
-                const rightDirection = new Vector3(right.x, 0, right.z).normalize();
-                
-                // Movement controls relative to vehicle orientation
-                const moveSpeed = settings.forceMultiplier * dt * 60;
-                
-                // Forward/backward movement
-                if (input.forward) {
-                    body.velocity.x += forwardDirection.x * moveSpeed;
-                    body.velocity.z += forwardDirection.z * moveSpeed;
-                }
-                if (input.backward) {
-                    body.velocity.x -= forwardDirection.x * moveSpeed;
-                    body.velocity.z -= forwardDirection.z * moveSpeed;
-                }
-
-                // Left/right strafing
-                if (input.left) {
-                    body.velocity.x -= rightDirection.x * moveSpeed;
-                    body.velocity.z -= rightDirection.z * moveSpeed;
-                }
-                if (input.right) {
-                    body.velocity.x += rightDirection.x * moveSpeed;
-                    body.velocity.z += rightDirection.z * moveSpeed;
-                }
-
-                // Vertical movement
-                if (input.up) {
-                    body.velocity.y += moveSpeed;
-                    targetAltitude.set(entity.id, body.position.y + body.velocity.y * dt);
-                }
-                if (input.down) {
-                    body.velocity.y -= moveSpeed;
-                    targetAltitude.set(entity.id, body.position.y - body.velocity.y * dt);
-                }
-
-                // Apply pitch control
-                if (input.pitchUp || input.pitchDown) {
-                    const currentPitch = Math.asin(2 * (
-                        body.quaternion.w * body.quaternion.x -
-                        body.quaternion.y * body.quaternion.z
-                    ));
-                    
-                    const pitchAmount = input.pitchUp ? -rotationSpeed : rotationSpeed;
-                    if (Math.abs(currentPitch + pitchAmount) < maxPitchAngle) {
-                        const pitchQuat = new CANNON.Quaternion();
-                        pitchQuat.setFromAxisAngle(new CANNON.Vec3(right.x, right.y, right.z), pitchAmount);
-                        body.quaternion = pitchQuat.mult(body.quaternion);
-                    }
-                }
-
-                // Apply yaw control
-                if (input.yawLeft || input.yawRight) {
-                    const yawAmount = input.yawLeft ? -rotationSpeed : rotationSpeed;
-                    const yawQuat = new CANNON.Quaternion();
-                    yawQuat.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), yawAmount);
-                    body.quaternion = yawQuat.mult(body.quaternion);
-                }
-
-                // Apply mouse control
-                if (input.mouseDelta) {
-                    const yawAmount = -input.mouseDelta.x * mouseSensitivity;
-                    const pitchAmount = -input.mouseDelta.y * mouseSensitivity;
-                    
-                    // Apply yaw (horizontal mouse movement)
-                    const yawQuat = new CANNON.Quaternion();
-                    yawQuat.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), yawAmount);
-                    body.quaternion = yawQuat.mult(body.quaternion);
-                    
-                    // Apply pitch (vertical mouse movement)
+                const pitchAmount = input.pitchUp ? -rotationSpeed : rotationSpeed;
+                if (Math.abs(currentPitch + pitchAmount) < maxPitchAngle) {
                     const pitchQuat = new CANNON.Quaternion();
                     pitchQuat.setFromAxisAngle(new CANNON.Vec3(right.x, right.y, right.z), pitchAmount);
                     body.quaternion = pitchQuat.mult(body.quaternion);
                 }
+            }
 
-                // Apply momentum damping
-                body.velocity.x *= momentumDamping;
-                body.velocity.y *= momentumDamping;
-                body.velocity.z *= momentumDamping;
+            // Apply yaw control
+            if (input.yawLeft || input.yawRight) {
+                const yawAmount = input.yawLeft ? -rotationSpeed : rotationSpeed;
+                const yawQuat = new CANNON.Quaternion();
+                yawQuat.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), yawAmount);
+                body.quaternion = yawQuat.mult(body.quaternion);
+            }
 
-                // Apply angular damping
-                body.angularVelocity.x *= 0.95;
-                body.angularVelocity.y *= 0.95;
-                body.angularVelocity.z *= 0.95;
+            // Apply mouse control
+            if (input.mouseDelta) {
+                const yawAmount = -input.mouseDelta.x * mouseSensitivity;
+                const pitchAmount = -input.mouseDelta.y * mouseSensitivity;
+                
+                // Apply yaw (horizontal mouse movement)
+                const yawQuat = new CANNON.Quaternion();
+                yawQuat.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), yawAmount);
+                body.quaternion = yawQuat.mult(body.quaternion);
+                
+                // Apply pitch (vertical mouse movement)
+                const pitchQuat = new CANNON.Quaternion();
+                pitchQuat.setFromAxisAngle(new CANNON.Vec3(right.x, right.y, right.z), pitchAmount);
+                body.quaternion = pitchQuat.mult(body.quaternion);
+            }
+
+            // Apply momentum damping
+            body.velocity.x *= momentumDamping;
+            body.velocity.y *= momentumDamping;
+            body.velocity.z *= momentumDamping;
+
+            // Apply angular damping
+            body.angularVelocity.x *= 0.95;
+            body.angularVelocity.y *= 0.95;
+            body.angularVelocity.z *= 0.95;
+            applyBodyTransform(entity, body);
         }
     };
 }
@@ -173,174 +184,175 @@ export function createPlaneSystem(cannonWorld: CANNON.World) {
     return {
         update: (dt: number, entity: GameEntity, input: InputComponent) => {
             const body = entity.physics!.body;
-                const settings = PlaneSettings;
+            const settings = PlaneSettings;
 
-                // Initialize engine power if needed
-                if (!enginePower.has(entity.id)) {
-                    enginePower.set(entity.id, 0);
-                }
-                if (!lastDrag.has(entity.id)) {
-                    lastDrag.set(entity.id, 0);
-                }
+            // Initialize engine power if needed
+            if (!enginePower.has(entity.id)) {
+                enginePower.set(entity.id, 0);
+            }
+            if (!lastDrag.has(entity.id)) {
+                lastDrag.set(entity.id, 0);
+            }
 
-                // Update engine power
-                if (input.up) {
-                    enginePower.set(entity.id, 
-                        Math.min(enginePower.get(entity.id)! + 0.2, 1.0)
-                    );
-                } else if (input.down) {
-                    enginePower.set(entity.id, 
-                        Math.max(enginePower.get(entity.id)! - 0.2, 0)
-                    );
-                }
+            // Update engine power
+            if (input.up) {
+                enginePower.set(entity.id, 
+                    Math.min(enginePower.get(entity.id)! + 0.2, 1.0)
+                );
+            } else if (input.down) {
+                enginePower.set(entity.id, 
+                    Math.max(enginePower.get(entity.id)! - 0.2, 0)
+                );
+            }
 
-                // Get orientation vectors
-                const { right, up, forward } = getOrientationVectors(body);
+            // Get orientation vectors
+            const { right, up, forward } = getOrientationVectors(body);
 
-                // Calculate velocity and speed
-                const velocity = new Vector3(body.velocity.x, body.velocity.y, body.velocity.z);
-                const currentSpeed = Vector3.Dot(velocity, new Vector3(forward.x, forward.y, forward.z));
+            // Calculate velocity and speed
+            const velocity = new Vector3(body.velocity.x, body.velocity.y, body.velocity.z);
+            const currentSpeed = Vector3.Dot(velocity, new Vector3(forward.x, forward.y, forward.z));
 
-                // Flight mode influence based on speed
-                let flightModeInfluence = currentSpeed / 10;
-                flightModeInfluence = Math.min(Math.max(flightModeInfluence, 0), 1);
+            // Flight mode influence based on speed
+            let flightModeInfluence = currentSpeed / 10;
+            flightModeInfluence = Math.min(Math.max(flightModeInfluence, 0), 1);
 
-                // Mass adjustment based on speed
-                let lowerMassInfluence = currentSpeed / 10;
-                lowerMassInfluence = Math.min(Math.max(lowerMassInfluence, 0), 1);
-                body.mass = settings.mass * (1 - (lowerMassInfluence * 0.6));
+            // Mass adjustment based on speed
+            let lowerMassInfluence = currentSpeed / 10;
+            lowerMassInfluence = Math.min(Math.max(lowerMassInfluence, 0), 1);
+            body.mass = settings.mass * (1 - (lowerMassInfluence * 0.6));
 
-                // Scale control inputs by deltaTime and 60fps for consistent behavior
-                const controlScale = dt * 60;
+            // Scale control inputs by deltaTime and 60fps for consistent behavior
+            const controlScale = dt * 60;
 
-                // Rotation stabilization
-                let lookVelocity = velocity.clone();
-                const velLength = lookVelocity.length();
+            // Rotation stabilization
+            let lookVelocity = velocity.clone();
+            const velLength = lookVelocity.length();
+            
+            if (velLength > 0.1) {
+                lookVelocity.normalize();
                 
-                if (velLength > 0.1) {
-                    lookVelocity.normalize();
+                const rotStabVelocity = new Quaternion();
+                const axis = new Vector3();
+                const dot = Vector3.Dot(new Vector3(forward.x, forward.y, forward.z), lookVelocity);
+                
+                const clampedDot = Math.max(-1, Math.min(1, dot));
+                const angle = Math.acos(clampedDot);
+                
+                if (angle > 0.001) {
+                    Vector3.CrossToRef(new Vector3(forward.x, forward.y, forward.z), lookVelocity, axis);
+                    const axisLength = axis.length();
                     
-                    const rotStabVelocity = new Quaternion();
-                    const axis = new Vector3();
-                    const dot = Vector3.Dot(new Vector3(forward.x, forward.y, forward.z), lookVelocity);
-                    
-                    const clampedDot = Math.max(-1, Math.min(1, dot));
-                    const angle = Math.acos(clampedDot);
-                    
-                    if (angle > 0.001) {
-                        Vector3.CrossToRef(new Vector3(forward.x, forward.y, forward.z), lookVelocity, axis);
-                        const axisLength = axis.length();
+                    if (axisLength > 0.001) {
+                        axis.normalize();
+                        Quaternion.RotationAxisToRef(axis, angle, rotStabVelocity);
                         
-                        if (axisLength > 0.001) {
-                            axis.normalize();
-                            Quaternion.RotationAxisToRef(axis, angle, rotStabVelocity);
-                            
-                            rotStabVelocity.x *= 0.3;
-                            rotStabVelocity.y *= 0.3;
-                            rotStabVelocity.z *= 0.3;
-                            rotStabVelocity.w *= 0.3;
-                            
-                            const rotStabEuler = new Vector3();
-                            let euler = new Vector3();
-                            euler = rotStabVelocity.toEulerAngles();
-                            rotStabEuler.copyFrom(euler);
-                            
-                            let rotStabInfluence = Math.min(Math.max(velLength - 1, 0), 0.1);
-                            let loopFix = (input.up && currentSpeed > 0 ? 0 : 1);
-                            
-                            body.angularVelocity.x += rotStabEuler.x * rotStabInfluence * loopFix;
-                            body.angularVelocity.y += rotStabEuler.y * rotStabInfluence;
-                            body.angularVelocity.z += rotStabEuler.z * rotStabInfluence * loopFix;
-                        }
+                        rotStabVelocity.x *= 0.3;
+                        rotStabVelocity.y *= 0.3;
+                        rotStabVelocity.z *= 0.3;
+                        rotStabVelocity.w *= 0.3;
+                        
+                        const rotStabEuler = new Vector3();
+                        let euler = new Vector3();
+                        euler = rotStabVelocity.toEulerAngles();
+                        rotStabEuler.copyFrom(euler);
+                        
+                        let rotStabInfluence = Math.min(Math.max(velLength - 1, 0), 0.1);
+                        let loopFix = (input.up && currentSpeed > 0 ? 0 : 1);
+                        
+                        body.angularVelocity.x += rotStabEuler.x * rotStabInfluence * loopFix;
+                        body.angularVelocity.y += rotStabEuler.y * rotStabInfluence;
+                        body.angularVelocity.z += rotStabEuler.z * rotStabInfluence * loopFix;
                     }
                 }
+            }
 
-                // Apply pitch control
-                if (input.pitchUp) {
-                    body.angularVelocity.x -= right.x * 0.04 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
-                    body.angularVelocity.y -= right.y * 0.04 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
-                    body.angularVelocity.z -= right.z * 0.04 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
-                } else if (input.pitchDown) {
-                    body.angularVelocity.x += right.x * 0.04 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
-                    body.angularVelocity.y += right.y * 0.04 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
-                    body.angularVelocity.z += right.z * 0.04 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
-                }
+            // Apply pitch control
+            if (input.pitchUp) {
+                body.angularVelocity.x -= right.x * 0.04 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
+                body.angularVelocity.y -= right.y * 0.04 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
+                body.angularVelocity.z -= right.z * 0.04 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
+            } else if (input.pitchDown) {
+                body.angularVelocity.x += right.x * 0.04 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
+                body.angularVelocity.y += right.y * 0.04 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
+                body.angularVelocity.z += right.z * 0.04 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
+            }
 
-                // Apply yaw control
-                if (input.left) {
-                    body.angularVelocity.x -= up.x * 0.02 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
-                    body.angularVelocity.y -= up.y * 0.02 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
-                    body.angularVelocity.z -= up.z * 0.02 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
-                } else if (input.right) {
-                    body.angularVelocity.x += up.x * 0.02 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
-                    body.angularVelocity.y += up.y * 0.02 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
-                    body.angularVelocity.z += up.z * 0.02 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
-                }
+            // Apply yaw control
+            if (input.left) {
+                body.angularVelocity.x -= up.x * 0.02 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
+                body.angularVelocity.y -= up.y * 0.02 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
+                body.angularVelocity.z -= up.z * 0.02 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
+            } else if (input.right) {
+                body.angularVelocity.x += up.x * 0.02 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
+                body.angularVelocity.y += up.y * 0.02 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
+                body.angularVelocity.z += up.z * 0.02 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
+            }
 
-                // Apply roll control
-                if (input.rollLeft) {
-                    body.angularVelocity.x += forward.x * 0.055 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
-                    body.angularVelocity.y += forward.y * 0.055 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
-                    body.angularVelocity.z += forward.z * 0.055 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
-                } else if (input.rollRight) {
-                    body.angularVelocity.x -= forward.x * 0.055 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
-                    body.angularVelocity.y -= forward.y * 0.055 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
-                    body.angularVelocity.z -= forward.z * 0.055 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
-                }
+            // Apply roll control
+            if (input.rollLeft) {
+                body.angularVelocity.x += forward.x * 0.055 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
+                body.angularVelocity.y += forward.y * 0.055 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
+                body.angularVelocity.z += forward.z * 0.055 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
+            } else if (input.rollRight) {
+                body.angularVelocity.x -= forward.x * 0.055 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
+                body.angularVelocity.y -= forward.y * 0.055 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
+                body.angularVelocity.z -= forward.z * 0.055 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
+            }
 
-                // Apply mouse control
-                if (input.mouseDelta) {
-                    const yawAmount = -input.mouseDelta.x * 0.02 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
-                    const pitchAmount = -input.mouseDelta.y * 0.02 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
-                    
-                    // Apply yaw (horizontal mouse movement)
-                    body.angularVelocity.x += up.x * yawAmount;
-                    body.angularVelocity.y += up.y * yawAmount;
-                    body.angularVelocity.z += up.z * yawAmount;
-                    
-                    // Apply pitch (vertical mouse movement)
-                    body.angularVelocity.x += right.x * pitchAmount;
-                    body.angularVelocity.y += right.y * pitchAmount;
-                    body.angularVelocity.z += right.z * pitchAmount;
-                }
+            // Apply mouse control
+            if (input.mouseDelta) {
+                const yawAmount = -input.mouseDelta.x * 0.02 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
+                const pitchAmount = -input.mouseDelta.y * 0.02 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
+                
+                // Apply yaw (horizontal mouse movement)
+                body.angularVelocity.x += up.x * yawAmount;
+                body.angularVelocity.y += up.y * yawAmount;
+                body.angularVelocity.z += up.z * yawAmount;
+                
+                // Apply pitch (vertical mouse movement)
+                body.angularVelocity.x += right.x * pitchAmount;
+                body.angularVelocity.y += right.y * pitchAmount;
+                body.angularVelocity.z += right.z * pitchAmount;
+            }
 
-                // Thrust
-                let speedModifier = 0.02;
-                if (input.up && !input.down) {
-                    speedModifier = 0.06;
-                } else if (!input.up && input.down) {
-                    speedModifier = -0.05;
-                }
+            // Thrust
+            let speedModifier = 0.02;
+            if (input.up && !input.down) {
+                speedModifier = 0.06;
+            } else if (!input.up && input.down) {
+                speedModifier = -0.05;
+            }
 
-                // Scale thrust by deltaTime
-                const thrustScale = dt * 60;
-                body.velocity.x += (velLength * lastDrag.get(entity.id)! + speedModifier) * forward.x * enginePower.get(entity.id)! * thrustScale;
-                body.velocity.y += (velLength * lastDrag.get(entity.id)! + speedModifier) * forward.y * enginePower.get(entity.id)! * thrustScale;
-                body.velocity.z += (velLength * lastDrag.get(entity.id)! + speedModifier) * forward.z * enginePower.get(entity.id)! * thrustScale;
+            // Scale thrust by deltaTime
+            const thrustScale = dt * 60;
+            body.velocity.x += (velLength * lastDrag.get(entity.id)! + speedModifier) * forward.x * enginePower.get(entity.id)! * thrustScale;
+            body.velocity.y += (velLength * lastDrag.get(entity.id)! + speedModifier) * forward.y * enginePower.get(entity.id)! * thrustScale;
+            body.velocity.z += (velLength * lastDrag.get(entity.id)! + speedModifier) * forward.z * enginePower.get(entity.id)! * thrustScale;
 
-                // Drag
-                const drag = Math.pow(velLength, 1) * 0.003 * enginePower.get(entity.id)!;
-                body.velocity.x -= body.velocity.x * drag;
-                body.velocity.y -= body.velocity.y * drag;
-                body.velocity.z -= body.velocity.z * drag;
-                lastDrag.set(entity.id, drag);
+            // Drag
+            const drag = Math.pow(velLength, 1) * 0.003 * enginePower.get(entity.id)!;
+            body.velocity.x -= body.velocity.x * drag;
+            body.velocity.y -= body.velocity.y * drag;
+            body.velocity.z -= body.velocity.z * drag;
+            lastDrag.set(entity.id, drag);
 
-                // Lift
-                let lift = Math.pow(velLength, 1) * 0.005 * enginePower.get(entity.id)!;
-                lift = Math.min(Math.max(lift, 0), 0.05);
-                body.velocity.x += up.x * lift * thrustScale;
-                body.velocity.y += up.y * lift * thrustScale;
-                body.velocity.z += up.z * lift * thrustScale;
+            // Lift
+            let lift = Math.pow(velLength, 1) * 0.005 * enginePower.get(entity.id)!;
+            lift = Math.min(Math.max(lift, 0), 0.05);
+            body.velocity.x += up.x * lift * thrustScale;
+            body.velocity.y += up.y * lift * thrustScale;
+            body.velocity.z += up.z * lift * thrustScale;
 
-                // Apply angular damping with flight mode influence
-                body.angularVelocity.x *= (1 - 0.02 * flightModeInfluence);
-                body.angularVelocity.y *= (1 - 0.02 * flightModeInfluence);
-                body.angularVelocity.z *= (1 - 0.02 * flightModeInfluence);
+            // Apply angular damping with flight mode influence
+            body.angularVelocity.x *= (1 - 0.02 * flightModeInfluence);
+            body.angularVelocity.y *= (1 - 0.02 * flightModeInfluence);
+            body.angularVelocity.z *= (1 - 0.02 * flightModeInfluence);
 
-                // Add extra damping to prevent continuous rotation
-                body.angularVelocity.x *= 0.95;
-                body.angularVelocity.y *= 0.95;
-                body.angularVelocity.z *= 0.95;
+            // Add extra damping to prevent continuous rotation
+            body.angularVelocity.x *= 0.95;
+            body.angularVelocity.y *= 0.95;
+            body.angularVelocity.z *= 0.95;
+            applyBodyTransform(entity, body);
         }
     };
 }

@@ -1,7 +1,9 @@
-import { world as ecsWorld } from '../world';
-import { GameEntity } from '../types';
+import { world as ecsWorld } from '@shared/ecs/world';
+import { GameEntity } from '@shared/ecs/types';
 import { Vector3, Quaternion } from 'babylonjs';
-import { createFlagEntity } from '../utils/EntityHelpers';
+import { createFlagEntity } from '@shared/ecs/utils/EntityHelpers';
+import { createPhysicsWorldSystem } from '@shared/ecs/systems/PhysicsWorldSystem';
+import { createStateSyncSystem } from './StateSyncSystem';
 
 export enum GameMode {
     CTF = 'ctf',
@@ -23,12 +25,17 @@ export interface GameModeConfig {
 /**
  * Creates a system that handles game mode initialization and management
  */
-export function createGameModeSystem(config: GameModeConfig) {
+export function createGameModeSystem(
+    physicsWorldSystem: ReturnType<typeof createPhysicsWorldSystem>,
+    stateSyncSystem: ReturnType<typeof createStateSyncSystem>,
+    generateEntityId: () => string,
+    config: GameModeConfig
+) {
     return {
         initialize: () => {
             switch (config.mode) {
                 case GameMode.CTF:
-                    initializeCTF(config);
+                    initializeCTF(config, physicsWorldSystem, stateSyncSystem);
                     break;
                 case GameMode.Deathmatch:
                     initializeDeathmatch(config);
@@ -59,7 +66,7 @@ export function createGameModeSystem(config: GameModeConfig) {
 /**
  * Initializes Capture the Flag game mode
  */
-function initializeCTF(config: GameModeConfig) {
+function initializeCTF(config: GameModeConfig, physicsWorldSystem: ReturnType<typeof createPhysicsWorldSystem>, stateSyncSystem: ReturnType<typeof createStateSyncSystem>) {
     if (!config.flagPositions || config.flagPositions.length < 2) {
         throw new Error('CTF mode requires at least 2 flag positions');
     }
@@ -70,6 +77,8 @@ function initializeCTF(config: GameModeConfig) {
         const flagPosition = config.flagPositions[i];
         const flag = createFlagEntity(`flag_team${i}`, i, flagPosition);
         ecsWorld.add(flag);
+        physicsWorldSystem.addBody(flag);
+        stateSyncSystem.addEntity(flag);
     }
 }
 

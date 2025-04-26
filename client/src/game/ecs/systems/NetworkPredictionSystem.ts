@@ -245,7 +245,7 @@ export function createNetworkPredictionSystem(
         /**
          * Updates the system
          */
-        update: (dt: number) => {
+        update: () => {
             // Update interpolation delay based on network quality
             updateInterpolationDelay();
 
