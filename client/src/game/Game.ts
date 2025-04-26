@@ -1,5 +1,5 @@
-import { State } from './schemas/';
-import { PhysicsInput } from '@shared/ecs/types';
+import { State } from './schemas/State';
+import { InputComponent } from '@shared/ecs/types';
 import * as Colyseus from 'colyseus.js';
 import { Engine } from 'babylonjs';
 import { useGameDebug } from '@/composables/useGameDebug';
@@ -134,7 +134,7 @@ export class Game {
     /**
      * Sends a command update to the server
      */
-    public sendCommandUpdate(input: PhysicsInput): void {
+    public sendCommandUpdate(input: InputComponent): void {
         if (this.gameSystems) {
             this.gameSystems.networkSystem.sendCommand(input);
         }
@@ -167,7 +167,7 @@ export class Game {
     /**
      * Gets the current network stats
      */
-    public getNetworkStats() {
+    public getNetworkStats(): { latency: number; quality: number; jitter: number } {
         return this.gameSystems?.networkSystem.getNetworkStats() ?? {
             latency: 0,
             quality: 1.0,

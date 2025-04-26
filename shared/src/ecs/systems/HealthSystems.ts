@@ -5,15 +5,15 @@ import { GameEntity } from '../types';
  * Health system that handles damage and entity destruction
  */
 export function createHealthSystem() {
-    const damageableEntities = ecsWorld.with("health", "maxHealth");
+    const damageableEntities = ecsWorld.with("gameState");
 
     return {
         update: (dt: number) => {
             for (const entity of damageableEntities) {
                 // Check for destruction
-                if (entity.health! <= 0) {
+                if (entity.gameState!.health <= 0) {
                     // Handle vehicle destruction
-                    if (entity.drone || entity.plane) {
+                    if (entity.vehicle) {
                         // TODO: Trigger destruction effects
                         // For now, just remove the entity
                         ecsWorld.remove(entity);
@@ -25,11 +25,11 @@ export function createHealthSystem() {
                 }
 
                 // Regenerate health if below max
-                if (entity.health! < entity.maxHealth!) {
+                if (entity.gameState!.health < entity.gameState!.maxHealth) {
                     // Regenerate 1 health per second
-                    entity.health = Math.min(
-                        entity.maxHealth!,
-                        entity.health! + dt
+                    entity.gameState!.health = Math.min(
+                        entity.gameState!.maxHealth,
+                        entity.gameState!.health + dt
                     );
                 }
             }

@@ -2,16 +2,34 @@ import { Room } from 'colyseus.js';
 import { State } from '../../schemas/State';
 import { EntitySchema } from '../../schemas/EntitySchema';
 import { world as ecsWorld } from '@shared/ecs/world';
-import { Vector3, Quaternion } from 'babylonjs';
-import { GameEntity } from '@shared/ecs/types';
+import { Vector3, Quaternion, Scene } from 'babylonjs';
+import { GameEntity, TransformBuffer, ProjectileComponent, VehicleComponent, InputComponent, RenderComponent } from '@shared/ecs/types';
 import * as Colyseus from 'colyseus.js';
-
+import { createCameraSystem } from './CameraSystem';
+import { createPhysicsWorldSystem } from '@shared/ecs/systems';
+import { createNetworkPredictionSystem } from './NetworkPredictionSystem';
+import { createVehicleBody, createDroneMesh, createPlaneMesh, } from '@shared/ecs/utils/EntityHelpers';
+import { createDroneSystem } from '@shared/ecs/systems/VehicleSystems';
+import { createPlaneSystem } from '@shared/ecs/systems/VehicleSystems';
+import { createWeaponSystem } from '@shared/ecs/systems/WeaponSystems';
+import { createClientInputSystem } from './ClientInputSystem';
 /**
  * Creates a system that handles network state updates and converts them to ECS entities
  */
-export function createNetworkSystem(room: Room<State>) {
-    const entityById = new Map<string, GameEntity>();
+export function createNetworkSystem(
+    room: Room<State>,
+    scene: Scene,
+    cameraSystem: ReturnType<typeof createCameraSystem>,
+    physicsWorldSystem: ReturnType<typeof createPhysicsWorldSystem>,
+    droneSystem: ReturnType<typeof createDroneSystem>,
+    planeSystem: ReturnType<typeof createPlaneSystem>,
+    weaponSystem: ReturnType<typeof createWeaponSystem>,
+    inputSystem: ReturnType<typeof createClientInputSystem>
+) {
+    console.log('Creating network system...');
     const $ = Colyseus.getStateCallbacks(room);
+
+    const networkPredictionSystem = createNetworkPredictionSystem(room, droneSystem, planeSystem, weaponSystem);
 
     // Network quality tracking
     let networkLatency = 0;
@@ -53,126 +71,188 @@ export function createNetworkSystem(room: Room<State>) {
 
     // Handle entity updates
     $(room.state).entities.onAdd((entity: EntitySchema, id: string) => {
+        console.log('Entity added:', { id, type: entity.type });
         const newEntity: GameEntity = {
             id,
             type: entity.type,
-            position: new Vector3(entity.positionX, entity.positionY, entity.positionZ),
-            rotation: new Quaternion(entity.quaternionX, entity.quaternionY, entity.quaternionZ, entity.quaternionW),
-            velocity: new Vector3(entity.linearVelocityX, entity.linearVelocityY, entity.linearVelocityZ),
-            angularVelocity: new Vector3(entity.angularVelocityX, entity.angularVelocityY, entity.angularVelocityZ),
-            health: entity.health,
-            maxHealth: entity.maxHealth,
-            team: entity.team,
-            hasFlag: entity.hasFlag,
-            carriedBy: entity.carriedBy,
-            atBase: entity.atBase
+            transform: {
+                position: new Vector3(entity.transform.positionX, entity.transform.positionY, entity.transform.positionZ),
+                rotation: new Quaternion(entity.transform.quaternionX, entity.transform.quaternionY, entity.transform.quaternionZ, entity.transform.quaternionW),
+                velocity: new Vector3(entity.transform.linearVelocityX, entity.transform.linearVelocityY, entity.transform.linearVelocityZ),
+                angularVelocity: new Vector3(entity.transform.angularVelocityX, entity.transform.angularVelocityY, entity.transform.angularVelocityZ)
+            },
+            gameState: {
+                health: entity.gameState.health,
+                maxHealth: entity.gameState.maxHealth,
+                team: entity.gameState.team,
+                hasFlag: entity.gameState.hasFlag,
+                carryingFlag: entity.gameState.carryingFlag,
+                carriedBy: entity.gameState.carriedBy,
+                atBase: entity.gameState.atBase
+            },
+            tick: {
+                tick: entity.tick.tick,
+                timestamp: entity.tick.timestamp,
+                lastProcessedInputTimestamp: entity.tick.lastProcessedInputTimestamp,
+                lastProcessedInputTick: entity.tick.lastProcessedInputTick
+            },
+            owner: {
+                id: entity.owner.id,
+                isLocal: room.sessionId === entity.owner.id
+            }
         };
 
         // Set type-specific properties
         if (entity.type === 'drone' || entity.type === 'plane') {
-            newEntity[entity.type] = true;
-            // Convert weapons array to the correct type
-            newEntity.weapons = Array.from(entity.weapons).map(w => ({
-                id: w.id,
-                name: w.name,
-                projectileType: w.projectileType as 'bullet' | 'missile',
-                damage: w.damage,
-                fireRate: w.fireRate,
-                projectileSpeed: w.projectileSpeed,
-                cooldown: w.cooldown,
-                range: w.range,
-                isOnCooldown: w.isOnCooldown,
-                lastFireTime: w.lastFireTime
-            }));
-            newEntity.activeWeaponIndex = entity.activeWeaponIndex;
+            const vehicleComponent: VehicleComponent = {
+                vehicleType: entity.vehicle.vehicleType as 'drone' | 'plane',
+                weapons: Array.from(entity.vehicle.weapons).map(w => ({
+                    id: w.id,
+                    name: w.name,
+                    projectileType: w.projectileType as 'bullet' | 'missile',
+                    damage: w.damage,
+                    fireRate: w.fireRate,
+                    projectileSpeed: w.projectileSpeed,
+                    cooldown: w.cooldown,
+                    range: w.range,
+                    isOnCooldown: w.isOnCooldown,
+                    lastFireTime: w.lastFireTime
+                })),
+                activeWeaponIndex: entity.vehicle.activeWeaponIndex
+            };
+            newEntity.vehicle = vehicleComponent;
+            if (newEntity.vehicle.vehicleType === 'drone') {
+                createDroneMesh(newEntity, scene);
+            } else if (newEntity.vehicle.vehicleType === 'plane') {
+                createPlaneMesh(newEntity, scene);
+            }
+            if (newEntity.owner?.isLocal && newEntity.vehicle) {
+                const vehicleBody = createVehicleBody(newEntity.vehicle.vehicleType, newEntity.transform!.position, newEntity.transform!.rotation);
+                newEntity.physics!.body = vehicleBody;
+                physicsWorldSystem.addBody(newEntity);
+                cameraSystem.attachCamera(newEntity);
+            }
         } else if (entity.type === 'projectile') {
-            newEntity.projectile = true;
-            newEntity.damage = entity.damage;
-            newEntity.range = entity.range;
-            newEntity.distanceTraveled = entity.distanceTraveled;
-            newEntity.sourceId = entity.sourceId;
-        } else if (entity.type === 'flag') {
-            newEntity.flag = true;
+            const projectileComponent: ProjectileComponent = {
+                projectileType: entity.projectile.projectileType as 'bullet' | 'missile',
+                damage: entity.projectile.damage,
+                range: entity.projectile.range,
+                distanceTraveled: entity.projectile.distanceTraveled,
+                sourceId: entity.projectile.sourceId,
+                timestamp: entity.tick.timestamp,
+                tick: entity.tick.tick
+            };
+            newEntity.projectile = projectileComponent;
         }
 
         ecsWorld.add(newEntity);
-        entityById.set(id, newEntity);
+        console.log('Entity added to ECS world:', { id, entity});
+        $(entity).onChange(() => {
+            console.log('Entity changed:', { id, entity });
+            const gameEntity = ecsWorld.entities.find(e => e.id === id);
+            if (!gameEntity) {
+                console.log('Entity not found in local map:', id);
+                return;
+            }
+            
+            // Update transform data
+            const transformBuffer: TransformBuffer = {
+                transform: {
+                    position: new Vector3(entity.transform.positionX, entity.transform.positionY, entity.transform.positionZ),
+                    rotation: new Quaternion(entity.transform.quaternionX, entity.transform.quaternionY, entity.transform.quaternionZ, entity.transform.quaternionW),
+                    velocity: new Vector3(entity.transform.linearVelocityX, entity.transform.linearVelocityY, entity.transform.linearVelocityZ),
+                    angularVelocity: new Vector3(entity.transform.angularVelocityX, entity.transform.angularVelocityY, entity.transform.angularVelocityZ)
+                },
+                tick: {
+                    tick: entity.tick.tick,
+                    timestamp: entity.tick.timestamp,
+                    lastProcessedInputTimestamp: entity.tick.lastProcessedInputTimestamp,
+                    lastProcessedInputTick: entity.tick.lastProcessedInputTick
+                }
+            };
+            networkPredictionSystem.addEntityState(id, transformBuffer);
+            // Update game state
+            if (gameEntity.gameState) {
+                gameEntity.gameState.health = entity.gameState.health;
+                gameEntity.gameState.maxHealth = entity.gameState.maxHealth;
+                gameEntity.gameState.hasFlag = entity.gameState.hasFlag;
+                gameEntity.gameState.carryingFlag = entity.gameState.carryingFlag;
+                gameEntity.gameState.carriedBy = entity.gameState.carriedBy;
+                gameEntity.gameState.atBase = entity.gameState.atBase;
+                gameEntity.gameState.team = entity.gameState.team;
+            }
+    
+            // Update tick data
+            if (gameEntity.tick) {
+                gameEntity.tick.tick = entity.tick.tick;
+                gameEntity.tick.timestamp = entity.tick.timestamp;
+                gameEntity.tick.lastProcessedInputTimestamp = entity.tick.lastProcessedInputTimestamp;
+                gameEntity.tick.lastProcessedInputTick = entity.tick.lastProcessedInputTick;
+            }
+    
+            // Update owner data
+            if (gameEntity.owner) {
+                gameEntity.owner.id = entity.owner.id;
+                gameEntity.owner.isLocal = room.sessionId === entity.owner.id;
+            }
+    
+            // Update type-specific data
+            if ((entity.type === 'drone' || entity.type === 'plane') && gameEntity.vehicle) {
+                const vehicle = gameEntity.vehicle;
+                vehicle.vehicleType = entity.vehicle.vehicleType as 'drone' | 'plane';
+                vehicle.weapons = Array.from(entity.vehicle.weapons).map(w => ({
+                    id: w.id,
+                    name: w.name,
+                    projectileType: w.projectileType as 'bullet' | 'missile',
+                    damage: w.damage,
+                    fireRate: w.fireRate,
+                    projectileSpeed: w.projectileSpeed,
+                    cooldown: w.cooldown,
+                    range: w.range,
+                    isOnCooldown: w.isOnCooldown,
+                    lastFireTime: w.lastFireTime
+                }));
+                vehicle.activeWeaponIndex = entity.vehicle.activeWeaponIndex;
+            } else if (entity.type === 'projectile' && gameEntity.projectile) {
+                gameEntity.projectile.damage = entity.projectile.damage;
+                gameEntity.projectile.range = entity.projectile.range;
+                gameEntity.projectile.distanceTraveled = entity.projectile.distanceTraveled;
+                gameEntity.projectile.sourceId = entity.projectile.sourceId;
+                gameEntity.projectile.timestamp = entity.tick.timestamp;
+                gameEntity.projectile.tick = entity.tick.tick;
+            }
+        });
     });
 
-    $(room.state).entities.onChange((entity: EntitySchema, id: string) => {
-        const gameEntity = entityById.get(id);
-        if (!gameEntity) return;
-
-        // Update transform data
-        if (gameEntity.position) {
-            gameEntity.position.set(entity.positionX, entity.positionY, entity.positionZ);
-        }
-        if (gameEntity.rotation) {
-            gameEntity.rotation.set(entity.quaternionX, entity.quaternionY, entity.quaternionZ, entity.quaternionW);
-        }
-        if (gameEntity.velocity) {
-            gameEntity.velocity.set(entity.linearVelocityX, entity.linearVelocityY, entity.linearVelocityZ);
-        }
-        if (gameEntity.angularVelocity) {
-            gameEntity.angularVelocity.set(entity.angularVelocityX, entity.angularVelocityY, entity.angularVelocityZ);
-        }
-
-        // Update common state data
-        gameEntity.health = entity.health;
-        gameEntity.maxHealth = entity.maxHealth;
-        gameEntity.hasFlag = entity.hasFlag;
-        gameEntity.carriedBy = entity.carriedBy;
-        gameEntity.atBase = entity.atBase;
-        gameEntity.team = entity.team;
-
-        // Update type-specific data
-        if (entity.type === 'drone' || entity.type === 'plane') {
-            // Convert weapons array to the correct type
-            gameEntity.weapons = Array.from(entity.weapons).map(w => ({
-                id: w.id,
-                name: w.name,
-                projectileType: w.projectileType as 'bullet' | 'missile',
-                damage: w.damage,
-                fireRate: w.fireRate,
-                projectileSpeed: w.projectileSpeed,
-                cooldown: w.cooldown,
-                range: w.range,
-                isOnCooldown: w.isOnCooldown,
-                lastFireTime: w.lastFireTime
-            }));
-            gameEntity.activeWeaponIndex = entity.activeWeaponIndex;
-        } else if (entity.type === 'projectile') {
-            gameEntity.damage = entity.damage;
-            gameEntity.range = entity.range;
-            gameEntity.distanceTraveled = entity.distanceTraveled;
-            gameEntity.sourceId = entity.sourceId;
-        }
-    });
 
     $(room.state).entities.onRemove((_entity: EntitySchema, id: string) => {
-        const entity = entityById.get(id);
+        console.log('Entity removed:', id);
+        const entity = ecsWorld.entities.find(e => e.id === id);
         if (entity) {
             ecsWorld.remove(entity);
-            entityById.delete(id);
+            console.log('Entity removed from ECS world:', id);
         }
     });
 
     return {
-        getEntityById: (id: string) => entityById.get(id),
+        networkPredictionSystem,
         getNetworkStats: () => ({
             latency: networkLatency,
             quality: networkQuality,
             jitter: networkJitter
         }),
-        sendCommand: (input: any) => {
+        sendCommand: (input: InputComponent) => {
             room.send("command", input);
         },
         sendPing: () => {
             room.send("ping", Date.now());
         },
         update: (dt: number) => {
-            // Network system doesn't need per-frame updates
-            // All updates are handled through Colyseus state change events
+            networkPredictionSystem.addInput(room.sessionId, inputSystem.getInput());
+            networkPredictionSystem.update(dt);
+        },
+        cleanup: () => {
+            networkPredictionSystem.cleanup();
         }
     };
 } 

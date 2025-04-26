@@ -1,14 +1,14 @@
 import * as CANNON from 'cannon-es';
 import { Vector3, Quaternion, Matrix } from 'babylonjs';
 import { world as ecsWorld } from '../world';
-import { GameEntity } from '../types';
+import { GameEntity, InputComponent } from '../types';
 import { DroneSettings, PlaneSettings } from '../types';
 
 /**
  * Creates a system that handles drone-specific physics
  */
 export function createDroneSystem(cannonWorld: CANNON.World) {
-    const drones = ecsWorld.with("drone", "body", "position", "rotation", "input");
+    const drones = ecsWorld.with("vehicle", "physics", "transform").where(({vehicle}) => vehicle.vehicleType === "drone");
     const momentumDamping = 0.99;
     const moveSpeed = 0.2;
     const rotationSpeed = 0.02;
@@ -20,10 +20,8 @@ export function createDroneSystem(cannonWorld: CANNON.World) {
     const maxPitchAngle = Math.PI / 2.5;
 
     return {
-        update: (dt: number) => {
-            for (const entity of drones) {
-                const body = entity.body!;
-                const input = entity.input!;
+        update: (dt: number, entity: GameEntity, input: InputComponent) => {
+            const body = entity.physics!.body;
                 const settings = DroneSettings;
 
                 // Initialize altitude tracking if needed
@@ -160,7 +158,6 @@ export function createDroneSystem(cannonWorld: CANNON.World) {
                 body.angularVelocity.x *= 0.95;
                 body.angularVelocity.y *= 0.95;
                 body.angularVelocity.z *= 0.95;
-            }
         }
     };
 }
@@ -169,15 +166,13 @@ export function createDroneSystem(cannonWorld: CANNON.World) {
  * Creates a system that handles plane-specific physics
  */
 export function createPlaneSystem(cannonWorld: CANNON.World) {
-    const planes = ecsWorld.with("plane", "body", "position", "rotation", "input");
+    const planes = ecsWorld.with("vehicle", "physics", "transform").where(({vehicle}) => vehicle.vehicleType === "plane");
     const enginePower = new Map<string, number>();
     const lastDrag = new Map<string, number>();
 
     return {
-        update: (dt: number) => {
-            for (const entity of planes) {
-                const body = entity.body!;
-                const input = entity.input!;
+        update: (dt: number, entity: GameEntity, input: InputComponent) => {
+            const body = entity.physics!.body;
                 const settings = PlaneSettings;
 
                 // Initialize engine power if needed
@@ -346,7 +341,6 @@ export function createPlaneSystem(cannonWorld: CANNON.World) {
                 body.angularVelocity.x *= 0.95;
                 body.angularVelocity.y *= 0.95;
                 body.angularVelocity.z *= 0.95;
-            }
         }
     };
 }

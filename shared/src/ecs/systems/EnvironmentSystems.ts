@@ -32,12 +32,39 @@ export function createEnvironmentSystem(cannonWorld: CANNON.World) {
     const groundEntity: GameEntity = {
         id: 'ground',
         type: 'environment',
-        environment: true,
-        body: groundBody,
+        transform: {
         position: new Vector3(0, 0, 0),
         rotation: new Quaternion(0, 0, 0, 1),
-        collisionGroup: CollisionGroups.Environment,
-        collisionMask: CollisionGroups.Drones | CollisionGroups.Planes
+            velocity: Vector3.Zero(),
+            angularVelocity: Vector3.Zero()
+        },
+        physics: {
+            body: groundBody,
+            mass: 0,
+            drag: 0,
+            angularDrag: 0,
+            maxSpeed: 0,
+            maxAngularSpeed: 0,
+            maxAngularAcceleration: 0,
+            angularDamping: 1,
+            forceMultiplier: 0,
+            thrust: 0,
+            lift: 0,
+            torque: 0,
+            minSpeed: 0,
+            bankAngle: 0,
+            wingArea: 0,
+            strafeForce: 0,
+            minHeight: 0
+        },
+        gameState: {
+            health: 100,
+            maxHealth: 100,
+            team: -1, // Environment team
+            hasFlag: false,
+            carryingFlag: false,
+            atBase: true
+        }
     };
     
     // Add ground entity to ECS world
@@ -46,18 +73,18 @@ export function createEnvironmentSystem(cannonWorld: CANNON.World) {
     return {
         update: (dt: number) => {
             // Update ground entity position and rotation from physics body
-            const ground = ecsWorld.with("environment", "body").first;
+            const ground = ecsWorld.with("physics", "transform").first;
             if (ground) {
-                ground.position = new Vector3(
-                    ground.body!.position.x,
-                    ground.body!.position.y,
-                    ground.body!.position.z
+                ground.transform!.position = new Vector3(
+                    ground.physics!.body.position.x,
+                    ground.physics!.body.position.y,
+                    ground.physics!.body.position.z
                 );
-                ground.rotation = new Quaternion(
-                    ground.body!.quaternion.x,
-                    ground.body!.quaternion.y,
-                    ground.body!.quaternion.z,
-                    ground.body!.quaternion.w
+                ground.transform!.rotation = new Quaternion(
+                    ground.physics!.body.quaternion.x,
+                    ground.physics!.body.quaternion.y,
+                    ground.physics!.body.quaternion.z,
+                    ground.physics!.body.quaternion.w
                 );
             }
         }

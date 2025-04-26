@@ -24,6 +24,6 @@
             "@shared/*": ["../shared/src/*"]
         }
     },
-    "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue", "src/*.vue","../shared/src/**/*", "../server/src/schemas"],
+    "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue", "src/*.vue","../shared/src/**/*", "../server/src/schemas", "../server/src/schemas.ts", "../server/src/ecs/systems/InputSystems.ts", "../server/src/ecs/systems/InputProcessorSystem.ts"],
     "references": [{ "path": "./tsconfig.node.json" }, { "path": "../shared/tsconfig.json" }]
 } 

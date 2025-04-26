@@ -9,30 +9,30 @@ const FLAG_RETURN_RADIUS = 10;
  * Flag system that handles flag capture and scoring
  */
 export function createFlagSystem() {
-    const flags = ecsWorld.with("flag", "position", "team");
-    const vehicles = ecsWorld.with("drone", "plane", "position", "team");
+    const flags = ecsWorld.with("gameState", "transform");
+    const vehicles = ecsWorld.with("vehicle", "transform", "gameState");
 
     return {
         update: (dt: number) => {
             for (const flag of flags) {
                 // Skip if flag is being carried
-                if (flag.carriedBy) continue;
+                if (flag.gameState!.carriedBy) continue;
 
                 // Check for flag capture
                 for (const vehicle of vehicles) {
                     // Skip if vehicle is on the same team as the flag
-                    if (vehicle.team === flag.team) continue;
+                    if (vehicle.gameState!.team === flag.gameState!.team) continue;
 
                     // Check distance to flag
                     const distance = Vector3.Distance(
-                        vehicle.position!,
-                        flag.position!
+                        vehicle.transform!.position,
+                        flag.transform!.position
                     );
 
                     // Capture flag if close enough
                     if (distance < FLAG_CAPTURE_RADIUS) {
-                        flag.carriedBy = vehicle.id;
-                        vehicle.hasFlag = true;
+                        flag.gameState!.carriedBy = vehicle.id;
+                        vehicle.gameState!.hasFlag = true;
                         break;
                     }
                 }
@@ -40,39 +40,39 @@ export function createFlagSystem() {
 
             // Update carried flags
             for (const flag of flags) {
-                if (flag.carriedBy) {
-                    const carrier = ecsWorld.entities.find(e => e.id === flag.carriedBy);
+                if (flag.gameState?.carriedBy) {
+                    const carrier = ecsWorld.entities.find(e => e.id === flag.gameState?.carriedBy);
                     if (carrier) {
                         // Update flag position to follow carrier
-                        flag.position!.copyFrom(carrier.position!);
+                        flag.transform!.position.copyFrom(carrier.transform!.position);
 
                         // Check if carrier is at their base
                         const basePos = new Vector3(
-                            carrier.team === 0 ? -20 : 20,
+                            carrier.gameState!.team === 0 ? -20 : 20,
                             0,
                             0
                         );
                         const distanceToBase = Vector3.Distance(
-                            carrier.position!,
+                            carrier.transform!.position,
                             basePos
                         );
 
                         // Return flag if at base
                         if (distanceToBase < FLAG_RETURN_RADIUS) {
-                            flag.carriedBy = undefined;
-                            carrier.hasFlag = false;
-                            flag.position!.copyFrom(basePos);
-                            flag.atBase = true;
+                            flag.gameState!.carriedBy = undefined;
+                            carrier.gameState!.hasFlag = false;
+                            flag.transform!.position.copyFrom(basePos);
+                            flag.gameState!.atBase = true;
                         }
                     } else {
                         // Carrier no longer exists, return flag to base
-                        flag.carriedBy = undefined;
-                        flag.position!.set(
-                            flag.team === 0 ? -20 : 20,
+                        flag.gameState!.carriedBy = undefined;
+                        flag.transform!.position.set(
+                            flag.gameState!.team === 0 ? -20 : 20,
                             0,
                             0
                         );
-                        flag.atBase = true;
+                        flag.gameState!.atBase = true;
                     }
                 }
             }

@@ -1,127 +1,208 @@
-import { world as ecsWorld } from '@shared/ecs/world';
-import { GameEntity } from '@shared/ecs/types';
-import { Vector3, Quaternion, Mesh, Scene, MeshBuilder, StandardMaterial, Color3, MultiMaterial, Color4, ParticleSystem, Texture, Matrix } from 'babylonjs';
-import { CollisionGroups } from '@shared/ecs/CollisionGroups';
+import { GameEntity } from '../types';
+import { Vector3, Quaternion, MeshBuilder, Scene, Color4, StandardMaterial, Color3, MultiMaterial, ParticleSystem, Texture } from 'babylonjs';
+import * as CANNON from 'cannon-es';
+import { DroneSettings, PlaneSettings, DefaultWeapons } from '../types';
+import { CollisionGroups, collisionMasks } from '../CollisionGroups';
+
+
+export function createVehicleBody(
+    vehicleType: 'drone' | 'plane',
+    position: Vector3,
+    rotation: Quaternion,
+): CANNON.Body {
+    const body = new CANNON.Body({
+        mass: vehicleType === 'drone' ? DroneSettings.mass : PlaneSettings.mass,
+        material: new CANNON.Material('vehicleMaterial'),
+        collisionFilterGroup: vehicleType === 'drone' ? CollisionGroups.Drones : CollisionGroups.Planes,
+        collisionFilterMask: CollisionGroups.Environment | CollisionGroups.Drones | CollisionGroups.Planes,
+        position: new CANNON.Vec3(position.x, position.y, position.z),
+        quaternion: new CANNON.Quaternion(rotation.x, rotation.y, rotation.z, rotation.w)
+    });
+
+    // Add collision shape based on vehicle type
+    if (vehicleType === 'drone') {
+        const shape = new CANNON.Box(new CANNON.Vec3(0.5, 0.25, 0.5));
+        body.addShape(shape);
+    } else {
+        const shape = new CANNON.Box(new CANNON.Vec3(1.5, 0.3, 0.5));
+        body.addShape(shape);
+    }
+
+    return body;
+}
 
 /**
- * Creates a system that handles vehicle creation and management
+ * Creates a vehicle entity in the ECS world
  */
-export function createVehicleSystem(scene: Scene) {
-    const vehicles = ecsWorld.with("drone", "plane", "position", "rotation", "mesh");
-    const particleSystems = new Map<string, {
-        frontLeft: ParticleSystem;
-        frontRight: ParticleSystem;
-        backLeft: ParticleSystem;
-        backRight: ParticleSystem;
-    }>();
+export function createVehicleEntity(
+    id: string,
+    vehicleType: 'drone' | 'plane',
+    position: Vector3,
+    rotation: Quaternion,
+    team: number,
+): GameEntity {
+    // Create physics body
+    const body = createVehicleBody(vehicleType, position, rotation);
 
+    // Create entity
     return {
-        createVehicle: (id: string, type: 'drone' | 'plane', team: number) => {
-            const entity: GameEntity = {
-                id,
-                type,
-                [type]: true,
-                team,
-                health: type === 'drone' ? 150 : 200,
-                maxHealth: type === 'drone' ? 150 : 200,
-                position: new Vector3(0, type === 'drone' ? 10 : 50, 0),
-                rotation: new Quaternion(0, 0, 0, 1),
-                velocity: new Vector3(0, 0, 0),
-                angularVelocity: new Vector3(0, 0, 0),
-                maxSpeed: type === 'drone' ? 5 : 8,
-                thrust: type === 'drone' ? 10 : 15,
-                lift: type === 'drone' ? 5 : 10,
-                torque: type === 'drone' ? 1 : 2,
-                strafeForce: type === 'drone' ? 5 : 3,
-                minHeight: type === 'drone' ? 0 : 20,
-                collisionGroup: type === 'drone' ? CollisionGroups.Drones : CollisionGroups.Planes,
-                collisionMask: CollisionGroups.Drones | CollisionGroups.Planes | CollisionGroups.Environment | CollisionGroups.Projectiles | CollisionGroups.Flags
-            };
-
-            // Create mesh
-            if (type === 'drone') {
-                createDroneMesh(entity, scene);
-            } else {
-                createPlaneMesh(entity, scene);
-            }
-
-            ecsWorld.add(entity);
-            return entity;
+        id,
+        type: vehicleType,
+        transform: {
+            position: position.clone(),
+            rotation: rotation.clone(),
+            velocity: new Vector3(0, 0, 0),
+            angularVelocity: new Vector3(0, 0, 0)
         },
-
-        update: (dt: number) => {
-            for (const entity of vehicles) {
-                if (!entity.mesh) continue;
-
-                // Update mesh position and rotation
-                entity.mesh.position = entity.position!;
-                entity.mesh.rotationQuaternion = entity.rotation!;
-
-                // Update control surfaces for planes
-                if (entity.plane && entity.mesh.getChildMeshes) {
-                    const controlSurfaces = entity.mesh.getChildMeshes();
-                    const input = entity.input;
-
-                    if (input && controlSurfaces.length > 0) {
-                        // Update wing angles for roll
-                        const leftWing = controlSurfaces.find(m => m.name === 'leftWing');
-                        const rightWing = controlSurfaces.find(m => m.name === 'rightWing');
-                        const tail = controlSurfaces.find(m => m.name === 'tail');
-
-                        if (leftWing && rightWing) {
-                            const rollAmount = (input.rollLeft ? 1 : 0) - (input.rollRight ? 1 : 0);
-                            leftWing.rotation.z = rollAmount * 0.5;
-                            rightWing.rotation.z = -rollAmount * 0.5;
-                        }
-
-                        if (tail) {
-                            const pitchAmount = (input.pitchUp ? 1 : 0) - (input.pitchDown ? 1 : 0);
-                            const yawAmount = (input.yawLeft ? 1 : 0) - (input.yawRight ? 1 : 0);
-                            tail.rotation.x = pitchAmount * 0.5;
-                            tail.rotation.y = yawAmount * 0.5;
-                        }
-                    }
-                }
-
-                // Update particle effects for drones
-                if (entity.drone && entity.mesh.getChildMeshes) {
-                    const thrusters = entity.mesh.getChildMeshes().filter(m => m.name.startsWith('thruster'));
-                    const input = entity.input;
-
-                    if (input && thrusters.length > 0) {
-                        const thrust = (input.forward ? 1 : 0) + (input.up ? 1 : 0);
-                        thrusters.forEach(thruster => {
-                            const particleSystem = thruster.getChildMeshes().find(m => m.name.startsWith('particles'));
-                            if (particleSystem) {
-                                (particleSystem as any).emitRate = 250 + (thrust * 250);
-                            }
-                        });
-                    }
-                }
-            }
+        physics: {
+            body,
+            mass: vehicleType === 'drone' ? DroneSettings.mass : PlaneSettings.mass,
+            drag: vehicleType === 'drone' ? DroneSettings.drag : PlaneSettings.drag,
+            angularDrag: vehicleType === 'drone' ? DroneSettings.angularDrag : PlaneSettings.angularDrag,
+            maxSpeed: vehicleType === 'drone' ? DroneSettings.maxSpeed : PlaneSettings.maxSpeed,
+            maxAngularSpeed: vehicleType === 'drone' ? DroneSettings.maxAngularSpeed : PlaneSettings.maxAngularSpeed,
+            maxAngularAcceleration: vehicleType === 'drone' ? DroneSettings.maxAngularAcceleration : PlaneSettings.maxAngularAcceleration,
+            angularDamping: vehicleType === 'drone' ? DroneSettings.angularDamping : PlaneSettings.angularDamping,
+            forceMultiplier: vehicleType === 'drone' ? DroneSettings.forceMultiplier : PlaneSettings.forceMultiplier,
+            thrust: vehicleType === 'drone' ? DroneSettings.thrust : PlaneSettings.thrust,
+            lift: vehicleType === 'drone' ? DroneSettings.lift : PlaneSettings.lift,
+            torque: vehicleType === 'drone' ? DroneSettings.torque : PlaneSettings.torque,
+            minSpeed: vehicleType === 'drone' ? (DroneSettings.minSpeed ?? 0) : (PlaneSettings.minSpeed ?? 0),
+            bankAngle: vehicleType === 'drone' ? (DroneSettings.bankAngle ?? 0) : (PlaneSettings.bankAngle ?? 0),
+            wingArea: vehicleType === 'drone' ? (DroneSettings.wingArea ?? 0) : (PlaneSettings.wingArea ?? 0),
+            strafeForce: vehicleType === 'drone' ? (DroneSettings.strafeForce ?? 0) : (PlaneSettings.strafeForce ?? 0),
+            minHeight: vehicleType === 'drone' ? (DroneSettings.minHeight ?? 0) : (PlaneSettings.minHeight ?? 0)
         },
-
-        cleanup: (entity: GameEntity) => {
-            if (entity.mesh) {
-                entity.mesh.dispose();
-            }
-
-            // Clean up particle systems
-            const particleSystem = particleSystems.get(entity.id);
-            if (particleSystem) {
-                Object.values(particleSystem).forEach(system => {
-                    system.dispose();
-                });
-                particleSystems.delete(entity.id);
-            }
+        vehicle: {
+            vehicleType,
+            weapons: Object.values(DefaultWeapons),
+            activeWeaponIndex: 0
+        },
+        gameState: {
+            health: 100,
+            maxHealth: vehicleType === 'drone' ? 150 : 100,
+            team,
+            hasFlag: false,
+            carryingFlag: false,
+            carriedBy: "",
+            atBase: true
+        },
+        tick: {
+            tick: 0,
+            timestamp: Date.now(),
+            lastProcessedInputTimestamp: 0,
+            lastProcessedInputTick: 0
         }
     };
 }
 
 /**
+ * Creates a projectile entity in the ECS world
+ */
+export function createProjectileEntity(
+    id: string,
+    sourceId: string,
+    position: Vector3,
+    direction: Vector3,
+    speed: number,
+    damage: number,
+    range: number,
+    type: 'bullet' | 'missile'
+): GameEntity {
+    return {
+        id,
+        type: 'projectile',
+        transform: {
+            position: position.clone(),
+            rotation: new Quaternion(0, 0, 0, 1),
+            velocity: direction.scale(speed),
+            angularVelocity: new Vector3(0, 0, 0)
+        },
+        projectile: {
+            projectileType: type,
+            damage,
+            range,
+            distanceTraveled: 0,
+            sourceId,
+            timestamp: Date.now(),
+            tick: 0
+        },
+        tick: {
+            tick: 0,
+            timestamp: Date.now()
+        }
+    };
+}
+
+/**
+ * Creates a flag entity in the ECS world
+ */
+export function createFlagEntity(
+    id: string,
+    team: number,
+    position: Vector3
+): GameEntity {
+    // Create physics body for flag
+    const body = new CANNON.Body({
+        mass: 0, // Static body
+        material: new CANNON.Material('flagMaterial'),
+        collisionFilterGroup: CollisionGroups.Flags,
+        collisionFilterMask: collisionMasks.Flag,
+        position: new CANNON.Vec3(position.x, position.y, position.z),
+        quaternion: new CANNON.Quaternion(0, 0, 0, 1)
+    });
+
+    // Add collision shape
+    const shape = new CANNON.Box(new CANNON.Vec3(0.5, 0.5, 0.5));
+    body.addShape(shape);
+
+    return {
+        id,
+        type: 'flag',
+        transform: {
+            position: position.clone(),
+            rotation: new Quaternion(0, 0, 0, 1),
+            velocity: new Vector3(0, 0, 0),
+            angularVelocity: new Vector3(0, 0, 0)
+        },
+        physics: {
+            body,
+            mass: 0,
+            drag: 0,
+            angularDrag: 0,
+            maxSpeed: 0,
+            maxAngularSpeed: 0,
+            maxAngularAcceleration: 0,
+            angularDamping: 0,
+            forceMultiplier: 0,
+            thrust: 0,
+            lift: 0,
+            torque: 0,
+            minSpeed: 0,
+            bankAngle: 0,
+            wingArea: 0,
+            strafeForce: 0,
+            minHeight: 0
+        },
+        gameState: {
+            health: 100,
+            maxHealth: 100,
+            team,
+            hasFlag: false,
+            carryingFlag: false,
+            carriedBy: "",
+            atBase: true
+        },
+        tick: {
+            tick: 0,
+            timestamp: Date.now()
+        }
+    };
+}
+/**
  * Creates a drone mesh with propellers and particle effects
  */
-function createDroneMesh(entity: GameEntity, scene: Scene) {
+export function createDroneMesh(entity: GameEntity, scene: Scene) {
     // Create main body
     const mesh = MeshBuilder.CreateBox("droneBody", {
         width: 1,
@@ -238,13 +319,13 @@ function createDroneMesh(entity: GameEntity, scene: Scene) {
     mesh.checkCollisions = true;
     mesh.receiveShadows = true;
 
-    entity.mesh = mesh;
+    entity.render = { mesh };
 }
 
 /**
  * Creates a plane mesh with control surfaces
  */
-function createPlaneMesh(entity: GameEntity, scene: Scene) {
+export function createPlaneMesh(entity: GameEntity, scene: Scene) {
     // Create main fuselage
     const mesh = MeshBuilder.CreateBox('plane', { 
         width: 0.3, 
@@ -339,5 +420,5 @@ function createPlaneMesh(entity: GameEntity, scene: Scene) {
     mesh.isVisible = true;
     mesh.checkCollisions = true;
 
-    entity.mesh = mesh;
+    entity.render = { mesh };
 } 

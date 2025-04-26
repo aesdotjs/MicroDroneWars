@@ -10,7 +10,7 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "outDir": "./dist",
-    "rootDir": "./src",
+    "rootDir": "../", 
     "composite": true,
     "declaration": true,
     "baseUrl": ".",
@@ -19,6 +19,6 @@
     },
     "useDefineForClassFields": false
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "../server/src/schemas.ts", "../server/src/ecs/systems/InputSystems.ts", "../server/src/ecs/systems/InputProcessorSystem.ts"],
   "exclude": ["node_modules", "**/*.spec.ts", "dist"]
 } 

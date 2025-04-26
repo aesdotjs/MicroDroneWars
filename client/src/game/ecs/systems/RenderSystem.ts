@@ -6,24 +6,20 @@ import { GameEntity } from '@shared/ecs/types';
  * Creates a system that handles rendering of entities in the scene
  */
 export function createRenderSystem(scene: Scene) {
-    const renderables = ecsWorld.with("mesh", "position");
+    // Find entities with render and transform components
+    const renderables = ecsWorld.with("render", "transform");
 
     return {
         update: (dt: number) => {
             for (const entity of renderables) {
-                if (!entity.mesh || !entity.position) continue;
+                if (!entity.render?.mesh || !entity.transform) continue;
 
                 // Update position
-                entity.mesh.position.copyFrom(entity.position);
+                entity.render.mesh.position.copyFrom(entity.transform.position);
 
                 // Update rotation if available
-                if (entity.rotation) {
-                    entity.mesh.rotationQuaternion = entity.rotation;
-                }
-
-                // Update visibility based on entity state
-                if (entity.health !== undefined) {
-                    entity.mesh.isVisible = entity.health > 0;
+                if (entity.transform.rotation) {
+                    entity.render.mesh.rotationQuaternion = entity.transform.rotation;
                 }
             }
         }

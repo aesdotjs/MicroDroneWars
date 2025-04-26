@@ -1,5 +1,5 @@
 import { world as ecsWorld } from '@shared/ecs/world';
-import { GameEntity, PhysicsInput } from '@shared/ecs/types';
+import { GameEntity, InputComponent } from '@shared/ecs/types';
 
 /**
  * Creates a system that handles client-side input processing
@@ -110,12 +110,9 @@ export function createClientInputSystem(canvas: HTMLCanvasElement) {
     });
 
     return {
-        update: (dt: number) => {
-            const localPlayer = ecsWorld.with("drone", "plane", "input").first;
-            if (!localPlayer) return;
-
+        getInput: (): InputComponent => {
             // Create input state
-            const input: PhysicsInput = {
+            const input: InputComponent = {
                 forward: keys.get(keyBindings.forward) || false,
                 backward: keys.get(keyBindings.backward) || false,
                 left: keys.get(keyBindings.left) || false,
@@ -140,12 +137,10 @@ export function createClientInputSystem(canvas: HTMLCanvasElement) {
                 tick: 0 // Will be set by physics system
             };
 
-            // Update entity input
-            localPlayer.input = input;
-
             // Reset mouse delta
             mouseDelta.x = 0;
             mouseDelta.y = 0;
+            return input;
         },
 
         isIdle: () => {

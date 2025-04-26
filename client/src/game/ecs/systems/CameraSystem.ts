@@ -6,7 +6,10 @@ import { GameEntity } from '@shared/ecs/types';
  * Creates a system that handles camera control and following
  */
 export function createCameraSystem(scene: Scene, camera: UniversalCamera) {
-    const localPlayer = ecsWorld.with("drone", "plane", "position", "rotation").first;
+    console.log('Creating camera system...');
+    
+    // Find local player using owner component
+    let attachedEntity: GameEntity | null = null;
     const FOLLOW_DISTANCE = 10;
     const FOLLOW_HEIGHT = 5;
     const FOLLOW_OFFSET = new Vector3(0, FOLLOW_HEIGHT, FOLLOW_DISTANCE);
@@ -14,12 +17,22 @@ export function createCameraSystem(scene: Scene, camera: UniversalCamera) {
     const ROTATION_SPEED = 0.1;
 
     return {
+        attachCamera: (entity: GameEntity) => {
+            attachedEntity = entity;
+            console.log('Camera attached to entity:', attachedEntity.id);
+        },
+        detachCamera: () => {
+            attachedEntity = null;
+            console.log('Camera detached');
+        },
         update: (dt: number) => {
-            if (!localPlayer || !localPlayer.position || !localPlayer.rotation) return;
+            if (!attachedEntity || !attachedEntity.transform) {
+                return;
+            }
 
             // Calculate target position
-            const targetPosition = localPlayer.position.clone();
-            const targetRotation = localPlayer.rotation.clone();
+            const targetPosition = attachedEntity.transform.position.clone();
+            const targetRotation = attachedEntity.transform.rotation.clone();
 
             // Transform follow offset by player rotation
             const rotatedOffset = FOLLOW_OFFSET.clone();

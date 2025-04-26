@@ -1,7 +1,7 @@
 import { world as ecsWorld } from '../world';
 import { GameEntity } from '../types';
 import { Vector3, Quaternion } from 'babylonjs';
-import { createFlagEntity } from './ServerSystems';
+import { createFlagEntity } from '../utils/EntityHelpers';
 
 export enum GameMode {
     CTF = 'ctf',
@@ -91,12 +91,23 @@ function initializeRace(config: GameModeConfig) {
 
     // Create checkpoints
     config.raceCheckpoints.forEach((position, index) => {
-        const checkpoint = {
+        const checkpoint: GameEntity = {
             id: `checkpoint_${index}`,
-            checkpoint: true,
-            checkpointIndex: index,
-            position: position.clone(),
-            rotation: Quaternion.Identity()
+            type: 'checkpoint',
+            transform: {
+                position: position.clone(),
+                rotation: Quaternion.Identity(),
+                velocity: Vector3.Zero(),
+                angularVelocity: Vector3.Zero()
+            },
+            gameState: {
+                health: 100,
+                maxHealth: 100,
+                team: -1,
+                hasFlag: false,
+                carryingFlag: false,
+                atBase: true
+            }
         };
         ecsWorld.add(checkpoint);
     });

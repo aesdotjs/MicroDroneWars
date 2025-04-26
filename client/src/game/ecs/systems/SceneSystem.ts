@@ -6,15 +6,34 @@ import { GameEntity } from '@shared/ecs/types';
  * Creates a system that handles scene initialization and setup
  */
 export function createSceneSystem(engine: Engine) {
+    console.log('Creating scene system...');
     // Create scene
     const scene = new Scene(engine);
     scene.clearColor = new Color4(0.1, 0.1, 0.1, 1);
+    console.log('Scene created');
 
     // Initialize scene components
+    console.log('Setting up lights...');
     const shadowGenerator = setupLights(scene);
+    console.log('Lights setup complete');
+
+    console.log('Setting up camera...');
     const camera = setupCamera(scene);
+    console.log('Camera setup complete');
+
+    console.log('Setting up glow layer...');
     const glowLayer = setupGlowLayer(scene);
+    console.log('Glow layer setup complete');
+
+    console.log('Setting up environment...');
     setupEnvironment(scene, shadowGenerator);
+    console.log('Environment setup complete');
+
+    // Start the render loop
+    console.log('Starting scene render loop...');
+    engine.runRenderLoop(() => {
+        scene.render();
+    });
 
     return {
         getScene: () => scene,
@@ -22,7 +41,9 @@ export function createSceneSystem(engine: Engine) {
         getShadowGenerator: () => shadowGenerator,
         getGlowLayer: () => glowLayer,
         dispose: () => {
+            console.log('Disposing scene...');
             scene.dispose();
+            console.log('Scene disposed');
         }
     };
 }
@@ -73,7 +94,7 @@ function setupCamera(scene: Scene): UniversalCamera {
     
     // Remove default inputs and disable camera controls
     camera.inputs.clear();
-    camera.detachControl();
+    camera.attachControl();
     
     return camera;
 }

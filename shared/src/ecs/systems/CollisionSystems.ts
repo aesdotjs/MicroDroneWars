@@ -52,10 +52,10 @@ export function createCollisionSystem(cannonWorld: World) {
         update: (deltaTime: number) => {
             // Collision handling is done through the event listener
             // This system just ensures entities are properly registered
-            const damageableEntities = ecsWorld.with("health", "body");
+            const damageableEntities = ecsWorld.with("gameState", "physics");
             
             for (const entity of damageableEntities) {
-                if (!entity.body) continue;
+                if (!entity.physics!.body) continue;
                 // Entity registration is handled by the physics system
             }
         }
@@ -101,16 +101,16 @@ export function determineCollisionSeverity(impactVelocity: number): CollisionSev
  * Handles a collision event and routes it to the appropriate handler
  */
 function handleCollisionEvent(event: any) {
-    const entityA = ecsWorld.entities.find(e => e.body === event.bodyA);
-    const entityB = ecsWorld.entities.find(e => e.body === event.bodyB);
+    const entityA = ecsWorld.entities.find(e => e.physics?.body === event.bodyA);
+    const entityB = ecsWorld.entities.find(e => e.physics?.body === event.bodyB);
 
     if (!entityA || !entityB) return;
 
     // Handle vehicle collisions
-    if (entityA.drone || entityA.plane) {
+    if (entityA.vehicle) {
         handleVehicleCollision(entityA, entityB, event);
     }
-    if (entityB.drone || entityB.plane) {
+    if (entityB.vehicle) {
         handleVehicleCollision(entityB, entityA, event);
     }
 
@@ -123,10 +123,10 @@ function handleCollisionEvent(event: any) {
     }
 
     // Handle flag collisions
-    if (entityA.flag) {
+    if (entityA.gameState!.hasFlag) {
         handleFlagCollision(entityA, entityB, event);
     }
-    if (entityB.flag) {
+    if (entityB.gameState!.hasFlag) {
         handleFlagCollision(entityB, entityA, event);
     }
 }
@@ -135,7 +135,7 @@ function handleCollisionEvent(event: any) {
  * Handles collision events for vehicles
  */
 export function handleVehicleCollision(vehicle: GameEntity, other: GameEntity, event: any) {
-    if (!vehicle.health) return;
+    if (!vehicle.gameState!.health) return;
 
     // Calculate damage based on impact velocity and collision severity
     let damage = 0;
@@ -152,16 +152,16 @@ export function handleVehicleCollision(vehicle: GameEntity, other: GameEntity, e
     }
 
     // Apply additional damage for environment collisions
-    if (other.environment) {
+    if (other.gameState!.team === -1) { // Environment team
         damage *= 1.5;
     }
 
     // Apply damage
-    vehicle.health = Math.max(0, vehicle.health - damage);
+    vehicle.gameState!.health = Math.max(0, vehicle.gameState!.health - damage);
 
     // Check for destruction
-    if (vehicle.health <= 0) {
-        vehicle.health = 0;
+    if (vehicle.gameState!.health <= 0) {
+        vehicle.gameState!.health = 0;
         // TODO: Trigger destruction effects
     }
 }
@@ -171,13 +171,13 @@ export function handleVehicleCollision(vehicle: GameEntity, other: GameEntity, e
  */
 export function handleProjectileCollision(projectile: GameEntity, other: GameEntity, event: any) {
     // Apply damage to hit entity
-    if (other.health !== undefined) {
-        const damage = projectile.damage || 20; // Use projectile damage or default
-        other.health = Math.max(0, other.health - damage);
+    if (other.gameState!.health !== undefined) {
+        const damage = projectile.projectile!.damage || 20; // Use projectile damage or default
+        other.gameState!.health = Math.max(0, other.gameState!.health - damage);
     }
 
     // Mark projectile for removal
-    projectile.health = 0;
+    projectile.gameState!.health = 0;
 }
 
 /**
@@ -185,8 +185,8 @@ export function handleProjectileCollision(projectile: GameEntity, other: GameEnt
  */
 export function handleFlagCollision(flag: GameEntity, other: GameEntity, event: any) {
     // Only drones can pick up flags
-    if (other.drone && !flag.carriedBy) {
-        flag.carriedBy = other.id;
-        other.hasFlag = true;
+    if (other.vehicle && !flag.gameState!.carriedBy) {
+        flag.gameState!.carriedBy = other.id;
+        other.gameState!.hasFlag = true;
     }
 } 

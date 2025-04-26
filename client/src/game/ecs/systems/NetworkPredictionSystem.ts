@@ -1,15 +1,22 @@
 import { world as ecsWorld } from '@shared/ecs/world';
 import { GameEntity } from '@shared/ecs/types';
-import { PhysicsState, PhysicsInput, StateBuffer, InterpolationConfig } from '@shared/ecs/types';
+import { PhysicsState, InputComponent, TransformBuffer, InterpolationConfig } from '@shared/ecs/types';
 import { Vector3, Quaternion } from 'babylonjs';
 import { Room } from 'colyseus.js';
 import { State } from '../../schemas/State';
 import { EntitySchema } from '../../schemas/EntitySchema';
-
+import { createDroneSystem } from '@shared/ecs/systems/VehicleSystems';
+import { createPlaneSystem } from '@shared/ecs/systems/VehicleSystems';
+import { createWeaponSystem } from '@shared/ecs/systems/WeaponSystems';
 /**
  * Creates a system that handles network prediction, reconciliation, and interpolation
  */
-export function createNetworkPredictionSystem(room: Room<State>) {
+export function createNetworkPredictionSystem(
+    room: Room<State>,
+    droneSystem: ReturnType<typeof createDroneSystem>,
+    planeSystem: ReturnType<typeof createPlaneSystem>,
+    weaponSystem: ReturnType<typeof createWeaponSystem>
+) {
     // Configuration
     const interpolationConfig: InterpolationConfig = {
         delay: 150,
@@ -18,8 +25,8 @@ export function createNetworkPredictionSystem(room: Room<State>) {
     };
 
     // State buffers for each entity
-    const stateBuffers = new Map<string, StateBuffer[]>();
-    const pendingInputs = new Map<string, PhysicsInput[]>();
+    const TransformBuffers = new Map<string, TransformBuffer[]>();
+    const pendingInputs = new Map<string, InputComponent[]>();
     const lastProcessedInputTicks = new Map<string, number>();
     const lastProcessedInputTimestamps = new Map<string, number>();
 
@@ -68,12 +75,12 @@ export function createNetworkPredictionSystem(room: Room<State>) {
         const now = Date.now() - networkLatency;
         const targetTime = now - currentInterpolationDelay;
         
-        stateBuffers.forEach((buffer, id) => {
+        TransformBuffers.forEach((buffer, id) => {
             if (buffer.length < 2) return;
             
             // Find states bracketing target time
             let i = 0;
-            while (i < buffer.length - 1 && buffer[i + 1].timestamp <= targetTime) {
+            while (i < buffer.length - 1 && buffer[i + 1].tick.timestamp <= targetTime) {
                 i++;
             }
 
@@ -81,47 +88,43 @@ export function createNetworkPredictionSystem(room: Room<State>) {
             
             const a = buffer[i];
             const b = buffer[i + 1];
-            const t = (targetTime - a.timestamp) / (b.timestamp - a.timestamp);
+            const t = (targetTime - a.tick.timestamp) / (b.tick.timestamp - a.tick.timestamp);
             
             const entity = ecsWorld.entities.find(e => e.id === id);
-            if (!entity) return;
+            if (!entity || !entity.transform) return;
 
             // Interpolate position
-            entity.position!.x = a.state.position.x + (b.state.position.x - a.state.position.x) * t;
-            entity.position!.y = a.state.position.y + (b.state.position.y - a.state.position.y) * t;
-            entity.position!.z = a.state.position.z + (b.state.position.z - a.state.position.z) * t;
+            entity.transform.position.x = a.transform.position.x + (b.transform.position.x - a.transform.position.x) * t;
+            entity.transform.position.y = a.transform.position.y + (b.transform.position.y - a.transform.position.y) * t;
+            entity.transform.position.z = a.transform.position.z + (b.transform.position.z - a.transform.position.z) * t;
 
             // Interpolate rotation
             const qa = new Quaternion(
-                a.state.quaternion.x,
-                a.state.quaternion.y,
-                a.state.quaternion.z,
-                a.state.quaternion.w
+                a.transform.rotation.x,
+                a.transform.rotation.y,
+                a.transform.rotation.z,
+                a.transform.rotation.w
             );
             const qb = new Quaternion(
-                b.state.quaternion.x,
-                b.state.quaternion.y,
-                b.state.quaternion.z,
-                b.state.quaternion.w
+                b.transform.rotation.x,
+                b.transform.rotation.y,
+                b.transform.rotation.z,
+                b.transform.rotation.w
             );
             const q = Quaternion.Slerp(qa, qb, t);
-            entity.rotation!.x = q.x;
-            entity.rotation!.y = q.y;
-            entity.rotation!.z = q.z;
-            entity.rotation!.w = q.w;
+            entity.transform.rotation.x = q.x;
+            entity.transform.rotation.y = q.y;
+            entity.transform.rotation.z = q.z;
+            entity.transform.rotation.w = q.w;
 
             // Interpolate velocities
-            if (entity.velocity) {
-                entity.velocity.x = a.state.linearVelocity.x + (b.state.linearVelocity.x - a.state.linearVelocity.x) * t;
-                entity.velocity.y = a.state.linearVelocity.y + (b.state.linearVelocity.y - a.state.linearVelocity.y) * t;
-                entity.velocity.z = a.state.linearVelocity.z + (b.state.linearVelocity.z - a.state.linearVelocity.z) * t;
-            }
+            entity.transform.velocity.x = a.transform.velocity.x + (b.transform.velocity.x - a.transform.velocity.x) * t;
+            entity.transform.velocity.y = a.transform.velocity.y + (b.transform.velocity.y - a.transform.velocity.y) * t;
+            entity.transform.velocity.z = a.transform.velocity.z + (b.transform.velocity.z - a.transform.velocity.z) * t;
 
-            if (entity.angularVelocity) {
-                entity.angularVelocity.x = a.state.angularVelocity.x + (b.state.angularVelocity.x - a.state.angularVelocity.x) * t;
-                entity.angularVelocity.y = a.state.angularVelocity.y + (b.state.angularVelocity.y - a.state.angularVelocity.y) * t;
-                entity.angularVelocity.z = a.state.angularVelocity.z + (b.state.angularVelocity.z - a.state.angularVelocity.z) * t;
-            }
+            entity.transform.angularVelocity.x = a.transform.angularVelocity.x + (b.transform.angularVelocity.x - a.transform.angularVelocity.x) * t;
+            entity.transform.angularVelocity.y = a.transform.angularVelocity.y + (b.transform.angularVelocity.y - a.transform.angularVelocity.y) * t;
+            entity.transform.angularVelocity.z = a.transform.angularVelocity.z + (b.transform.angularVelocity.z - a.transform.angularVelocity.z) * t;
         });
     }
 
@@ -139,13 +142,13 @@ export function createNetworkPredictionSystem(room: Room<State>) {
          * Adds a new physics state to the buffer for interpolation
          * or reconciles with the server state for local player
          */
-        addEntityState: (id: string, state: PhysicsState) => {
+        addEntityState: (id: string, state: TransformBuffer) => {
             const entity = ecsWorld.entities.find(e => e.id === id);
-            if (!entity) return;
+            if (!entity || !entity.transform) return;
 
             // Initialize buffers if needed
-            if (!stateBuffers.has(id)) {
-                stateBuffers.set(id, []);
+            if (!TransformBuffers.has(id)) {
+                TransformBuffers.set(id, []);
             }
             if (!pendingInputs.has(id)) {
                 pendingInputs.set(id, []);
@@ -157,23 +160,23 @@ export function createNetworkPredictionSystem(room: Room<State>) {
                 lastProcessedInputTimestamps.set(id, 0);
             }
 
-            const buffers = stateBuffers.get(id)!;
-            const isLocalPlayer = entity.drone || entity.plane;
+            const buffers = TransformBuffers.get(id)!;
+            const isLocalPlayer = entity.owner?.isLocal;
 
             if (isLocalPlayer) {
                 // Get current client state
                 const clientState = {
-                    position: entity.position!.clone(),
-                    quaternion: entity.rotation!.clone()
+                    position: entity.transform.position.clone(),
+                    quaternion: entity.transform.rotation.clone()
                 };
 
                 const serverState = {
-                    position: new Vector3(state.position.x, state.position.y, state.position.z),
+                    position: new Vector3(state.transform.position.x, state.transform.position.y, state.transform.position.z),
                     quaternion: new Quaternion(
-                        state.quaternion.x,
-                        state.quaternion.y,
-                        state.quaternion.z,
-                        state.quaternion.w
+                        state.transform.rotation.x,
+                        state.transform.rotation.y,
+                        state.transform.rotation.z,
+                        state.transform.rotation.w
                     )
                 };
 
@@ -187,9 +190,9 @@ export function createNetworkPredictionSystem(room: Room<State>) {
                     rotationError > RECONCILIATION_ROTATION_THRESHOLD) {
                     
                     // Smoothly correct position
-                    entity.position!.x += (serverState.position.x - clientState.position.x) * RECONCILIATION_POSITION_SMOOTHING;
-                    entity.position!.y += (serverState.position.y - clientState.position.y) * RECONCILIATION_POSITION_SMOOTHING;
-                    entity.position!.z += (serverState.position.z - clientState.position.z) * RECONCILIATION_POSITION_SMOOTHING;
+                    entity.transform.position.x += (serverState.position.x - clientState.position.x) * RECONCILIATION_POSITION_SMOOTHING;
+                    entity.transform.position.y += (serverState.position.y - clientState.position.y) * RECONCILIATION_POSITION_SMOOTHING;
+                    entity.transform.position.z += (serverState.position.z - clientState.position.z) * RECONCILIATION_POSITION_SMOOTHING;
 
                     // Smoothly correct rotation
                     const correction = Quaternion.Slerp(
@@ -197,27 +200,25 @@ export function createNetworkPredictionSystem(room: Room<State>) {
                         serverState.quaternion,
                         RECONCILIATION_ROTATION_SMOOTHING
                     );
-                    entity.rotation!.x = correction.x;
-                    entity.rotation!.y = correction.y;
-                    entity.rotation!.z = correction.z;
-                    entity.rotation!.w = correction.w;
+                    entity.transform.rotation.x = correction.x;
+                    entity.transform.rotation.y = correction.y;
+                    entity.transform.rotation.z = correction.z;
+                    entity.transform.rotation.w = correction.w;
                 }
 
                 // Replay unprocessed inputs
-                const lastProcessedInputTick = state.lastProcessedInputTick ?? state.tick;
-                const unprocessedInputs = pendingInputs.get(id)!.filter((input: PhysicsInput) => input.tick > lastProcessedInputTick);
+                const lastProcessedInputTick = state.tick.lastProcessedInputTick ?? state.tick.tick;
+                const unprocessedInputs = pendingInputs.get(id)!.filter((input: InputComponent) => input.tick > lastProcessedInputTick);
                 for (const input of unprocessedInputs) {
                     // Apply input to entity
-                    applyInputToEntity(entity, input);
+                    droneSystem.update(1/60, entity, input);
+                    planeSystem.update(1/60, entity, input);
+                    weaponSystem.update(1/60, entity, input);
                 }
                 pendingInputs.set(id, unprocessedInputs);
             } else {
                 // Buffer remote states for interpolation
-                buffers.push({
-                    state: state,
-                    timestamp: state.timestamp,
-                    tick: state.tick
-                });
+                buffers.push(state);
                 
                 // Keep buffer size reasonable
                 if (buffers.length > interpolationConfig.maxBufferSize) {
@@ -229,7 +230,7 @@ export function createNetworkPredictionSystem(room: Room<State>) {
         /**
          * Adds a new input to the pending inputs buffer
          */
-        addInput: (id: string, input: PhysicsInput) => {
+        addInput: (id: string, input: InputComponent) => {
             if (!pendingInputs.has(id)) {
                 pendingInputs.set(id, []);
             }
@@ -258,32 +259,10 @@ export function createNetworkPredictionSystem(room: Room<State>) {
          * Cleans up resources
          */
         cleanup: () => {
-            stateBuffers.clear();
+            TransformBuffers.clear();
             pendingInputs.clear();
             lastProcessedInputTicks.clear();
             lastProcessedInputTimestamps.clear();
         }
     };
 }
-
-/**
- * Applies a physics input to an entity
- */
-function applyInputToEntity(entity: GameEntity, input: PhysicsInput) {
-    // Apply input to entity's physics state
-    if (entity.velocity) {
-        // Calculate velocity based on input controls
-        const speed = 10; // Base speed
-        entity.velocity.x = (input.right ? speed : 0) - (input.left ? speed : 0);
-        entity.velocity.y = (input.up ? speed : 0) - (input.down ? speed : 0);
-        entity.velocity.z = (input.forward ? speed : 0) - (input.backward ? speed : 0);
-    }
-
-    if (entity.angularVelocity) {
-        // Calculate angular velocity based on input controls
-        const rotationSpeed = 2; // Base rotation speed
-        entity.angularVelocity.x = (input.pitchDown ? rotationSpeed : 0) - (input.pitchUp ? rotationSpeed : 0);
-        entity.angularVelocity.y = (input.yawRight ? rotationSpeed : 0) - (input.yawLeft ? rotationSpeed : 0);
-        entity.angularVelocity.z = (input.rollRight ? rotationSpeed : 0) - (input.rollLeft ? rotationSpeed : 0);
-    }
-} 

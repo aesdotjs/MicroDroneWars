@@ -6,9 +6,8 @@ import { createCameraSystem } from './CameraSystem';
 import { createClientInputSystem } from './ClientInputSystem';
 import { createEffectSystem } from './EffectSystem';
 import { createNetworkSystem } from './NetworkSystem';
-import { createNetworkPredictionSystem } from './NetworkPredictionSystem';
 import { createRenderSystem } from './RenderSystem';
-import { createVehicleSystem } from './VehicleSystem';
+import { createPlaneSystem, createDroneSystem } from '@shared/ecs/systems/VehicleSystems';
 import { createGameModeSystem, GameMode, GameModeConfig } from '@shared/ecs/systems/GameModeSystem';
 import { createHealthSystem } from '@shared/ecs/systems/HealthSystems';
 import { createCollisionSystem } from '@shared/ecs/systems/CollisionSystems';
@@ -23,16 +22,23 @@ export function createGameSystems(
     room: Room<State>,
     canvas: HTMLCanvasElement
 ) {
+    console.log('Creating game systems...');
+
     // Initialize scene system first
+    console.log('Initializing scene system...');
     const sceneSystem = createSceneSystem(engine);
     const scene = sceneSystem.getScene();
     const camera = sceneSystem.getCamera();
     const shadowGenerator = sceneSystem.getShadowGenerator();
+    console.log('Scene system initialized:', { scene, camera, shadowGenerator });
 
     // Initialize physics world system
+    console.log('Initializing physics world system...');
     const physicsWorldSystem = createPhysicsWorldSystem();
+    console.log('Physics world system initialized');
 
     // Initialize game mode system
+    console.log('Initializing game mode system...');
     const gameModeConfig: GameModeConfig = {
         mode: GameMode.CTF,
         teamCount: 2,
@@ -49,20 +55,23 @@ export function createGameSystems(
         ]
     };
     const gameModeSystem = createGameModeSystem(gameModeConfig);
+    console.log('Game mode system initialized');
 
     // Initialize other systems
+    console.log('Initializing remaining systems...');
     const cameraSystem = createCameraSystem(scene, camera);
     const inputSystem = createClientInputSystem(canvas);
     const effectSystem = createEffectSystem(scene);
-    const networkSystem = createNetworkSystem(room);
-    const networkPredictionSystem = createNetworkPredictionSystem(room);
+    const droneSystem = createDroneSystem(physicsWorldSystem.getWorld());
+    const planeSystem = createPlaneSystem(physicsWorldSystem.getWorld());
+    const weaponSystem = createWeaponSystem(physicsWorldSystem.getWorld());
+    const networkSystem = createNetworkSystem(room, scene, cameraSystem, physicsWorldSystem, droneSystem, planeSystem, weaponSystem, inputSystem);
     const renderSystem = createRenderSystem(scene);
-    const vehicleSystem = createVehicleSystem(scene);
     const healthSystem = createHealthSystem();
     const collisionSystem = createCollisionSystem(physicsWorldSystem.getWorld());
-    const weaponSystem = createWeaponSystem(physicsWorldSystem.getWorld());
     const environmentSystem = createEnvironmentSystem(physicsWorldSystem.getWorld());
     const flagSystem = createFlagSystem();
+    console.log('All systems initialized');
 
     return {
         sceneSystem,
@@ -72,9 +81,9 @@ export function createGameSystems(
         inputSystem,
         effectSystem,
         networkSystem,
-        networkPredictionSystem,
         renderSystem,
-        vehicleSystem,
+        droneSystem,
+        planeSystem,
         healthSystem,
         collisionSystem,
         weaponSystem,
@@ -82,35 +91,39 @@ export function createGameSystems(
         flagSystem,
 
         update: (deltaTime: number) => {
-            // Update systems in the correct order
-            inputSystem.update(deltaTime);
-            physicsWorldSystem.update(deltaTime);
-            collisionSystem.update(deltaTime);
-            weaponSystem.update(deltaTime);
-            healthSystem.update(deltaTime);
-            flagSystem.update(deltaTime);
-            vehicleSystem.update(deltaTime);
-            environmentSystem.update(deltaTime);
-            gameModeSystem.update(deltaTime);
-            networkPredictionSystem.update(deltaTime);
-            cameraSystem.update(deltaTime);
-            effectSystem.update(deltaTime);
-            renderSystem.update(deltaTime);
+            try {
+                // Update systems in the correct order
+                physicsWorldSystem.update(deltaTime);
+                collisionSystem.update(deltaTime);
+                healthSystem.update(deltaTime);
+                flagSystem.update(deltaTime);
+                environmentSystem.update(deltaTime);
+                gameModeSystem.update(deltaTime);
+                cameraSystem.update(deltaTime);
+                effectSystem.update(deltaTime);
+                renderSystem.update(deltaTime);
+            } catch (error) {
+                console.error('Error in game systems update:', error);
+            }
         },
 
         cleanup: () => {
-            sceneSystem.dispose();
-            physicsWorldSystem.dispose();
-            inputSystem.cleanup();
-            effectSystem.cleanup();
-            
-            // Clean up all vehicles
-            const vehicles = ecsWorld.with("drone", "plane");
-            for (const vehicle of vehicles) {
-                vehicleSystem.cleanup(vehicle);
+            console.log('Cleaning up game systems...');
+            try {
+                sceneSystem.dispose();
+                physicsWorldSystem.dispose();
+                inputSystem.cleanup();
+                effectSystem.cleanup();
+                networkSystem.cleanup();    
+                // Clean up all vehicles
+                const vehicles = ecsWorld.with("vehicle", "render").where(({vehicle}) => 
+                    vehicle.vehicleType === 'drone' || vehicle.vehicleType === 'plane'
+                );
+                console.log('Cleaning up vehicles:', vehicles.size);
+                console.log('Game systems cleanup completed');
+            } catch (error) {
+                console.error('Error during game systems cleanup:', error);
             }
-            
-            networkPredictionSystem.cleanup();
         }
     };
 } 

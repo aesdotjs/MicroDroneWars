@@ -3,6 +3,37 @@ import type { Body as CannonBody } from 'cannon-es';
 import { CollisionGroups } from './CollisionGroups';
 
 /**
+ * Owner component for tracking entity ownership
+ */
+export interface OwnerComponent {
+    /** The ID of the player that owns this entity */
+    id: string;
+    /** Quickly identifies the local player entity */
+    isLocal: boolean;
+}
+
+/**
+ * Game state component for tracking entity state
+ */
+export interface GameStateComponent {
+    /** Current health of the entity */
+    health: number;
+    /** Maximum health of the entity */
+    maxHealth: number;
+    /** Team number (0 or 1) for team-based entities */
+    team: number;
+    /** Whether the entity has a flag */
+    hasFlag: boolean;
+    /** Whether the entity is carrying a flag */
+    carryingFlag: boolean;
+    /** ID of the entity carrying this entity */
+    carriedBy?: string;
+    /** Whether the entity is at its base */
+    atBase: boolean;
+}
+
+
+/**
  * Base interface for all game entities in the ECS system.
  * Components are optional properties that entities may have.
  */
@@ -13,113 +44,39 @@ export interface GameEntity {
     /** Type of entity (e.g. "drone", "plane", "projectile", "flag") */
     type?: string;
 
-    // Transform components
-    position?: Vector3;
-    rotation?: Quaternion;
-    velocity?: Vector3;
-    angularVelocity?: Vector3;
+    /** Transform component for position, rotation and velocity */
+    transform?: TransformComponent;
 
-    // Physics components
-    body?: CannonBody;
-    collisionGroup?: number;
-    collisionMask?: number;
-    mass?: number;
-    drag?: number;
-    angularDrag?: number;
-    maxSpeed?: number;
-    maxAngularSpeed?: number;
-    maxAngularAcceleration?: number;
-    angularDamping?: number;
-    forceMultiplier?: number;
-    thrust?: number;
-    lift?: number;
-    torque?: number;
-    minSpeed?: number;
-    bankAngle?: number;
-    wingArea?: number;
-    strafeForce?: number;
-    minHeight?: number;
+    /** Physics component for physical properties and behavior */
+    physics?: PhysicsComponent;
 
-    // Game state components
-    health?: number;
-    maxHealth?: number;
-    team?: number;
-    hasFlag?: boolean;
-    carryingFlag?: boolean;
-    carriedBy?: string;
-    atBase?: boolean;
+    /** Vehicle component for vehicle-specific properties */
+    vehicle?: VehicleComponent;
 
-    // Vehicle type tags
-    drone?: boolean;
-    plane?: boolean;
-    projectile?: boolean;
-    flag?: boolean;
-    environment?: boolean;
-    checkpoint?: boolean;
-    checkpointIndex?: number;
+    /** Projectile component for projectile-specific properties */
+    projectile?: ProjectileComponent;
+
+    /** Input component for control inputs */
+    // input?: InputComponent;
+
+    /** Render component for visual representation */
+    render?: RenderComponent;
+
+    /** Tick and timestamp component for synchronization */
+    tick?: TickComponent;
+
+    /** Owner component for tracking entity ownership */
+    owner?: OwnerComponent;
+
+    /** Game state component for tracking entity state */
+    gameState?: GameStateComponent;
 
     // Vehicle-specific data
     vehicleType?: string;
 
     // Weapon components
-    weapons?: {
-        id: string;
-        name: string;
-        projectileType: 'bullet' | 'missile';
-        damage: number;
-        fireRate: number;
-        projectileSpeed: number;
-        cooldown: number;
-        range: number;
-        isOnCooldown: boolean;
-        lastFireTime: number;
-    }[];
+    weapons?: WeaponComponent[];
     activeWeaponIndex?: number;
-
-    // Projectile components
-    projectileType?: string;
-    damage?: number;
-    range?: number;
-    distanceTraveled?: number;
-    sourceId?: string;
-    speed?: number;
-
-    // Input components (server-side)
-    input?: {
-        forward: boolean;
-        backward: boolean;
-        left: boolean;
-        right: boolean;
-        up: boolean;
-        down: boolean;
-        pitchUp: boolean;
-        pitchDown: boolean;
-        yawLeft: boolean;
-        yawRight: boolean;
-        rollLeft: boolean;
-        rollRight: boolean;
-        fire: boolean;
-        zoom: boolean;
-        nextWeapon: boolean;
-        previousWeapon: boolean;
-        weapon1: boolean;
-        weapon2: boolean;
-        weapon3: boolean;
-        mouseDelta?: { x: number; y: number };
-        tick: number;
-        timestamp: number;
-    };
-
-    // Rendering components (client-side)
-    mesh?: Mesh;
-    targetPosition?: Vector3;
-    targetRotation?: Quaternion;
-
-    // Timestamps and ticks
-    tick?: number;
-    timestamp?: number;
-    lastProcessedInputTimestamp?: number;
-    lastProcessedInputTick?: number;
 }
 
 /**
@@ -152,29 +109,20 @@ export type PhysicsComponent = {
     minHeight: number;
 };
 
-export type VehicleComponent = {
-    health: number;
-    maxHealth: number;
-    team: number;
-    hasFlag: boolean;
-    carryingFlag: boolean;
-    carriedBy?: string;
-    weapons: {
-        id: string;
-        name: string;
-        projectileType: 'bullet' | 'missile';
-        damage: number;
-        fireRate: number;
-        projectileSpeed: number;
-        cooldown: number;
-        range: number;
-        isOnCooldown: boolean;
-        lastFireTime: number;
-    }[];
+/**
+ * Vehicle component for vehicle-specific properties
+ */
+export interface VehicleComponent {
+    /** Type of vehicle (drone or plane) */
+    vehicleType: 'drone' | 'plane';
+    /** Array of weapons equipped on the vehicle */
+    weapons: WeaponComponent[];
+    /** Index of the currently active weapon */
     activeWeaponIndex: number;
-};
+}
 
 export type ProjectileComponent = {
+    projectileType: 'bullet' | 'missile';
     damage: number;
     range: number;
     distanceTraveled: number;
@@ -183,36 +131,19 @@ export type ProjectileComponent = {
     tick: number;
 };
 
-export type InputComponent = {
-    forward: boolean;
-    backward: boolean;
-    left: boolean;
-    right: boolean;
-    up: boolean;
-    down: boolean;
-    pitchUp: boolean;
-    pitchDown: boolean;
-    yawLeft: boolean;
-    yawRight: boolean;
-    rollLeft: boolean;
-    rollRight: boolean;
-    fire: boolean;
-    zoom: boolean;
-    nextWeapon: boolean;
-    previousWeapon: boolean;
-    weapon1: boolean;
-    weapon2: boolean;
-    weapon3: boolean;
-    mouseDelta?: { x: number; y: number };
-    tick: number;
-    timestamp: number;
-};
 
 export type RenderComponent = {
     mesh: Mesh;
     targetPosition?: Vector3;
     targetRotation?: Quaternion;
 };
+
+export type TickComponent = {
+    tick: number;
+    timestamp: number;
+    lastProcessedInputTimestamp?: number;
+    lastProcessedInputTick?: number;
+}
 
 /**
  * Represents the complete physics state of a vehicle or object.
@@ -241,7 +172,7 @@ export interface PhysicsState {
  * Input state for vehicle control.
  * Represents all possible control inputs for vehicles.
  */
-export interface PhysicsInput {
+export interface InputComponent {
     /** Forward movement input */
     forward: boolean;
     /** Backward movement input */
@@ -365,13 +296,9 @@ export interface VehicleCollisionEvent {
  * Buffer for storing and interpolating physics states.
  * Used for network synchronization and smooth movement.
  */
-export interface StateBuffer {
-    /** Array of recent physics states */
-    state: PhysicsState;
-    /** Last processed simulation tick */
-    tick: number;
-    /** Timestamp of the last processed state */
-    timestamp: number;
+export interface TransformBuffer {
+    transform: TransformComponent;
+    tick: TickComponent;
 }
 
 /**
@@ -489,3 +416,75 @@ export const PlaneSettings: VehiclePhysicsConfig = {
     /** Torque force in N·m */
     torque: 2,
 };
+
+/**
+ * Represents a weapon that can be equipped on vehicles
+ */
+export interface WeaponComponent {
+    /** Unique identifier for the weapon type */
+    id: string;
+    /** Display name of the weapon */
+    name: string;
+    /** Type of projectile this weapon fires */
+    projectileType: 'bullet' | 'missile';
+    /** Damage dealt by the weapon */
+    damage: number;
+    /** Fire rate in rounds per second */
+    fireRate: number;
+    /** Speed of the projectile in m/s */
+    projectileSpeed: number;
+    /** Cooldown time between shots in seconds */
+    cooldown: number;
+    /** Maximum range of the weapon in meters */
+    range: number;
+    /** Whether the weapon is currently on cooldown */
+    isOnCooldown: boolean;
+    /** Last time the weapon was fired */
+    lastFireTime: number;
+}
+
+/**
+ * Default weapons available in the game
+ */
+export const DefaultWeapons: { [key: string]: WeaponComponent } = {
+    chaingun: {
+        id: 'chaingun',
+        name: 'Chaingun',
+        projectileType: 'bullet',
+        damage: 10,
+        fireRate: 10,
+        projectileSpeed: 100,
+        cooldown: 0.1,
+        range: 1000,
+        isOnCooldown: false,
+        lastFireTime: 0
+    },
+    missile: {
+        id: 'missile',
+        name: 'Missile',
+        projectileType: 'missile',
+        damage: 50,
+        fireRate: 1,
+        projectileSpeed: 50,
+        cooldown: 1,
+        range: 2000,
+        isOnCooldown: false,
+        lastFireTime: 0
+    }
+};
+
+/**
+ * Event emitted when a vehicle takes damage
+ */
+export interface DamageEvent {
+    /** ID of the vehicle that took damage */
+    targetId: string;
+    /** Amount of damage taken */
+    damage: number;
+    /** Type of projectile that caused the damage */
+    projectileType: 'bullet' | 'missile';
+    /** Position where the damage occurred */
+    position: Vector3;
+    /** Timestamp of the damage event */
+    timestamp: number;
+}

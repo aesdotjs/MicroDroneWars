@@ -76,12 +76,12 @@ export function createEffectSystem(scene: Scene) {
 
     // Create projectile mesh
     function createProjectileMesh(projectile: GameEntity): void {
-        if (!projectile.position || !projectile.velocity) return;
+        if (!projectile.transform) return;
 
         removeProjectileMesh(projectile.id);
 
         let projectileMesh: Mesh;
-        if (projectile.type === 'bullet') {
+        if (projectile.projectile?.projectileType === 'bullet') {
             projectileMesh = MeshBuilder.CreateBox('bullet', {
                 width: 0.05,
                 height: 0.05,
@@ -93,8 +93,8 @@ export function createEffectSystem(scene: Scene) {
             projectileMesh.material = missileMaterial;
         }
 
-        projectileMesh.position = projectile.position;
-        const direction = projectile.velocity.normalize();
+        projectileMesh.position = projectile.transform.position;
+        const direction = projectile.transform.velocity.normalize();
         const rotation = Quaternion.FromLookDirectionLH(direction, Vector3.Up());
         projectileMesh.rotationQuaternion = rotation;
 
@@ -218,11 +218,11 @@ export function createEffectSystem(scene: Scene) {
         cleanup,
         update: (dt: number) => {
             // Update projectile positions
-            const projectiles = ecsWorld.with("projectile", "position", "velocity");
+            const projectiles = ecsWorld.with("projectile", "transform");
             for (const projectile of projectiles) {
                 const mesh = activeProjectiles.get(projectile.id);
-                if (mesh && projectile.position) {
-                    mesh.position.copyFrom(projectile.position);
+                if (mesh && projectile.transform) {
+                    mesh.position.copyFrom(projectile.transform.position);
                 }
             }
         }

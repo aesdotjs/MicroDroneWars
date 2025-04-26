@@ -1,5 +1,6 @@
-import { describe, test, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import * as CANNON from 'cannon-es'
+import { Vector3, Quaternion } from 'babylonjs'
 import { world as ecsWorld } from '../../world'
 import { 
   createCollisionSystem,
@@ -22,7 +23,7 @@ describe('CollisionSystem', () => {
     ecsWorld.clear()
   })
 
-  test('should determine vehicle-vehicle collision type', () => {
+  it('should determine vehicle-vehicle collision type', () => {
     const bodyA = new CANNON.Body()
     const bodyB = new CANNON.Body()
     bodyA.collisionFilterGroup = CollisionGroups.Drones
@@ -32,7 +33,7 @@ describe('CollisionSystem', () => {
     expect(collisionType).toBe(CollisionType.VehicleVehicle)
   })
 
-  test('should determine vehicle-environment collision type', () => {
+  it('should determine vehicle-environment collision type', () => {
     const bodyA = new CANNON.Body()
     const bodyB = new CANNON.Body()
     bodyA.collisionFilterGroup = CollisionGroups.Drones
@@ -42,7 +43,7 @@ describe('CollisionSystem', () => {
     expect(collisionType).toBe(CollisionType.VehicleEnvironment)
   })
 
-  test('should determine vehicle-projectile collision type', () => {
+  it('should determine vehicle-projectile collision type', () => {
     const bodyA = new CANNON.Body()
     const bodyB = new CANNON.Body()
     bodyA.collisionFilterGroup = CollisionGroups.Drones
@@ -52,100 +53,293 @@ describe('CollisionSystem', () => {
     expect(collisionType).toBe(CollisionType.VehicleProjectile)
   })
 
-  test('should determine collision severity based on impact velocity', () => {
+  it('should determine collision severity based on impact velocity', () => {
     expect(determineCollisionSeverity(4)).toBe(CollisionSeverity.Light)
     expect(determineCollisionSeverity(12)).toBe(CollisionSeverity.Medium)
     expect(determineCollisionSeverity(20)).toBe(CollisionSeverity.Heavy)
   })
 
-  test('should handle vehicle collision damage', () => {
+  it('should handle vehicle collision damage', () => {
     const vehicle = ecsWorld.add({
-      drone: true,
+      id: 'vehicle1',
+      type: 'vehicle',
+      transform: {
+        position: new Vector3(0, 0, 0),
+        rotation: new Quaternion(0, 0, 0, 1),
+        velocity: new Vector3(0, 0, 0),
+        angularVelocity: new Vector3(0, 0, 0)
+      },
+      physics: {
+        body: new CANNON.Body(),
+        mass: 1,
+        drag: 0.8,
+        angularDrag: 0.8,
+        maxSpeed: 20,
+        maxAngularSpeed: 0.2,
+        maxAngularAcceleration: 0.05,
+        angularDamping: 0.9,
+        forceMultiplier: 0.005,
+        thrust: 20,
+        lift: 15,
+        torque: 1
+      },
+      gameState: {
       health: 100,
-      body: new CANNON.Body()
-    } as GameEntity)
+        maxHealth: 100,
+        team: 0,
+        hasFlag: false,
+        carryingFlag: false,
+        atBase: true
+      }
+    } as unknown as GameEntity)
 
     const other = ecsWorld.add({
-      environment: true,
-      body: new CANNON.Body()
-    } as GameEntity)
+      id: 'env1',
+      type: 'environment',
+      transform: {
+        position: new Vector3(0, 0, 0),
+        rotation: new Quaternion(0, 0, 0, 1),
+        velocity: new Vector3(0, 0, 0),
+        angularVelocity: new Vector3(0, 0, 0)
+      },
+      physics: {
+        body: new CANNON.Body(),
+        mass: 0,
+        drag: 0,
+        angularDrag: 0,
+        maxSpeed: 0,
+        maxAngularSpeed: 0,
+        maxAngularAcceleration: 0,
+        angularDamping: 0,
+        forceMultiplier: 0,
+        thrust: 0,
+        lift: 0,
+        torque: 0
+      }
+    } as unknown as GameEntity)
+
+    if (!vehicle.physics || !other.physics || !vehicle.gameState) {
+      throw new Error('Required components missing')
+    }
 
     const event = {
       severity: CollisionSeverity.Medium,
       impactVelocity: 12,
-      bodyA: vehicle.body,
-      bodyB: other.body
+      bodyA: vehicle.physics.body,
+      bodyB: other.physics.body
     }
 
     handleVehicleCollision(vehicle, other, event)
-    expect(vehicle.health).toBeLessThan(100)
+    expect(vehicle.gameState.health).toBeLessThan(100)
   })
 
-  test('should handle projectile collision', () => {
+  it('should handle projectile collision', () => {
     const projectile = ecsWorld.add({
-      projectile: true,
+      id: 'proj1',
+      type: 'projectile',
+      transform: {
+        position: new Vector3(0, 0, 0),
+        rotation: new Quaternion(0, 0, 0, 1),
+        velocity: new Vector3(0, 0, 0),
+        angularVelocity: new Vector3(0, 0, 0)
+      },
+      projectile: {
+        projectileType: 'bullet',
+        damage: 50,
+        range: 100,
+        distanceTraveled: 0,
+        sourceId: 'player1',
+        timestamp: 0,
+        tick: 0
+      },
+      gameState: {
       health: 100,
-      damage: 50,
-      body: new CANNON.Body()
-    } as GameEntity)
+        maxHealth: 100,
+        team: 0,
+        hasFlag: false,
+        carryingFlag: false,
+        atBase: true
+      }
+    } as unknown as GameEntity)
 
     const target = ecsWorld.add({
-      drone: true,
+      id: 'target1',
+      type: 'vehicle',
+      transform: {
+        position: new Vector3(0, 0, 0),
+        rotation: new Quaternion(0, 0, 0, 1),
+        velocity: new Vector3(0, 0, 0),
+        angularVelocity: new Vector3(0, 0, 0)
+      },
+      physics: {
+        body: new CANNON.Body(),
+        mass: 1,
+        drag: 0.8,
+        angularDrag: 0.8,
+        maxSpeed: 20,
+        maxAngularSpeed: 0.2,
+        maxAngularAcceleration: 0.05,
+        angularDamping: 0.9,
+        forceMultiplier: 0.005,
+        thrust: 20,
+        lift: 15,
+        torque: 1
+      },
+      gameState: {
       health: 100,
-      body: new CANNON.Body()
-    } as GameEntity)
+        maxHealth: 100,
+        team: 0,
+        hasFlag: false,
+        carryingFlag: false,
+        atBase: true
+      }
+    } as unknown as GameEntity)
+
+    if (!projectile.physics || !target.physics || !target.gameState || !projectile.gameState) {
+      throw new Error('Required components missing')
+    }
 
     const event = {
-      bodyA: projectile.body,
-      bodyB: target.body
+      bodyA: projectile.physics.body,
+      bodyB: target.physics.body
     }
 
     handleProjectileCollision(projectile, target, event)
-    expect(target.health).toBe(50)
-    expect(projectile.health).toBe(0)
+    expect(target.gameState.health).toBe(50)
+    expect(projectile.gameState.health).toBe(0)
   })
 
-  test('should handle flag collision', () => {
+  it('should handle flag collision', () => {
     const flag = ecsWorld.add({
-      flag: true,
-      body: new CANNON.Body()
-    } as GameEntity)
+      id: 'flag1',
+      type: 'flag',
+      transform: {
+        position: new Vector3(0, 0, 0),
+        rotation: new Quaternion(0, 0, 0, 1),
+        velocity: new Vector3(0, 0, 0),
+        angularVelocity: new Vector3(0, 0, 0)
+      },
+      gameState: {
+        health: 100,
+        maxHealth: 100,
+        team: 0,
+        hasFlag: true,
+        carryingFlag: false,
+        atBase: true
+      }
+    } as unknown as GameEntity)
 
     const drone = ecsWorld.add({
-      drone: true,
       id: 'drone1',
-      body: new CANNON.Body()
-    } as GameEntity)
+      type: 'vehicle',
+      transform: {
+        position: new Vector3(0, 0, 0),
+        rotation: new Quaternion(0, 0, 0, 1),
+        velocity: new Vector3(0, 0, 0),
+        angularVelocity: new Vector3(0, 0, 0)
+      },
+      physics: {
+        body: new CANNON.Body(),
+        mass: 1,
+        drag: 0.8,
+        angularDrag: 0.8,
+        maxSpeed: 20,
+        maxAngularSpeed: 0.2,
+        maxAngularAcceleration: 0.05,
+        angularDamping: 0.9,
+        forceMultiplier: 0.005,
+        thrust: 20,
+        lift: 15,
+        torque: 1
+      },
+      gameState: {
+        health: 100,
+        maxHealth: 100,
+        team: 1,
+        hasFlag: false,
+        carryingFlag: false,
+        atBase: true
+      }
+    } as unknown as GameEntity)
+
+    if (!flag.physics || !drone.physics || !flag.gameState || !drone.gameState) {
+      throw new Error('Required components missing')
+    }
 
     const event = {
-      bodyA: flag.body,
-      bodyB: drone.body
+      bodyA: flag.physics.body,
+      bodyB: drone.physics.body
     }
 
     handleFlagCollision(flag, drone, event)
-    expect(flag.carriedBy).toBe('drone1')
-    expect(drone.hasFlag).toBe(true)
+    expect(flag.gameState.carriedBy).toBe('drone1')
+    expect(drone.gameState.hasFlag).toBe(true)
   })
 
-  test('should not allow non-drones to pick up flags', () => {
+  it('should not allow non-drones to pick up flags', () => {
     const flag = ecsWorld.add({
-      flag: true,
-      body: new CANNON.Body()
-    } as GameEntity)
+      id: 'flag1',
+      type: 'flag',
+      transform: {
+        position: new Vector3(0, 0, 0),
+        rotation: new Quaternion(0, 0, 0, 1),
+        velocity: new Vector3(0, 0, 0),
+        angularVelocity: new Vector3(0, 0, 0)
+      },
+      gameState: {
+        health: 100,
+        maxHealth: 100,
+        team: 0,
+        hasFlag: true,
+        carryingFlag: false,
+        atBase: true
+      }
+    } as unknown as GameEntity)
 
     const plane = ecsWorld.add({
-      plane: true,
       id: 'plane1',
-      body: new CANNON.Body()
-    } as GameEntity)
+      type: 'vehicle',
+      transform: {
+        position: new Vector3(0, 0, 0),
+        rotation: new Quaternion(0, 0, 0, 1),
+        velocity: new Vector3(0, 0, 0),
+        angularVelocity: new Vector3(0, 0, 0)
+      },
+      physics: {
+        body: new CANNON.Body(),
+        mass: 1,
+        drag: 0.8,
+        angularDrag: 0.8,
+        maxSpeed: 20,
+        maxAngularSpeed: 0.2,
+        maxAngularAcceleration: 0.05,
+        angularDamping: 0.9,
+        forceMultiplier: 0.005,
+        thrust: 20,
+        lift: 15,
+        torque: 1
+      },
+      gameState: {
+        health: 100,
+        maxHealth: 100,
+        team: 1,
+        hasFlag: false,
+        carryingFlag: false,
+        atBase: true
+      }
+    } as unknown as GameEntity)
+
+    if (!flag.physics || !plane.physics || !flag.gameState || !plane.gameState) {
+      throw new Error('Required components missing')
+    }
 
     const event = {
-      bodyA: flag.body,
-      bodyB: plane.body
+      bodyA: flag.physics.body,
+      bodyB: plane.physics.body
     }
 
     handleFlagCollision(flag, plane, event)
-    expect(flag.carriedBy).toBeUndefined()
-    expect(plane.hasFlag).toBeUndefined()
+    expect(flag.gameState.carriedBy).toBeUndefined()
+    expect(plane.gameState.hasFlag).toBeUndefined()
   })
 }) 
