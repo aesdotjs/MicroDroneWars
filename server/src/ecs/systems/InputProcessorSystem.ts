@@ -1,17 +1,13 @@
-import { world as ecsWorld } from '../../../../shared/src/ecs/world';
-import { GameEntity, InputComponent } from '../../../../shared/src/ecs/types';
-import { createIdleInput } from './InputSystems';
-import { createDroneSystem } from '../../../../shared/src/ecs/systems/VehicleSystems';
-import { createPlaneSystem } from '../../../../shared/src/ecs/systems/VehicleSystems';
-import { createWeaponSystem } from '../../../../shared/src/ecs/systems/WeaponSystems';
+import { world as ecsWorld } from '@shared/ecs/world';
+import { GameEntity, InputComponent } from '@shared/ecs/types';
+import { createIdleInput } from '@shared/ecs/utils/InputHelpers';
+import { createPhysicsSystem } from '@shared/ecs/systems/PhysicsSystem';
 
 /**
  * Creates a system that processes inputs and applies them to vehicle and weapon systems
  */
 export function createInputProcessorSystem(
-    droneSystem: ReturnType<typeof createDroneSystem>,
-    planeSystem: ReturnType<typeof createPlaneSystem>,
-    weaponSystem: ReturnType<typeof createWeaponSystem>
+    physicsSystem: ReturnType<typeof createPhysicsSystem>
 ) {
     const lastProcessedInputTicks = new Map<string, number>();
     const lastProcessedInputTimestamps = new Map<string, number>();
@@ -24,9 +20,7 @@ export function createInputProcessorSystem(
             if (!inputBuffer || inputBuffer.length === 0) {
                 // Apply idle input if no inputs available
                 const idleInput = createIdleInput(entity.tick!.tick);
-                droneSystem.update(dt, entity, idleInput);
-                planeSystem.update(dt, entity, idleInput);
-                weaponSystem.update(dt, entity, idleInput);
+                physicsSystem.update(dt, entity, idleInput);
                 return;
             }
 
@@ -40,9 +34,7 @@ export function createInputProcessorSystem(
             let processedCount = 0;
             for (const input of sortedInputs) {
                 if (input.tick > lastProcessedTick) {
-                    droneSystem.update(dt, entity, input);
-                    planeSystem.update(dt, entity, input);
-                    weaponSystem.update(dt, entity, input);
+                    physicsSystem.update(dt, entity, input);
                     lastProcessedTick = input.tick;
                     processedCount++;
                 }

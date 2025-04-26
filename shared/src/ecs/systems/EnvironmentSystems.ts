@@ -51,11 +51,6 @@ export function createEnvironmentSystem(cannonWorld: CANNON.World) {
             thrust: 0,
             lift: 0,
             torque: 0,
-            minSpeed: 0,
-            bankAngle: 0,
-            wingArea: 0,
-            strafeForce: 0,
-            minHeight: 0
         },
         gameState: {
             health: 100,
@@ -72,21 +67,7 @@ export function createEnvironmentSystem(cannonWorld: CANNON.World) {
     
     return {
         update: (dt: number) => {
-            // Update ground entity position and rotation from physics body
-            const ground = ecsWorld.with("physics", "transform").first;
-            if (ground) {
-                ground.transform!.position = new Vector3(
-                    ground.physics!.body.position.x,
-                    ground.physics!.body.position.y,
-                    ground.physics!.body.position.z
-                );
-                ground.transform!.rotation = new Quaternion(
-                    ground.physics!.body.quaternion.x,
-                    ground.physics!.body.quaternion.y,
-                    ground.physics!.body.quaternion.z,
-                    ground.physics!.body.quaternion.w
-                );
-            }
+            
         }
     };
 }

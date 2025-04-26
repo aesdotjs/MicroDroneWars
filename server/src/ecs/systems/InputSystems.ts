@@ -1,49 +1,15 @@
-import { world as ecsWorld } from '../../../../shared/src/ecs/world';
-import { GameEntity, InputComponent } from '../../../../shared/src/ecs/types';
+import { world as ecsWorld } from '@shared/ecs/world';
+import { GameEntity, InputComponent } from '@shared/ecs/types';
 import { createInputProcessorSystem } from './InputProcessorSystem';
-import { createDroneSystem } from '../../../../shared/src/ecs/systems/VehicleSystems';
-import { createPlaneSystem } from '../../../../shared/src/ecs/systems/VehicleSystems';
-import { createWeaponSystem } from '../../../../shared/src/ecs/systems/WeaponSystems';
+import { createPhysicsSystem } from '@shared/ecs/systems/PhysicsSystem';
 
 const MAX_INPUT_BUFFER_SIZE = 60; // 1 second worth of inputs at 60fps
 
-/**
- * Creates a default idle input state
- */
-export function createIdleInput(tick: number): InputComponent {
-    return {
-        forward: false,
-        backward: false,
-        left: false,
-        right: false,
-        up: false,
-        down: false,
-        pitchUp: false,
-        pitchDown: false,
-        yawLeft: false,
-        yawRight: false,
-        rollLeft: false,
-        rollRight: false,
-        fire: false,
-        zoom: false,
-        nextWeapon: false,
-        previousWeapon: false,
-        weapon1: false,
-        weapon2: false,
-        weapon3: false,
-        mouseDelta: { x: 0, y: 0 },
-        tick: tick,
-        timestamp: Date.now()
-    };
-}
-
 export function createInputSystem(
-    droneSystem: ReturnType<typeof createDroneSystem>,
-    planeSystem: ReturnType<typeof createPlaneSystem>,
-    weaponSystem: ReturnType<typeof createWeaponSystem>
+    physicsSystem: ReturnType<typeof createPhysicsSystem>
 ) {
     const inputBuffers = new Map<string, InputComponent[]>();
-    const inputProcessor = createInputProcessorSystem(droneSystem, planeSystem, weaponSystem);
+    const inputProcessor = createInputProcessorSystem(physicsSystem);
 
     return {
         addInput: (id: string, input: InputComponent) => {

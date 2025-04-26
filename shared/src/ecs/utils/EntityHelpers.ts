@@ -1,4 +1,4 @@
-import { GameEntity } from '../types';
+import { GameEntity, PhysicsComponent } from '../types';
 import { Vector3, Quaternion, MeshBuilder, Scene, Color4, StandardMaterial, Color3, MultiMaterial, ParticleSystem, Texture } from 'babylonjs';
 import * as CANNON from 'cannon-es';
 import { DroneSettings, PlaneSettings, DefaultWeapons } from '../types';
@@ -31,6 +31,21 @@ export function createVehicleBody(
     return body;
 }
 
+export function createPhysicsComponent(vehicleType: 'drone' | 'plane', body: CANNON.Body): PhysicsComponent {
+    let vehicleSettings;
+    switch(vehicleType) {
+        case 'drone':
+            vehicleSettings = DroneSettings;
+            break;
+        case 'plane':
+            vehicleSettings = PlaneSettings;
+            break;
+    }
+    return {
+        body,
+        ...vehicleSettings
+    }
+}
 /**
  * Creates a vehicle entity in the ECS world
  */
@@ -54,25 +69,7 @@ export function createVehicleEntity(
             velocity: new Vector3(0, 0, 0),
             angularVelocity: new Vector3(0, 0, 0)
         },
-        physics: {
-            body,
-            mass: vehicleType === 'drone' ? DroneSettings.mass : PlaneSettings.mass,
-            drag: vehicleType === 'drone' ? DroneSettings.drag : PlaneSettings.drag,
-            angularDrag: vehicleType === 'drone' ? DroneSettings.angularDrag : PlaneSettings.angularDrag,
-            maxSpeed: vehicleType === 'drone' ? DroneSettings.maxSpeed : PlaneSettings.maxSpeed,
-            maxAngularSpeed: vehicleType === 'drone' ? DroneSettings.maxAngularSpeed : PlaneSettings.maxAngularSpeed,
-            maxAngularAcceleration: vehicleType === 'drone' ? DroneSettings.maxAngularAcceleration : PlaneSettings.maxAngularAcceleration,
-            angularDamping: vehicleType === 'drone' ? DroneSettings.angularDamping : PlaneSettings.angularDamping,
-            forceMultiplier: vehicleType === 'drone' ? DroneSettings.forceMultiplier : PlaneSettings.forceMultiplier,
-            thrust: vehicleType === 'drone' ? DroneSettings.thrust : PlaneSettings.thrust,
-            lift: vehicleType === 'drone' ? DroneSettings.lift : PlaneSettings.lift,
-            torque: vehicleType === 'drone' ? DroneSettings.torque : PlaneSettings.torque,
-            minSpeed: vehicleType === 'drone' ? (DroneSettings.minSpeed ?? 0) : (PlaneSettings.minSpeed ?? 0),
-            bankAngle: vehicleType === 'drone' ? (DroneSettings.bankAngle ?? 0) : (PlaneSettings.bankAngle ?? 0),
-            wingArea: vehicleType === 'drone' ? (DroneSettings.wingArea ?? 0) : (PlaneSettings.wingArea ?? 0),
-            strafeForce: vehicleType === 'drone' ? (DroneSettings.strafeForce ?? 0) : (PlaneSettings.strafeForce ?? 0),
-            minHeight: vehicleType === 'drone' ? (DroneSettings.minHeight ?? 0) : (PlaneSettings.minHeight ?? 0)
-        },
+        physics: createPhysicsComponent(vehicleType, body),
         vehicle: {
             vehicleType,
             weapons: Object.values(DefaultWeapons),
@@ -178,11 +175,6 @@ export function createFlagEntity(
             thrust: 0,
             lift: 0,
             torque: 0,
-            minSpeed: 0,
-            bankAngle: 0,
-            wingArea: 0,
-            strafeForce: 0,
-            minHeight: 0
         },
         gameState: {
             health: 100,

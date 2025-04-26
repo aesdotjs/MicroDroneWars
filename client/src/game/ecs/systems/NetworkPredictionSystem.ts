@@ -1,21 +1,13 @@
 import { world as ecsWorld } from '@shared/ecs/world';
-import { GameEntity } from '@shared/ecs/types';
-import { PhysicsState, InputComponent, TransformBuffer, InterpolationConfig } from '@shared/ecs/types';
+import { InputComponent, TransformBuffer, InterpolationConfig } from '@shared/ecs/types';
 import { Vector3, Quaternion } from 'babylonjs';
-import { Room } from 'colyseus.js';
-import { State } from '../../schemas/State';
-import { EntitySchema } from '../../schemas/EntitySchema';
-import { createDroneSystem } from '@shared/ecs/systems/VehicleSystems';
-import { createPlaneSystem } from '@shared/ecs/systems/VehicleSystems';
-import { createWeaponSystem } from '@shared/ecs/systems/WeaponSystems';
+import { createIdleInput } from '@shared/ecs/utils/InputHelpers';
+import { createPhysicsSystem } from '@shared/ecs/systems/PhysicsSystem';
 /**
  * Creates a system that handles network prediction, reconciliation, and interpolation
  */
 export function createNetworkPredictionSystem(
-    room: Room<State>,
-    droneSystem: ReturnType<typeof createDroneSystem>,
-    planeSystem: ReturnType<typeof createPlaneSystem>,
-    weaponSystem: ReturnType<typeof createWeaponSystem>
+    physicsSystem:  ReturnType<typeof createPhysicsSystem>
 ) {
     // Configuration
     const interpolationConfig: InterpolationConfig = {
@@ -211,9 +203,7 @@ export function createNetworkPredictionSystem(
                 const unprocessedInputs = pendingInputs.get(id)!.filter((input: InputComponent) => input.tick > lastProcessedInputTick);
                 for (const input of unprocessedInputs) {
                     // Apply input to entity
-                    droneSystem.update(1/60, entity, input);
-                    planeSystem.update(1/60, entity, input);
-                    weaponSystem.update(1/60, entity, input);
+                    physicsSystem.update(1/60, entity, input);
                 }
                 pendingInputs.set(id, unprocessedInputs);
             } else {
@@ -241,6 +231,14 @@ export function createNetworkPredictionSystem(
             // Keep buffer size reasonable
             if (inputs.length > MAX_PENDING_INPUTS) {
                 inputs.splice(0, inputs.length - MAX_PENDING_INPUTS);
+            }
+
+            // Apply input immediately to local player
+            const entity = ecsWorld.entities.find(e => e.id === id);
+            if (entity && entity.owner?.isLocal) {
+                // If no input provided, use idle input
+                const inputToApply = input || createIdleInput(entity.tick!.tick);
+                physicsSystem.update(1/60, entity, inputToApply);
             }
         },
 

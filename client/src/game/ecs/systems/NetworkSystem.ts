@@ -8,11 +8,9 @@ import * as Colyseus from 'colyseus.js';
 import { createCameraSystem } from './CameraSystem';
 import { createPhysicsWorldSystem } from '@shared/ecs/systems';
 import { createNetworkPredictionSystem } from './NetworkPredictionSystem';
-import { createVehicleBody, createDroneMesh, createPlaneMesh, } from '@shared/ecs/utils/EntityHelpers';
-import { createDroneSystem } from '@shared/ecs/systems/VehicleSystems';
-import { createPlaneSystem } from '@shared/ecs/systems/VehicleSystems';
-import { createWeaponSystem } from '@shared/ecs/systems/WeaponSystems';
+import { createVehicleBody, createDroneMesh, createPlaneMesh, createPhysicsComponent } from '@shared/ecs/utils/EntityHelpers';
 import { createClientInputSystem } from './ClientInputSystem';
+import { createPhysicsSystem } from '@shared/ecs/systems/PhysicsSystem';
 /**
  * Creates a system that handles network state updates and converts them to ECS entities
  */
@@ -21,15 +19,13 @@ export function createNetworkSystem(
     scene: Scene,
     cameraSystem: ReturnType<typeof createCameraSystem>,
     physicsWorldSystem: ReturnType<typeof createPhysicsWorldSystem>,
-    droneSystem: ReturnType<typeof createDroneSystem>,
-    planeSystem: ReturnType<typeof createPlaneSystem>,
-    weaponSystem: ReturnType<typeof createWeaponSystem>,
+    physicsSystem: ReturnType<typeof createPhysicsSystem>,
     inputSystem: ReturnType<typeof createClientInputSystem>
 ) {
     console.log('Creating network system...');
     const $ = Colyseus.getStateCallbacks(room);
 
-    const networkPredictionSystem = createNetworkPredictionSystem(room, droneSystem, planeSystem, weaponSystem);
+    const networkPredictionSystem = createNetworkPredictionSystem(physicsSystem);
 
     // Network quality tracking
     let networkLatency = 0;
@@ -128,7 +124,7 @@ export function createNetworkSystem(
             }
             if (newEntity.owner?.isLocal && newEntity.vehicle) {
                 const vehicleBody = createVehicleBody(newEntity.vehicle.vehicleType, newEntity.transform!.position, newEntity.transform!.rotation);
-                newEntity.physics!.body = vehicleBody;
+                newEntity.physics = createPhysicsComponent(newEntity.vehicle.vehicleType, vehicleBody);
                 physicsWorldSystem.addBody(newEntity);
                 cameraSystem.attachCamera(newEntity);
             }
@@ -146,7 +142,7 @@ export function createNetworkSystem(
         }
 
         ecsWorld.add(newEntity);
-        console.log('Entity added to ECS world:', { id, entity});
+        console.log('Entity added to ECS world:', { id, newEntity});
         $(entity).onChange(() => {
             console.log('Entity changed:', { id, entity });
             const gameEntity = ecsWorld.entities.find(e => e.id === id);
@@ -249,7 +245,6 @@ export function createNetworkSystem(
         },
         update: (dt: number) => {
             networkPredictionSystem.addInput(room.sessionId, inputSystem.getInput());
-            networkPredictionSystem.update(dt);
         },
         cleanup: () => {
             networkPredictionSystem.cleanup();

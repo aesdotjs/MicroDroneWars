@@ -102,11 +102,6 @@ export type PhysicsComponent = {
     thrust: number;
     lift: number;
     torque: number;
-    minSpeed: number;
-    bankAngle: number;
-    wingArea: number;
-    strafeForce: number;
-    minHeight: number;
 };
 
 /**
@@ -145,28 +140,6 @@ export type TickComponent = {
     lastProcessedInputTick?: number;
 }
 
-/**
- * Represents the complete physics state of a vehicle or object.
- * Contains position, orientation, and velocity information.
- */
-export interface PhysicsState {
-    /** Current position in 3D space */
-    position: { x: number; y: number; z: number };
-    /** Current orientation as a quaternion */
-    quaternion: { x: number; y: number; z: number; w: number };
-    /** Current linear velocity */
-    linearVelocity: { x: number; y: number; z: number };
-    /** Current angular velocity */
-    angularVelocity: { x: number; y: number; z: number };
-    /** Current tick */
-    tick: number;
-    /** Timestamp of the state in milliseconds */
-    timestamp: number;
-    /** Last processed input timestamp */
-    lastProcessedInputTimestamp?: number;
-    /** Last processed input tick */
-    lastProcessedInputTick?: number;
-}
 
 /**
  * Input state for vehicle control.
@@ -330,16 +303,6 @@ export interface VehiclePhysicsConfig {
     lift: number;
     /** Torque force in N·m */
     torque: number;
-    /** Minimum speed in m/s */
-    minSpeed?: number;
-    /** Maximum bank angle in radians */
-    bankAngle?: number;
-    /** Wing area in m² */
-    wingArea?: number;
-    /** Sideways force multiplier */
-    strafeForce?: number;
-    /** Minimum height above ground in m */
-    minHeight?: number;
 }
 
 /**

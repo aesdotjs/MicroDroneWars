@@ -6,15 +6,12 @@ import { createCameraSystem } from './CameraSystem';
 import { createClientInputSystem } from './ClientInputSystem';
 import { createEffectSystem } from './EffectSystem';
 import { createNetworkSystem } from './NetworkSystem';
-import { createRenderSystem } from './RenderSystem';
-import { createPlaneSystem, createDroneSystem } from '@shared/ecs/systems/VehicleSystems';
 import { createGameModeSystem, GameMode, GameModeConfig } from '@shared/ecs/systems/GameModeSystem';
-import { createHealthSystem } from '@shared/ecs/systems/HealthSystems';
 import { createCollisionSystem } from '@shared/ecs/systems/CollisionSystems';
-import { createWeaponSystem } from '@shared/ecs/systems/WeaponSystems';
 import { createEnvironmentSystem } from '@shared/ecs/systems/EnvironmentSystems';
 import { createFlagSystem } from '@shared/ecs/systems/FlagSystems';
 import { createSceneSystem } from './SceneSystem';
+import { createPhysicsSystem } from '@shared/ecs/systems/PhysicsSystem';
 import { world as ecsWorld } from '@shared/ecs/world';
 
 export function createGameSystems(
@@ -36,6 +33,11 @@ export function createGameSystems(
     console.log('Initializing physics world system...');
     const physicsWorldSystem = createPhysicsWorldSystem();
     console.log('Physics world system initialized');
+
+    // Initialize physics system
+    console.log('Initializing physics system...');
+    const physicsSystem = createPhysicsSystem(physicsWorldSystem.getWorld());
+    console.log('Physics system initialized');
 
     // Initialize game mode system
     console.log('Initializing game mode system...');
@@ -62,46 +64,54 @@ export function createGameSystems(
     const cameraSystem = createCameraSystem(scene, camera);
     const inputSystem = createClientInputSystem(canvas);
     const effectSystem = createEffectSystem(scene);
-    const droneSystem = createDroneSystem(physicsWorldSystem.getWorld());
-    const planeSystem = createPlaneSystem(physicsWorldSystem.getWorld());
-    const weaponSystem = createWeaponSystem(physicsWorldSystem.getWorld());
-    const networkSystem = createNetworkSystem(room, scene, cameraSystem, physicsWorldSystem, droneSystem, planeSystem, weaponSystem, inputSystem);
-    const renderSystem = createRenderSystem(scene);
-    const healthSystem = createHealthSystem();
+    const networkSystem = createNetworkSystem(room, scene, cameraSystem, physicsWorldSystem, physicsSystem, inputSystem);
     const collisionSystem = createCollisionSystem(physicsWorldSystem.getWorld());
     const environmentSystem = createEnvironmentSystem(physicsWorldSystem.getWorld());
     const flagSystem = createFlagSystem();
     console.log('All systems initialized');
 
+    // Start the render loop
+    console.log('Starting scene render loop...');
+    engine.runRenderLoop(() => {
+        networkSystem.networkPredictionSystem.update(1/60);
+        sceneSystem.update();
+    });
+
+    // Fixed time step settings
+    const FIXED_TIME_STEP = 1/60; // 60fps
+    let accumulator = 0;
+
     return {
         sceneSystem,
         physicsWorldSystem,
+        physicsSystem,
         gameModeSystem,
         cameraSystem,
         inputSystem,
         effectSystem,
         networkSystem,
-        renderSystem,
-        droneSystem,
-        planeSystem,
-        healthSystem,
         collisionSystem,
-        weaponSystem,
         environmentSystem,
         flagSystem,
 
         update: (deltaTime: number) => {
             try {
-                // Update systems in the correct order
-                physicsWorldSystem.update(deltaTime);
-                collisionSystem.update(deltaTime);
-                healthSystem.update(deltaTime);
-                flagSystem.update(deltaTime);
-                environmentSystem.update(deltaTime);
-                gameModeSystem.update(deltaTime);
-                cameraSystem.update(deltaTime);
-                effectSystem.update(deltaTime);
-                renderSystem.update(deltaTime);
+                // Accumulate time
+                accumulator += deltaTime;
+
+                // Update systems in the correct order with fixed time step
+                while (accumulator >= FIXED_TIME_STEP) {
+                    physicsWorldSystem.update(FIXED_TIME_STEP);
+                    networkSystem.update(FIXED_TIME_STEP);
+                    collisionSystem.update(FIXED_TIME_STEP);
+                    flagSystem.update(FIXED_TIME_STEP);
+                    environmentSystem.update(FIXED_TIME_STEP);
+                    gameModeSystem.update(FIXED_TIME_STEP);
+                    cameraSystem.update(FIXED_TIME_STEP);
+                    effectSystem.update(FIXED_TIME_STEP);
+                    
+                    accumulator -= FIXED_TIME_STEP;
+                }
             } catch (error) {
                 console.error('Error in game systems update:', error);
             }
@@ -112,6 +122,7 @@ export function createGameSystems(
             try {
                 sceneSystem.dispose();
                 physicsWorldSystem.dispose();
+                physicsSystem.cleanup();
                 inputSystem.cleanup();
                 effectSystem.cleanup();
                 networkSystem.cleanup();    

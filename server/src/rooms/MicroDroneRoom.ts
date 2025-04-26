@@ -2,16 +2,15 @@ import { Room, Client } from "colyseus";
 import { ArraySchema } from "@colyseus/schema";
 import { State, EntitySchema, WeaponSchema } from "../schemas";
 import { createPhysicsWorldSystem } from "@shared/ecs/systems/PhysicsWorldSystem";
+import { createPhysicsSystem } from "@shared/ecs/systems/PhysicsSystem";
 import { GameEntity, InputComponent } from "@shared/ecs/types";
 import { DefaultWeapons } from "@shared/ecs/types";
 import { Vector3, Quaternion } from "babylonjs";
 import { world as ecsWorld } from "@shared/ecs/world";
 import { createVehicleEntity, createFlagEntity } from "@shared/ecs/utils/EntityHelpers";
 import { createStateSyncSystem } from "src/ecs/systems/StateSyncSystem";
-import { createWeaponSystem } from "@shared/ecs/systems/WeaponSystems";
 import { createHealthSystem } from "@shared/ecs/systems/HealthSystems";
 import { createFlagSystem } from "@shared/ecs/systems/FlagSystems";
-import { createDroneSystem, createPlaneSystem } from "@shared/ecs/systems/VehicleSystems";
 import { createInputSystem } from "../ecs/systems/InputSystems";
 import { createCollisionSystem } from "@shared/ecs/systems/CollisionSystems";
 import { createEnvironmentSystem } from "@shared/ecs/systems/EnvironmentSystems";
@@ -24,15 +23,13 @@ import { createGameModeSystem, GameMode, GameModeConfig } from "@shared/ecs/syst
  */
 export class MicroDroneRoom extends Room<State> {
     private physicsWorldSystem!: ReturnType<typeof createPhysicsWorldSystem>;
+    private physicsSystem!: ReturnType<typeof createPhysicsSystem>;
     private readonly TICK_RATE = 60;
     private readonly MAX_LATENCY = 1000; // 1 second max latency
     private clientLatencies: Map<string, number> = new Map();
     private stateSyncSystem!: ReturnType<typeof createStateSyncSystem>;
-    private weaponSystem!: ReturnType<typeof createWeaponSystem>;
     private healthSystem!: ReturnType<typeof createHealthSystem>;
     private flagSystem!: ReturnType<typeof createFlagSystem>;
-    private droneSystem!: ReturnType<typeof createDroneSystem>;
-    private planeSystem!: ReturnType<typeof createPlaneSystem>;
     private inputSystem!: ReturnType<typeof createInputSystem>;
     private collisionSystem!: ReturnType<typeof createCollisionSystem>;
     private environmentSystem!: ReturnType<typeof createEnvironmentSystem>;
@@ -54,14 +51,14 @@ export class MicroDroneRoom extends Room<State> {
         this.physicsWorldSystem = createPhysicsWorldSystem();
         this.state.serverTick = this.physicsWorldSystem.getCurrentTick();
 
+        // Initialize physics system
+        this.physicsSystem = createPhysicsSystem(this.physicsWorldSystem.getWorld());
+
         // Initialize ECS systems
         this.stateSyncSystem = createStateSyncSystem(this.state);
-        this.weaponSystem = createWeaponSystem(this.physicsWorldSystem.getWorld());
         this.healthSystem = createHealthSystem();
         this.flagSystem = createFlagSystem();
-        this.droneSystem = createDroneSystem(this.physicsWorldSystem.getWorld());
-        this.planeSystem = createPlaneSystem(this.physicsWorldSystem.getWorld());
-        this.inputSystem = createInputSystem(this.droneSystem, this.planeSystem, this.weaponSystem);
+        this.inputSystem = createInputSystem(this.physicsSystem);
         this.collisionSystem = createCollisionSystem(this.physicsWorldSystem.getWorld());
         this.environmentSystem = createEnvironmentSystem(this.physicsWorldSystem.getWorld());
 

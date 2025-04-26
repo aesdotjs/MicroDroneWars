@@ -1,9 +1,11 @@
 import { Scene, Engine, Vector3, HemisphericLight, UniversalCamera, Color4, Quaternion, MeshBuilder, StandardMaterial, Color3, DirectionalLight, ShadowGenerator, GlowLayer } from 'babylonjs';
+import { createGroundMesh } from '@shared/ecs/systems/EnvironmentSystems';
+
 import { world as ecsWorld } from '@shared/ecs/world';
 import { GameEntity } from '@shared/ecs/types';
 
 /**
- * Creates a system that handles scene initialization and setup
+ * Creates a system that handles scene initialization, setup, and rendering
  */
 export function createSceneSystem(engine: Engine) {
     console.log('Creating scene system...');
@@ -29,17 +31,29 @@ export function createSceneSystem(engine: Engine) {
     setupEnvironment(scene, shadowGenerator);
     console.log('Environment setup complete');
 
-    // Start the render loop
-    console.log('Starting scene render loop...');
-    engine.runRenderLoop(() => {
-        scene.render();
-    });
+    // Find entities with render and transform components
+    const renderables = ecsWorld.with("render", "transform");
 
     return {
         getScene: () => scene,
         getCamera: () => camera,
         getShadowGenerator: () => shadowGenerator,
         getGlowLayer: () => glowLayer,
+        update: () => {
+            // Update entity positions and rotations
+            for (const entity of renderables) {
+                if (!entity.render?.mesh || !entity.transform) continue;
+
+                // Update position
+                entity.render.mesh.position.copyFrom(entity.transform.position);
+
+                // Update rotation if available
+                if (entity.transform.rotation) {
+                    entity.render.mesh.rotationQuaternion = entity.transform.rotation;
+                }   
+            }
+            scene.render();
+        },
         dispose: () => {
             console.log('Disposing scene...');
             scene.dispose();
@@ -113,17 +127,7 @@ function setupGlowLayer(scene: Scene): GlowLayer {
  */
 function setupEnvironment(scene: Scene, shadowGenerator: ShadowGenerator): void {
     // Create ground
-    const ground = MeshBuilder.CreateGround("ground", {
-        width: 200,
-        height: 200
-    }, scene);
-    
-    const groundMaterial = new StandardMaterial("groundMaterial", scene);
-    groundMaterial.diffuseColor = new Color3(0.2, 0.2, 0.2);
-    groundMaterial.specularColor = new Color3(0.1, 0.1, 0.1);
-    groundMaterial.ambientColor = new Color3(0.3, 0.3, 0.3);
-    ground.material = groundMaterial;
-    ground.receiveShadows = true;
+    createGroundMesh(scene);
 
     // Add some obstacles
     for (let i = 0; i < 10; i++) {

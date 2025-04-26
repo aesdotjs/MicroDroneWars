@@ -66,15 +66,6 @@ export class Game {
         window.addEventListener('resize', () => {
             this.engine.resize();
         });
-
-        // Start the render loop
-        console.log('Starting render loop...');
-        this.engine.runRenderLoop(() => {
-            if (this.gameSystems) {
-                const deltaTime = this.engine.getDeltaTime() / 1000; // Convert to seconds
-                this.gameSystems.update(deltaTime);
-            }
-        });
     }
 
     /**

@@ -120,11 +120,6 @@ function createProjectile(
             thrust: 0,
             lift: 0,
             torque: 0,
-            minSpeed: 0,
-            bankAngle: 0,
-            wingArea: 0,
-            strafeForce: 0,
-            minHeight: 0
         },
         projectile: {
             projectileType: weapon.projectileType,
