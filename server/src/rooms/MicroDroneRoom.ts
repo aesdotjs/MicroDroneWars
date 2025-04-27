@@ -1,5 +1,5 @@
 import { Room, Client } from "colyseus";
-import { ArraySchema } from "@colyseus/schema";
+import { ArraySchema, entity } from "@colyseus/schema";
 import { State, EntitySchema, WeaponSchema } from "../schemas";
 import { createPhysicsWorldSystem } from "@shared/ecs/systems/PhysicsWorldSystem";
 import { createPhysicsSystem } from "@shared/ecs/systems/PhysicsSystem";
@@ -97,7 +97,7 @@ export class MicroDroneRoom extends Room<State> {
         this.gameModeSystem.initialize();
 
         // Set room options for faster connection
-        this.patchRate = 1000 / this.TICK_RATE; // 60 updates per second
+        // this.patchRate = 1000 / this.TICK_RATE; // 60 updates per second
         const NS_PER_SEC = 1e9;
         const NS_PER_TICK = NS_PER_SEC / this.TICK_RATE;
         let lastTime = process.hrtime();
@@ -122,7 +122,8 @@ export class MicroDroneRoom extends Room<State> {
             this.gameModeSystem.update(1 / this.TICK_RATE);
                 
             // Sync ECS state to Colyseus state
-            this.stateSyncSystem.update(Array.from(ecsWorld.entities));
+            this.stateSyncSystem.update();
+            this.broadcastPatch();
 
             // Calculate time taken by this tick
             const tickDiff = process.hrtime(lastTime);

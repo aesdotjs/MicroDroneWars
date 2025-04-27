@@ -160,7 +160,6 @@ export function createNetworkPredictionSystem(
             const buffers = TransformBuffers.get(id)!;
             const isLocalPlayer = entity.owner?.isLocal;
             
-            console.log("isLocalPlayer", isLocalPlayer);
             if (isLocalPlayer) {
                 // Get current client state
                 const clientState = {

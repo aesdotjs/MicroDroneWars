@@ -1,5 +1,6 @@
 import { GameEntity } from '@shared/ecs/types';
 import { State, EntitySchema, WeaponSchema } from '../../schemas';
+import { world as ecsWorld } from "@shared/ecs/world";
 /**
  * Synchronizes ECS entities with Colyseus state
  */
@@ -98,7 +99,6 @@ export function createStateSyncSystem(state: State) {
             entityState.tick.lastProcessedInputTimestamp = entity.tick.lastProcessedInputTimestamp || 0;
             entityState.tick.lastProcessedInputTick = entity.tick.lastProcessedInputTick || 0;
         }
-        debugger;
         state.entities.set(entity.id, entityState);
     };
 
@@ -112,7 +112,8 @@ export function createStateSyncSystem(state: State) {
             state.entities.delete(entity.id);
         },
         
-        update: (entities: GameEntity[]) => {
+        update: () => {
+            const entities = ecsWorld.entities;
             // Sync all entities to state
             for (const entity of entities) {
                 syncEntityToState(entity);
