@@ -1,7 +1,7 @@
 import * as CANNON from 'cannon-es';
 import { Vector3, Quaternion, Matrix } from 'babylonjs';
 import { world as ecsWorld } from '../world';
-import { GameEntity, InputComponent } from '../types';
+import { GameEntity, InputComponent, VehicleType } from '../types';
 import { DroneSettings, PlaneSettings } from '../types';
 
 function applyBodyTransform(entity: GameEntity, body: CANNON.Body) {
@@ -18,7 +18,7 @@ function applyBodyTransform(entity: GameEntity, body: CANNON.Body) {
  * Creates a system that handles drone-specific physics
  */
 export function createDroneSystem(cannonWorld: CANNON.World) {
-    const drones = ecsWorld.with("vehicle", "physics", "transform").where(({vehicle}) => vehicle.vehicleType === "drone");
+    const drones = ecsWorld.with("vehicle", "physics", "transform").where(({vehicle}) => vehicle.vehicleType === VehicleType.Drone);
     const momentumDamping = 0.99;
     const moveSpeed = 0.2;
     const rotationSpeed = 0.02;
@@ -191,7 +191,7 @@ export function createDroneSystem(cannonWorld: CANNON.World) {
  * Creates a system that handles plane-specific physics
  */
 export function createPlaneSystem(cannonWorld: CANNON.World) {
-    const planes = ecsWorld.with("vehicle", "physics", "transform").where(({vehicle}) => vehicle.vehicleType === "plane");
+    const planes = ecsWorld.with("vehicle", "physics", "transform").where(({vehicle}) => vehicle.vehicleType === VehicleType.Plane);
     const enginePower = new Map<string, number>();
     const lastDrag = new Map<string, number>();
 

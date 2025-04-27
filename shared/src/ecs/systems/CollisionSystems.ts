@@ -184,7 +184,7 @@ export function handleProjectileCollision(projectile: GameEntity, other: GameEnt
  * Handles collision events for flags
  */
 export function handleFlagCollision(flag: GameEntity, other: GameEntity, event: any) {
-    // Only drones can pick up flags
+    // Only vehicles can pick up flags
     if (other.vehicle && !flag.gameState!.carriedBy) {
         flag.gameState!.carriedBy = other.id;
         other.gameState!.hasFlag = true;

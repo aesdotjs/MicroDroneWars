@@ -1,26 +1,27 @@
-import { GameEntity, PhysicsComponent } from '../types';
+import { GameEntity, PhysicsComponent, EntityType } from '../types';
 import { Vector3, Quaternion, MeshBuilder, Scene, Color4, StandardMaterial, Color3, MultiMaterial, ParticleSystem, Texture } from 'babylonjs';
 import * as CANNON from 'cannon-es';
 import { DroneSettings, PlaneSettings, DefaultWeapons } from '../types';
 import { CollisionGroups, collisionMasks } from '../CollisionGroups';
+import { VehicleType, ProjectileType } from '../types';
 
 
 export function createVehicleBody(
-    vehicleType: 'drone' | 'plane',
+    vehicleType: VehicleType,
     position: Vector3,
     rotation: Quaternion,
 ): CANNON.Body {
     const body = new CANNON.Body({
-        mass: vehicleType === 'drone' ? DroneSettings.mass : PlaneSettings.mass,
+        mass: vehicleType === VehicleType.Drone ? DroneSettings.mass : PlaneSettings.mass,
         material: new CANNON.Material('vehicleMaterial'),
-        collisionFilterGroup: vehicleType === 'drone' ? CollisionGroups.Drones : CollisionGroups.Planes,
+        collisionFilterGroup: vehicleType === VehicleType.Drone ? CollisionGroups.Drones : CollisionGroups.Planes,
         collisionFilterMask: CollisionGroups.Environment | CollisionGroups.Drones | CollisionGroups.Planes,
         position: new CANNON.Vec3(position.x, position.y, position.z),
         quaternion: new CANNON.Quaternion(rotation.x, rotation.y, rotation.z, rotation.w)
     });
 
     // Add collision shape based on vehicle type
-    if (vehicleType === 'drone') {
+    if (vehicleType === VehicleType.Drone) {
         const shape = new CANNON.Box(new CANNON.Vec3(0.5, 0.25, 0.5));
         body.addShape(shape);
     } else {
@@ -31,13 +32,13 @@ export function createVehicleBody(
     return body;
 }
 
-export function createPhysicsComponent(vehicleType: 'drone' | 'plane', body: CANNON.Body): PhysicsComponent {
+export function createPhysicsComponent(vehicleType: VehicleType, body: CANNON.Body): PhysicsComponent {
     let vehicleSettings;
     switch(vehicleType) {
-        case 'drone':
+        case VehicleType.Drone:
             vehicleSettings = DroneSettings;
             break;
-        case 'plane':
+        case VehicleType.Plane:
             vehicleSettings = PlaneSettings;
             break;
     }
@@ -51,7 +52,7 @@ export function createPhysicsComponent(vehicleType: 'drone' | 'plane', body: CAN
  */
 export function createVehicleEntity(
     id: string,
-    vehicleType: 'drone' | 'plane',
+    vehicleType: VehicleType,
     position: Vector3,
     rotation: Quaternion,
     team: number,
@@ -62,7 +63,7 @@ export function createVehicleEntity(
     // Create entity
     return {
         id,
-        type: vehicleType,
+        type: EntityType.Vehicle,
         transform: {
             position: position.clone(),
             rotation: rotation.clone(),
@@ -77,7 +78,7 @@ export function createVehicleEntity(
         },
         gameState: {
             health: 100,
-            maxHealth: vehicleType === 'drone' ? 150 : 100,
+            maxHealth: vehicleType === VehicleType.Drone ? 150 : 100,
             team,
             hasFlag: false,
             carryingFlag: false,
@@ -104,11 +105,11 @@ export function createProjectileEntity(
     speed: number,
     damage: number,
     range: number,
-    type: 'bullet' | 'missile'
+    type: ProjectileType
 ): GameEntity {
     return {
         id,
-        type: 'projectile',
+        type: EntityType.Projectile,
         transform: {
             position: position.clone(),
             rotation: new Quaternion(0, 0, 0, 1),
@@ -155,7 +156,7 @@ export function createFlagEntity(
 
     return {
         id,
-        type: 'flag',
+        type: EntityType.Flag,
         transform: {
             position: position.clone(),
             rotation: new Quaternion(0, 0, 0, 1),

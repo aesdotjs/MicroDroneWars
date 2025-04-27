@@ -106,9 +106,7 @@ export function createGameSystems(
                 effectSystem.cleanup();
                 networkSystem.cleanup();    
                 // Clean up all vehicles
-                const vehicles = ecsWorld.with("vehicle", "render").where(({vehicle}) => 
-                    vehicle.vehicleType === 'drone' || vehicle.vehicleType === 'plane'
-                );
+                const vehicles = ecsWorld.with("vehicle", "render");
                 console.log('Cleaning up vehicles:', vehicles.size);
                 console.log('Game systems cleanup completed');
             } catch (error) {

@@ -4,7 +4,7 @@ import { EntitySchema } from '../../schemas/EntitySchema';
 import { WeaponSchema } from '../../schemas/WeaponSchema';
 import { world as ecsWorld } from '@shared/ecs/world';
 import { Vector3, Quaternion, Scene } from 'babylonjs';
-import { GameEntity, TransformBuffer, ProjectileComponent, VehicleComponent, InputComponent, RenderComponent } from '@shared/ecs/types';
+import { GameEntity, TransformBuffer, ProjectileComponent, VehicleComponent, InputComponent, RenderComponent, EntityType, VehicleType, ProjectileType } from '@shared/ecs/types';
 import * as Colyseus from 'colyseus.js';
 import { createCameraSystem } from './CameraSystem';
 import { createPhysicsWorldSystem } from '@shared/ecs/systems';
@@ -75,7 +75,7 @@ export function createNetworkSystem(
         console.log('Entity added:', { id, type: entity.type });
         const newEntity: GameEntity = {
             id,
-            type: entity.type,
+            type: entity.type as EntityType,
             transform: {
                 position: new Vector3(entity.transform.positionX, entity.transform.positionY, entity.transform.positionZ),
                 rotation: new Quaternion(entity.transform.quaternionX, entity.transform.quaternionY, entity.transform.quaternionZ, entity.transform.quaternionW),
@@ -104,13 +104,13 @@ export function createNetworkSystem(
         };
         
         // Set type-specific properties
-        if (entity.type === 'drone' || entity.type === 'plane') {
+        if (entity.type === EntityType.Vehicle) {
             const vehicleComponent: VehicleComponent = {
-                vehicleType: entity.vehicle.vehicleType as 'drone' | 'plane',
+                vehicleType: entity.vehicle.vehicleType as VehicleType,
                 weapons: Array.from(entity.vehicle.weapons).map(w => ({
                     id: w.id,
                     name: w.name,
-                    projectileType: w.projectileType as 'bullet' | 'missile',
+                    projectileType: w.projectileType as ProjectileType,
                     damage: w.damage,
                     fireRate: w.fireRate,
                     projectileSpeed: w.projectileSpeed,
@@ -122,9 +122,9 @@ export function createNetworkSystem(
                 activeWeaponIndex: entity.vehicle.activeWeaponIndex
             };
             newEntity.vehicle = vehicleComponent;
-            if (newEntity.vehicle.vehicleType === 'drone') {
+            if (newEntity.vehicle.vehicleType === VehicleType.Drone) {
                 createDroneMesh(newEntity, scene);
-            } else if (newEntity.vehicle.vehicleType === 'plane') {
+            } else if (newEntity.vehicle.vehicleType === VehicleType.Plane) {
                 createPlaneMesh(newEntity, scene);
             }
             if (newEntity.owner?.isLocal && newEntity.vehicle) {
@@ -133,9 +133,9 @@ export function createNetworkSystem(
                 physicsWorldSystem.addBody(newEntity);
                 cameraSystem.attachCamera(newEntity);
             }
-        } else if (entity.type === 'projectile') {
+        } else if (entity.type === EntityType.Projectile) {
             const projectileComponent: ProjectileComponent = {
-                projectileType: entity.projectile.projectileType as 'bullet' | 'missile',
+                projectileType: entity.projectile.projectileType as ProjectileType,
                 damage: entity.projectile.damage,
                 range: entity.projectile.range,
                 distanceTraveled: entity.projectile.distanceTraveled,
@@ -203,18 +203,18 @@ export function createNetworkSystem(
         });
 
         // Vehicle changes
-        if (entity.type === 'drone' || entity.type === 'plane') {
+        if (entity.type === EntityType.Vehicle) {
             // Weapon changes
             $(entity.vehicle).onChange(() => {
                 if (!gameEntity?.vehicle) return;
 
-                gameEntity.vehicle.vehicleType = entity.vehicle.vehicleType as 'drone' | 'plane';
+                gameEntity.vehicle.vehicleType = entity.vehicle.vehicleType as VehicleType;
                 gameEntity.vehicle.activeWeaponIndex = entity.vehicle.activeWeaponIndex;
                 $(entity.vehicle).weapons.onChange((weapon: WeaponSchema, index: number) => {
                     gameEntity.vehicle!.weapons[index] = {
                         id: weapon.id,
                         name: weapon.name,
-                        projectileType: weapon.projectileType as 'bullet' | 'missile',
+                        projectileType: weapon.projectileType as ProjectileType,
                         damage: weapon.damage,
                         fireRate: weapon.fireRate,
                         projectileSpeed: weapon.projectileSpeed,
@@ -228,7 +228,7 @@ export function createNetworkSystem(
         }
 
         // Projectile changes
-        if (entity.type === 'projectile') {
+        if (entity.type === EntityType.Projectile) {
             $(entity.projectile).onChange(() => {
                 const gameEntity = ecsWorld.entities.find(e => e.id === id);
                 if (!gameEntity?.projectile) return;

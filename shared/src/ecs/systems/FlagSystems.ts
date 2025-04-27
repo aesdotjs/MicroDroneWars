@@ -1,5 +1,5 @@
 import { world as ecsWorld } from '../world';
-import { GameEntity } from '../types';
+import { EntityType, GameEntity } from '../types';
 import { Vector3 } from 'babylonjs';
 
 const FLAG_CAPTURE_RADIUS = 5;
@@ -9,7 +9,7 @@ const FLAG_RETURN_RADIUS = 10;
  * Flag system that handles flag capture and scoring
  */
 export function createFlagSystem() {
-    const flags = ecsWorld.with("gameState", "transform", "type").where(({type}) => type === "flag");
+    const flags = ecsWorld.with("gameState", "transform", "type").where(({type}) => type === EntityType.Flag);
     const vehicles = ecsWorld.with("vehicle", "transform", "gameState");
 
     return {

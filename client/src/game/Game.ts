@@ -1,5 +1,5 @@
 import { State } from './schemas/State';
-import { InputComponent } from '@shared/ecs/types';
+import { InputComponent, VehicleType } from '@shared/ecs/types';
 import * as Colyseus from 'colyseus.js';
 import { Engine } from 'babylonjs';
 import { useGameDebug } from '@/composables/useGameDebug';
@@ -23,7 +23,7 @@ export class Game {
     /** The player's team number */
     private team!: number;
     /** The player's vehicle type */
-    private vehicleType!: 'drone' | 'plane';
+    private vehicleType!: VehicleType;
     /** The interval for sending ping messages */
     private pingInterval: NodeJS.Timeout | null = null;
     /** The game systems */
@@ -52,7 +52,7 @@ export class Game {
         this.team = teamParam === '1' ? 1 : 0;
         
         // Set vehicle type (default to drone if not specified)
-        this.vehicleType = typeParam === 'plane' ? 'plane' : 'drone';
+        this.vehicleType = typeParam === 'plane' ? VehicleType.Plane : VehicleType.Drone;
 
         // Initialize the engine
         this.engine = new Engine(this.canvas, true);

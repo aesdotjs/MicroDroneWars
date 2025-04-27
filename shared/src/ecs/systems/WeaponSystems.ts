@@ -1,7 +1,7 @@
 import * as CANNON from 'cannon-es';
 import { Vector3, Quaternion } from 'babylonjs';
 import { world as ecsWorld } from '../world';
-import { GameEntity, WeaponComponent, InputComponent } from '../types';
+import { GameEntity, WeaponComponent, InputComponent, ProjectileType, EntityType } from '../types';
 import { CollisionGroups, collisionMasks } from '../CollisionGroups';
 
 /**
@@ -88,9 +88,9 @@ function createProjectile(
     });
 
     // Add collision shape based on projectile type
-    if (weapon.projectileType === 'bullet') {
+    if (weapon.projectileType === ProjectileType.Bullet) {
         body.addShape(new CANNON.Sphere(0.1));
-    } else {
+    } else if (weapon.projectileType === ProjectileType.Missile) {
         body.addShape(new CANNON.Box(new CANNON.Vec3(0.2, 0.2, 0.5)));
     }
 
@@ -100,7 +100,7 @@ function createProjectile(
     // Create and return projectile entity
     return {
         id: `${shooter.id}_${Date.now()}`,
-        type: 'projectile',
+        type: EntityType.Projectile,
         transform: {
             position: shooter.transform!.position.clone(),
             rotation: shooter.transform!.rotation.clone(),
@@ -122,7 +122,7 @@ function createProjectile(
             torque: 0,
         },
         projectile: {
-            projectileType: weapon.projectileType,
+            projectileType: weapon.projectileType as ProjectileType,
             damage: weapon.damage,
             range: weapon.range,
             distanceTraveled: 0,

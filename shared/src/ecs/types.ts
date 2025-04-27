@@ -2,6 +2,27 @@ import { Vector3, Quaternion, Mesh } from 'babylonjs';
 import type { Body as CannonBody } from 'cannon-es';
 import { CollisionGroups } from './CollisionGroups';
 
+export enum VehicleType {
+    Drone = 'drone',
+    Plane = 'plane'
+};
+
+export enum ProjectileType {
+    Bullet = 'bullet',
+    Missile = 'missile'
+};
+
+export enum WeaponType {
+    Chaingun = 'chaingun',
+    Missile = 'missile'
+};
+
+export enum EntityType {
+    Vehicle = 'vehicle',
+    Projectile = 'projectile',
+    Flag = 'flag'
+};
+
 /**
  * Owner component for tracking entity ownership
  */
@@ -42,7 +63,7 @@ export interface GameEntity {
     id: string;
     
     /** Type of entity (e.g. "drone", "plane", "projectile", "flag") */
-    type?: string;
+    type?: EntityType;
 
     /** Transform component for position, rotation and velocity */
     transform?: TransformComponent;
@@ -70,9 +91,6 @@ export interface GameEntity {
 
     /** Game state component for tracking entity state */
     gameState?: GameStateComponent;
-
-    // Vehicle-specific data
-    vehicleType?: string;
 
     // Weapon components
     weapons?: WeaponComponent[];
@@ -109,7 +127,7 @@ export type PhysicsComponent = {
  */
 export interface VehicleComponent {
     /** Type of vehicle (drone or plane) */
-    vehicleType: 'drone' | 'plane';
+    vehicleType: VehicleType;
     /** Array of weapons equipped on the vehicle */
     weapons: WeaponComponent[];
     /** Index of the currently active weapon */
@@ -117,7 +135,7 @@ export interface VehicleComponent {
 }
 
 export type ProjectileComponent = {
-    projectileType: 'bullet' | 'missile';
+    projectileType: ProjectileType;
     damage: number;
     range: number;
     distanceTraveled: number;
@@ -296,7 +314,7 @@ export interface VehiclePhysicsConfig {
     /** Force multiplier for movement */
     forceMultiplier: number;
     /** Type of vehicle (drone or plane) */
-    vehicleType: 'drone' | 'plane';
+    vehicleType: VehicleType;
     /** Thrust force in N */
     thrust: number;
     /** Lift force in N */
@@ -324,7 +342,7 @@ export interface InterpolationConfig {
  */
 export const DroneSettings: VehiclePhysicsConfig = {
     /** Type of vehicle - drone */
-    vehicleType: 'drone',
+    vehicleType: VehicleType.Drone,
     /** Mass of the drone in kg */
     mass: 10,
     /** Linear drag coefficient */
@@ -355,7 +373,7 @@ export const DroneSettings: VehiclePhysicsConfig = {
  */
 export const PlaneSettings: VehiclePhysicsConfig = {
     /** Type of vehicle - plane */
-    vehicleType: 'plane',
+    vehicleType: VehicleType.Plane,
     /** Mass of the plane in kg */
     mass: 50,
     /** Linear drag coefficient */

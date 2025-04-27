@@ -3,7 +3,7 @@ import { ArraySchema, entity } from "@colyseus/schema";
 import { State, EntitySchema, WeaponSchema } from "../schemas";
 import { createPhysicsWorldSystem } from "@shared/ecs/systems/PhysicsWorldSystem";
 import { createPhysicsSystem } from "@shared/ecs/systems/PhysicsSystem";
-import { GameEntity, InputComponent } from "@shared/ecs/types";
+import { GameEntity, InputComponent, VehicleType } from "@shared/ecs/types";
 import { DefaultWeapons } from "@shared/ecs/types";
 import { Vector3, Quaternion } from "babylonjs";
 import { world as ecsWorld } from "@shared/ecs/world";
@@ -186,7 +186,7 @@ export class MicroDroneRoom extends Room<State> {
      * @param client - The client joining the room
      * @param options - Player options including vehicle type and team
      */
-    onJoin(client: Client, options: { vehicleType: "drone" | "plane", team: number }) {
+    onJoin(client: Client, options: { vehicleType: VehicleType, team: number }) {
         this.clientSystem.handleJoin(client, options);
     }
 

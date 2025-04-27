@@ -1,6 +1,6 @@
 import { Scene, Vector3, Mesh, StandardMaterial, Color3, Color4, ParticleSystem, Texture, MeshBuilder, Quaternion, TrailMesh } from 'babylonjs';
 import { world as ecsWorld } from '@shared/ecs/world';
-import { GameEntity } from '@shared/ecs/types';
+import { GameEntity, ProjectileType } from '@shared/ecs/types';
 
 /**
  * Creates a system that handles visual effects for entities
@@ -81,7 +81,7 @@ export function createEffectSystem(scene: Scene) {
         removeProjectileMesh(projectile.id);
 
         let projectileMesh: Mesh;
-        if (projectile.projectile?.projectileType === 'bullet') {
+        if (projectile.projectile?.projectileType === ProjectileType.Bullet) {
             projectileMesh = MeshBuilder.CreateBox('bullet', {
                 width: 0.05,
                 height: 0.05,

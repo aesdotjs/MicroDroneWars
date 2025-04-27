@@ -5,6 +5,7 @@ import { createVehicleEntity } from "@shared/ecs/utils/EntityHelpers";
 import { createPhysicsWorldSystem } from "@shared/ecs/systems/PhysicsWorldSystem";
 import { createStateSyncSystem } from "./StateSyncSystem";
 import { createInputSystem } from "./InputSystems";
+import { VehicleType } from "@shared/ecs/types";
 
 export function createClientSystem(
     physicsWorldSystem: ReturnType<typeof createPhysicsWorldSystem>,
@@ -13,7 +14,7 @@ export function createClientSystem(
     generateEntityId: () => string
 ) {
     return {
-        handleJoin: (client: Client, options: { vehicleType: "drone" | "plane", team: number }) => {
+        handleJoin: (client: Client, options: { vehicleType: VehicleType, team: number }) => {
             console.log(`Client ${client.sessionId} joining with options:`, options);
             
             // Create vehicle entity in ECS world
