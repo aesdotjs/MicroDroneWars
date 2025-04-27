@@ -65,7 +65,6 @@ export function createClientSystem(
             // Remove all entities owned by this client
             const ecsEntities = ecsWorld.with("owner").where(({owner}) => owner.id === client.sessionId);
             console.log('Cleaning up entities for client:', client.sessionId, ecsEntities.size);
-            console.log(ecsWorld.entities);
             for (const entity of ecsEntities) {
                 physicsWorldSystem.removeBody(entity.id);
                 ecsWorld.remove(entity);

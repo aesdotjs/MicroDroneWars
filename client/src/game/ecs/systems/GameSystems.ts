@@ -73,6 +73,10 @@ export function createGameSystems(
             console.error('Error in game systems update:', error);
         }
     }
+    console.log('Setting up render loop...');
+    engine.runRenderLoop(() => {
+        sceneSystem.update();
+    });
     // Start the physics loop
     console.log('Starting physics loop...');
     scene.registerBeforeRender(() => {

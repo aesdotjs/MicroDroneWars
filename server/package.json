@@ -4,7 +4,7 @@
   "description": "MicroDrone Wars Game Server",
   "main": "dist/index.js",
   "scripts": {
-    "start": "ts-node -r tsconfig-paths/register dist/index.js",
+    "start": "ts-node -r tsconfig-paths/register dist/server/src/index.js",
     "dev": "ts-node-dev -r tsconfig-paths/register --respawn --transpile-only -- src/index.ts",
     "build": "tsc",
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -18,7 +18,7 @@
     "@colyseus/schema": "^3.0.0",
     "@colyseus/testing": "^0.16.0",
     "@colyseus/tools": "^0.16.0",
-    "@colyseus/uwebsockets-transport": "^0.16.0",
+    "@colyseus/uwebsockets-transport": "^0.16.8",
     "@colyseus/ws-transport": "^0.16.4",
     "babylonjs": "^8.1.1",
     "babylonjs-loaders": "^8.2.0",

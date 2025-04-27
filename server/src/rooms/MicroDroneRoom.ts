@@ -35,6 +35,8 @@ export class MicroDroneRoom extends Room<State> {
     private environmentSystem!: ReturnType<typeof createEnvironmentSystem>;
     private gameModeSystem!: ReturnType<typeof createGameModeSystem>;
     private clientSystem!: ReturnType<typeof createClientSystem>;
+    private accumulatedTime: number = 0;
+    private isRunning: boolean = true;
 
     /**
      * Initializes the game room when it's created.
@@ -57,6 +59,9 @@ export class MicroDroneRoom extends Room<State> {
             return id;
         }
 
+        // Initialize state sync system
+        this.stateSyncSystem = createStateSyncSystem(this.state);
+
         // Initialize physics world system
         this.physicsWorldSystem = createPhysicsWorldSystem();
         this.state.serverTick = this.physicsWorldSystem.getCurrentTick();
@@ -65,7 +70,6 @@ export class MicroDroneRoom extends Room<State> {
         this.physicsSystem = createPhysicsSystem(this.physicsWorldSystem.getWorld());
 
         // Initialize ECS systems
-        this.stateSyncSystem = createStateSyncSystem(this.state);
         this.healthSystem = createHealthSystem();
         this.flagSystem = createFlagSystem();
         this.inputSystem = createInputSystem(this.physicsSystem);
@@ -94,9 +98,51 @@ export class MicroDroneRoom extends Room<State> {
 
         // Set room options for faster connection
         this.patchRate = 1000 / this.TICK_RATE; // 60 updates per second
-        this.setSimulationInterval((deltaTime) => {
-            this.update(deltaTime);
-        }, 1000 / this.TICK_RATE);
+        const NS_PER_SEC = 1e9;
+        const NS_PER_TICK = NS_PER_SEC / this.TICK_RATE;
+        let lastTime = process.hrtime();
+
+        const step = () => {
+            if (!this.isRunning) return;
+
+            const now = process.hrtime();
+            const diff = process.hrtime(lastTime);
+            const deltaTime = (diff[0] * NS_PER_SEC + diff[1]) / NS_PER_SEC;
+            lastTime = now;
+
+            // Run ECS systems in the correct order
+            this.inputSystem.update(1 / this.TICK_RATE);
+            this.physicsWorldSystem.update(1 / this.TICK_RATE);
+            // Update server tick in state
+            this.state.serverTick = this.physicsWorldSystem.getCurrentTick();
+            this.collisionSystem.update(1 / this.TICK_RATE);
+            this.healthSystem.update(1 / this.TICK_RATE);
+            this.flagSystem.update(1 / this.TICK_RATE);
+            this.environmentSystem.update(1 / this.TICK_RATE);
+            this.gameModeSystem.update(1 / this.TICK_RATE);
+                
+            // Sync ECS state to Colyseus state
+            this.stateSyncSystem.update(Array.from(ecsWorld.entities));
+
+            // Calculate time taken by this tick
+            const tickDiff = process.hrtime(lastTime);
+            const tickTime = tickDiff[0] * NS_PER_SEC + tickDiff[1];
+
+            // If we're running too fast, sleep for the remaining time
+            if (tickTime < NS_PER_TICK) {
+                const sleepTime = NS_PER_TICK - tickTime;
+                const end = process.hrtime.bigint() + BigInt(Math.floor(sleepTime));
+                while (process.hrtime.bigint() < end) {
+                    // Busy wait
+                }
+            }
+
+            // Use setImmediate for the next frame
+            setImmediate(step);
+        };
+
+        // Start the game loop
+        step();
 
         // Set up message handlers
         this.onMessage("command", (client, input: InputComponent) => {
@@ -143,8 +189,6 @@ export class MicroDroneRoom extends Room<State> {
         this.clientSystem.handleJoin(client, options);
     }
 
-
-
     /**
      * Handles a player leaving the room.
      * Returns any carried flag to base and cleans up the player's vehicle.
@@ -159,23 +203,10 @@ export class MicroDroneRoom extends Room<State> {
      * Currently handles physics world cleanup.
      */
     onDispose() {
+        // Stop the game loop
+        this.isRunning = false;
+        
         // Clean up physics world
         this.physicsWorldSystem.dispose();
-    }
-
-    private update(deltaTime: number) {
-        // Run ECS systems in the correct order
-        this.inputSystem.update(1 / this.TICK_RATE);
-        this.physicsWorldSystem.update(1 / this.TICK_RATE);
-        // Update server tick in state
-        this.state.serverTick = this.physicsWorldSystem.getCurrentTick();
-        this.collisionSystem.update(1 / this.TICK_RATE);
-        this.healthSystem.update(1 / this.TICK_RATE);
-        this.flagSystem.update(1 / this.TICK_RATE);
-        this.environmentSystem.update(1 / this.TICK_RATE);
-        this.gameModeSystem.update(1 / this.TICK_RATE);
-        
-        // Sync ECS state to Colyseus state
-        this.stateSyncSystem.update(Array.from(ecsWorld.entities));
     }
 }

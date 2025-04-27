@@ -26,15 +26,18 @@ export function createInputSystem(
         },
 
         update: (dt: number) => {
-            const entities = ecsWorld.with("vehicle", "physics", "tick");
+            const entities = ecsWorld.with("vehicle", "physics", "tick", "owner");
             
             for (const entity of entities) {
-                if (!inputBuffers.has(entity.id)) {
-                    inputBuffers.set(entity.id, []);
+                if (!inputBuffers.has(entity.owner!.id)) {
+                    inputBuffers.set(entity.owner!.id, []);
                 }
 
-                const buffer = inputBuffers.get(entity.id)!;
-                inputProcessor.processInputs(entity, buffer, dt);
+                const buffer = inputBuffers.get(entity.owner!.id)!;
+                const updatedBuffer = inputProcessor.processInputs(entity, buffer, dt);
+                if (updatedBuffer) {
+                    inputBuffers.set(entity.owner!.id, updatedBuffer);
+                }
             }
         },
 

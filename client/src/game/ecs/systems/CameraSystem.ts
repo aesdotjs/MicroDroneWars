@@ -1,18 +1,17 @@
-import { UniversalCamera, Vector3, Quaternion, Scene, Matrix } from 'babylonjs';
+import { ArcRotateCamera, Vector3, Quaternion, Scene, Matrix } from 'babylonjs';
 import { world as ecsWorld } from '@shared/ecs/world';
 import { GameEntity } from '@shared/ecs/types';
 
 /**
  * Creates a system that handles camera control and following
  */
-export function createCameraSystem(scene: Scene, camera: UniversalCamera) {
+export function createCameraSystem(scene: Scene, camera: ArcRotateCamera) {
     console.log('Creating camera system...');
     
     // Find local player using owner component
     let attachedEntity: GameEntity | null = null;
     const FOLLOW_DISTANCE = 10;
     const FOLLOW_HEIGHT = 5;
-    const FOLLOW_OFFSET = new Vector3(0, FOLLOW_HEIGHT, FOLLOW_DISTANCE);
     const FOLLOW_SPEED = 0.1;
     const ROTATION_SPEED = 0.1;
 
@@ -30,38 +29,37 @@ export function createCameraSystem(scene: Scene, camera: UniversalCamera) {
                 return;
             }
 
-            // Calculate target position
-            const targetPosition = attachedEntity.transform.position.clone();
-            const targetRotation = attachedEntity.transform.rotation.clone();
+            const position = attachedEntity.transform.position;
+            const quaternion = attachedEntity.transform.rotation;
 
-            // Transform follow offset by player rotation
-            const rotatedOffset = FOLLOW_OFFSET.clone();
-            const rotationMatrix = new Matrix();
-            targetRotation.toRotationMatrix(rotationMatrix);
-            Vector3.TransformNormalToRef(rotatedOffset, rotationMatrix, rotatedOffset);
+            // Get the forward vector from the quaternion
+            const forward = new Vector3(0, 0, 1);
+            const up = new Vector3(0, 1, 0);
+            forward.rotateByQuaternionToRef(quaternion, forward);
+            up.rotateByQuaternionToRef(quaternion, up);
 
-            // Calculate desired camera position
-            const desiredPosition = targetPosition.add(rotatedOffset);
+            // Calculate camera position using spherical coordinates
+            const distance = FOLLOW_DISTANCE;
+            const heightOffset = FOLLOW_HEIGHT;
 
-            // Smoothly move camera
-            camera.position = Vector3.Lerp(
-                camera.position,
-                desiredPosition,
-                FOLLOW_SPEED
-            );
+            // Get the vehicle's forward direction projected onto XZ plane
+            const forwardFlat = new Vector3(forward.x, 0, forward.z).normalize();
 
-            // Smoothly rotate camera to look at player
-            const currentLookDirection = camera.getDirection(Vector3.Forward());
-            const targetLookDirection = targetPosition.subtract(camera.position).normalize();
-            const newLookDirection = Vector3.Lerp(
-                currentLookDirection,
-                targetLookDirection,
-                ROTATION_SPEED
-            );
+            // Calculate pitch angle (clamped to prevent flip)
+            const pitchAngle = Math.asin(forward.y);
+            const clampedPitch = Math.max(-Math.PI * 0.49, Math.min(Math.PI * 0.49, pitchAngle));
+            
+            // Calculate camera position
+            const cameraPos = position.clone();
+            cameraPos.addInPlace(new Vector3(
+                -forwardFlat.x * distance * Math.cos(-clampedPitch),
+                heightOffset + distance * Math.sin(-clampedPitch),
+                -forwardFlat.z * distance * Math.cos(-clampedPitch)
+            ));
 
-            // Set camera rotation to look at player
-            const lookAt = camera.position.add(newLookDirection);
-            camera.setTarget(lookAt);
+            // Update camera position and target
+            camera.position = cameraPos;
+            camera.target = position.add(new Vector3(0, 2, 0));
         }
     };
 } 

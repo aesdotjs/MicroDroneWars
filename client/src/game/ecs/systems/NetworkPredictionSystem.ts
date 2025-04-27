@@ -3,11 +3,17 @@ import { InputComponent, TransformBuffer, InterpolationConfig } from '@shared/ec
 import { Vector3, Quaternion } from 'babylonjs';
 import { createIdleInput } from '@shared/ecs/utils/InputHelpers';
 import { createPhysicsSystem } from '@shared/ecs/systems/PhysicsSystem';
+import { createPhysicsWorldSystem } from '@shared/ecs/systems/PhysicsWorldSystem';
+import { Room } from 'colyseus.js';
+import { State } from '../../schemas/State';
+
 /**
  * Creates a system that handles network prediction, reconciliation, and interpolation
  */
 export function createNetworkPredictionSystem(
-    physicsSystem:  ReturnType<typeof createPhysicsSystem>
+    physicsSystem:  ReturnType<typeof createPhysicsSystem>,
+    physicsWorldSystem: ReturnType<typeof createPhysicsWorldSystem>,
+    room: Room<State>
 ) {
     // Configuration
     const interpolationConfig: InterpolationConfig = {
@@ -66,7 +72,6 @@ export function createNetworkPredictionSystem(
     function interpolateRemotes() {
         const now = Date.now() - networkLatency;
         const targetTime = now - currentInterpolationDelay;
-        
         TransformBuffers.forEach((buffer, id) => {
             if (buffer.length < 2) return;
             
@@ -154,7 +159,8 @@ export function createNetworkPredictionSystem(
 
             const buffers = TransformBuffers.get(id)!;
             const isLocalPlayer = entity.owner?.isLocal;
-
+            
+            console.log("isLocalPlayer", isLocalPlayer);
             if (isLocalPlayer) {
                 // Get current client state
                 const clientState = {
@@ -209,7 +215,6 @@ export function createNetworkPredictionSystem(
             } else {
                 // Buffer remote states for interpolation
                 buffers.push(state);
-                
                 // Keep buffer size reasonable
                 if (buffers.length > interpolationConfig.maxBufferSize) {
                     buffers.shift();
@@ -220,26 +225,47 @@ export function createNetworkPredictionSystem(
         /**
          * Adds a new input to the pending inputs buffer
          */
-        addInput: (id: string, input: InputComponent) => {
+        addInput: (dt: number, id: string, input: InputComponent, isIdle: boolean) => {
             if (!pendingInputs.has(id)) {
                 pendingInputs.set(id, []);
             }
 
             const inputs = pendingInputs.get(id)!;
-            inputs.push(input);
+            const currentTick = physicsWorldSystem.getCurrentTick();
+
+            // Skip if we've already processed this tick
+            if (currentTick === lastProcessedInputTicks.get(id)) {
+                return;
+            }
+
+            // Create final input with timestamp and tick
+            const finalInput: InputComponent = {
+                ...input,
+                timestamp: Date.now(),
+                tick: currentTick
+            };
+
+            // Update local player immediately
+            const entity = ecsWorld.with("physics", "vehicle", "transform", "owner").where(({owner}) => owner?.isLocal).entities[0];
+            if (entity) {
+                physicsSystem.update(dt, entity, finalInput);
+            }
+
+            // Only send and store non-idle inputs
+            if (!isIdle) {
+                room.send("command", finalInput);
+                inputs.push(finalInput);
+                lastProcessedInputTicks.set(id, currentTick);
+            }
 
             // Keep buffer size reasonable
             if (inputs.length > MAX_PENDING_INPUTS) {
                 inputs.splice(0, inputs.length - MAX_PENDING_INPUTS);
             }
+        },
 
-            // Apply input immediately to local player
-            const entity = ecsWorld.entities.find(e => e.id === id);
-            if (entity && entity.owner?.isLocal) {
-                // If no input provided, use idle input
-                const inputToApply = input || createIdleInput(entity.tick!.tick);
-                physicsSystem.update(1/60, entity, inputToApply);
-            }
+        sendCommand: (input: InputComponent) => {
+            room.send("command", input);
         },
 
         /**

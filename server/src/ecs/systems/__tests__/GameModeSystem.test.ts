@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { Vector3, Quaternion } from 'babylonjs'
-import { world as ecsWorld } from '../../world'
+import { world as ecsWorld } from '@shared/ecs/world'
 import { createGameModeSystem, GameMode, GameModeConfig } from '../GameModeSystem'
-import { GameEntity } from '../../types'
+import { GameEntity } from '@shared/ecs/types'
 
 describe('GameModeSystem', () => {
   beforeEach(() => {

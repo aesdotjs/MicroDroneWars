@@ -87,9 +87,6 @@ export function createDroneSystem(cannonWorld: CANNON.World) {
             const forwardDirection = new Vector3(forward.x, 0, forward.z).normalize();
             const rightDirection = new Vector3(right.x, 0, right.z).normalize();
             
-            // Movement controls relative to vehicle orientation
-            const moveSpeed = settings.forceMultiplier * dt * 60;
-            
             // Forward/backward movement
             if (input.forward) {
                 body.velocity.x += forwardDirection.x * moveSpeed;
@@ -120,7 +117,7 @@ export function createDroneSystem(cannonWorld: CANNON.World) {
                 targetAltitude.set(entity.id, body.position.y - body.velocity.y * dt);
             }
 
-            // Apply pitch control
+            // Apply pitch control with angle limiting
             if (input.pitchUp || input.pitchDown) {
                 const currentPitch = Math.asin(2 * (
                     body.quaternion.w * body.quaternion.x -
@@ -143,20 +140,37 @@ export function createDroneSystem(cannonWorld: CANNON.World) {
                 body.quaternion = yawQuat.mult(body.quaternion);
             }
 
-            // Apply mouse control
+            // Apply mouse control with quaternion-based rotation
             if (input.mouseDelta) {
-                const yawAmount = -input.mouseDelta.x * mouseSensitivity;
-                const pitchAmount = -input.mouseDelta.y * mouseSensitivity;
-                
-                // Apply yaw (horizontal mouse movement)
-                const yawQuat = new CANNON.Quaternion();
-                yawQuat.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), yawAmount);
-                body.quaternion = yawQuat.mult(body.quaternion);
-                
-                // Apply pitch (vertical mouse movement)
-                const pitchQuat = new CANNON.Quaternion();
-                pitchQuat.setFromAxisAngle(new CANNON.Vec3(right.x, right.y, right.z), pitchAmount);
-                body.quaternion = pitchQuat.mult(body.quaternion);
+                // Yaw (horizontal mouse movement) - using local forward axis to prevent roll
+                if (input.mouseDelta.x !== 0) {
+                    const yawAmount = input.mouseDelta.x * mouseSensitivity;
+                    // Get the current forward direction projected onto XZ plane
+                    const forwardFlat = new Vector3(forward.x, 0, forward.z).normalize();
+                    // Create rotation around world up axis
+                    const yawQuat = new CANNON.Quaternion();
+                    yawQuat.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), yawAmount);
+                    // Apply rotation
+                    body.quaternion = yawQuat.mult(body.quaternion);
+                }
+
+                // Pitch (vertical mouse movement) with angle limiting
+                if (input.mouseDelta.y !== 0) {
+                    const pitchAmount = input.mouseDelta.y * mouseSensitivity;
+                    
+                    // Calculate current pitch angle
+                    const currentPitch = Math.asin(2 * (
+                        body.quaternion.w * body.quaternion.x -
+                        body.quaternion.y * body.quaternion.z
+                    ));
+                    
+                    // Only apply pitch if within limits
+                    if (Math.abs(currentPitch + pitchAmount) < maxPitchAngle) {
+                        const pitchQuat = new CANNON.Quaternion();
+                        pitchQuat.setFromAxisAngle(new CANNON.Vec3(right.x, right.y, right.z), pitchAmount);
+                        body.quaternion = pitchQuat.mult(body.quaternion);
+                    }
+                }
             }
 
             // Apply momentum damping

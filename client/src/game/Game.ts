@@ -120,15 +120,6 @@ export class Game {
     }
 
     /**
-     * Sends a command update to the server
-     */
-    public sendCommandUpdate(input: InputComponent): void {
-        if (this.gameSystems) {
-            this.gameSystems.networkSystem.sendCommand(input);
-        }
-    }
-
-    /**
      * Stops the ping interval
      */
     public stopPing(): void {

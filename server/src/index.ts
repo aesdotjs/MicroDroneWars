@@ -3,7 +3,7 @@ import express from "express";
 import http from "http";
 import path from "path";
 import { MicroDroneRoom } from "./rooms/MicroDroneRoom";
-import { WebSocket } from "ws";
+import { uWebSocketsTransport } from "@colyseus/uwebsockets-transport"
 
 /**
  * Main server entry point for MicroDroneWars.
@@ -12,6 +12,7 @@ import { WebSocket } from "ws";
  */
 const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 2567;
 const app = express();
+const transport = new uWebSocketsTransport();
 
 /**
  * Creates the HTTP server and Colyseus game server.
@@ -20,6 +21,7 @@ const app = express();
 const server = http.createServer(app);
 const gameServer = new Server({ 
   server,
+  transport,
   // Development settings
   pingInterval: 0, // Disable ping interval during development
   pingMaxRetries: 3,

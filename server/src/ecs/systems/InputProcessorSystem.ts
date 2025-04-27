@@ -39,7 +39,7 @@ export function createInputProcessorSystem(
                     processedCount++;
                 }
             }
-
+            sortedInputs.splice(0, processedCount);
             // Update last processed tick and timestamp
             if (processedCount > 0) {
                 lastProcessedInputTicks.set(entity.id, lastProcessedTick);
@@ -47,7 +47,7 @@ export function createInputProcessorSystem(
             }
 
             // Return number of processed inputs
-            return processedCount;
+            return sortedInputs;
         },
 
         /**

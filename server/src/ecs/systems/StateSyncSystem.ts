@@ -7,7 +7,14 @@ export function createStateSyncSystem(state: State) {
     /**
      * Converts a GameEntity to an EntitySchema and updates the state
      */
-    const syncEntityToState = (entity: GameEntity, entityState: EntitySchema) => {
+    const syncEntityToState = (entity: GameEntity) => {
+        let entityState = state.entities.get(entity.id)
+        if (!entityState) {
+            console.log(`Creating entity state for:`, entity.id);
+            entityState = new EntitySchema();
+            entityState.id = entity.id;
+            entityState.type = entity.type || "";
+        }
         // Update transform data
         if (entity.transform) {
             if (entity.transform.position) {
@@ -91,15 +98,13 @@ export function createStateSyncSystem(state: State) {
             entityState.tick.lastProcessedInputTimestamp = entity.tick.lastProcessedInputTimestamp || 0;
             entityState.tick.lastProcessedInputTick = entity.tick.lastProcessedInputTick || 0;
         }
+        debugger;
+        state.entities.set(entity.id, entityState);
     };
 
     return {
         addEntity: (entity: GameEntity) => {
-            const entityState = new EntitySchema();
-            entityState.id = entity.id;
-            entityState.type = entity.type || "";
-            syncEntityToState(entity, entityState);
-            state.entities.set(entity.id, entityState);
+            syncEntityToState(entity);
         },
 
         removeEntity: (entity: GameEntity) => {
@@ -110,9 +115,7 @@ export function createStateSyncSystem(state: State) {
         update: (entities: GameEntity[]) => {
             // Sync all entities to state
             for (const entity of entities) {
-                const entityState = state.entities.get(entity.id);
-                if (!entityState) continue;
-                syncEntityToState(entity, entityState);
+                syncEntityToState(entity);
             }
         }
     };

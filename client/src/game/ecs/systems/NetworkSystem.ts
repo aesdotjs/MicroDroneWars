@@ -25,7 +25,11 @@ export function createNetworkSystem(
     console.log('Creating network system...');
     const $ = Colyseus.getStateCallbacks(room);
 
-    const networkPredictionSystem = createNetworkPredictionSystem(physicsSystem);
+    const networkPredictionSystem = createNetworkPredictionSystem(
+        physicsSystem,
+        physicsWorldSystem,
+        room
+    );
 
     // Network quality tracking
     let networkLatency = 0;
@@ -103,16 +107,16 @@ export function createNetworkSystem(
             const vehicleComponent: VehicleComponent = {
                 vehicleType: entity.vehicle.vehicleType as 'drone' | 'plane',
                 weapons: Array.from(entity.vehicle.weapons).map(w => ({
-                    id: w.id,
-                    name: w.name,
-                    projectileType: w.projectileType as 'bullet' | 'missile',
-                    damage: w.damage,
-                    fireRate: w.fireRate,
-                    projectileSpeed: w.projectileSpeed,
-                    cooldown: w.cooldown,
-                    range: w.range,
-                    isOnCooldown: w.isOnCooldown,
-                    lastFireTime: w.lastFireTime
+                id: w.id,
+                name: w.name,
+                projectileType: w.projectileType as 'bullet' | 'missile',
+                damage: w.damage,
+                fireRate: w.fireRate,
+                projectileSpeed: w.projectileSpeed,
+                cooldown: w.cooldown,
+                range: w.range,
+                isOnCooldown: w.isOnCooldown,
+                lastFireTime: w.lastFireTime
                 })),
                 activeWeaponIndex: entity.vehicle.activeWeaponIndex
             };
@@ -150,8 +154,8 @@ export function createNetworkSystem(
                 console.log('Entity not found in local map:', id);
                 return;
             }
-            
-            // Update transform data
+
+             // Update transform data
             const transformBuffer: TransformBuffer = {
                 transform: {
                     position: new Vector3(entity.transform.positionX, entity.transform.positionY, entity.transform.positionZ),
@@ -191,23 +195,23 @@ export function createNetworkSystem(
                 gameEntity.owner.id = entity.owner.id;
                 gameEntity.owner.isLocal = room.sessionId === entity.owner.id;
             }
-    
-            // Update type-specific data
+
+        // Update type-specific data
             if ((entity.type === 'drone' || entity.type === 'plane') && gameEntity.vehicle) {
                 const vehicle = gameEntity.vehicle;
                 vehicle.vehicleType = entity.vehicle.vehicleType as 'drone' | 'plane';
                 vehicle.weapons = Array.from(entity.vehicle.weapons).map(w => ({
-                    id: w.id,
-                    name: w.name,
-                    projectileType: w.projectileType as 'bullet' | 'missile',
-                    damage: w.damage,
-                    fireRate: w.fireRate,
-                    projectileSpeed: w.projectileSpeed,
-                    cooldown: w.cooldown,
-                    range: w.range,
-                    isOnCooldown: w.isOnCooldown,
-                    lastFireTime: w.lastFireTime
-                }));
+                id: w.id,
+                name: w.name,
+                projectileType: w.projectileType as 'bullet' | 'missile',
+                damage: w.damage,
+                fireRate: w.fireRate,
+                projectileSpeed: w.projectileSpeed,
+                cooldown: w.cooldown,
+                range: w.range,
+                isOnCooldown: w.isOnCooldown,
+                lastFireTime: w.lastFireTime
+            }));
                 vehicle.activeWeaponIndex = entity.vehicle.activeWeaponIndex;
             } else if (entity.type === 'projectile' && gameEntity.projectile) {
                 gameEntity.projectile.damage = entity.projectile.damage;
@@ -216,8 +220,8 @@ export function createNetworkSystem(
                 gameEntity.projectile.sourceId = entity.projectile.sourceId;
                 gameEntity.projectile.timestamp = entity.tick.timestamp;
                 gameEntity.projectile.tick = entity.tick.tick;
-            }
-        });
+        }
+    });
     });
 
 
@@ -237,14 +241,11 @@ export function createNetworkSystem(
             quality: networkQuality,
             jitter: networkJitter
         }),
-        sendCommand: (input: InputComponent) => {
-            room.send("command", input);
-        },
         sendPing: () => {
             room.send("ping", Date.now());
         },
         update: (dt: number) => {
-            networkPredictionSystem.addInput(room.sessionId, inputSystem.getInput());
+            networkPredictionSystem.addInput(dt,room.sessionId, inputSystem.getInput(), inputSystem.isIdle());
         },
         cleanup: () => {
             networkPredictionSystem.cleanup();

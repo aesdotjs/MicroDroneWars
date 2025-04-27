@@ -1,4 +1,4 @@
-import { Scene, Engine, Vector3, HemisphericLight, UniversalCamera, Color4, Quaternion, MeshBuilder, StandardMaterial, Color3, DirectionalLight, ShadowGenerator, GlowLayer } from 'babylonjs';
+import { Scene, Engine, Vector3, HemisphericLight, ArcRotateCamera, Color4, Quaternion, MeshBuilder, StandardMaterial, Color3, DirectionalLight, ShadowGenerator, GlowLayer, Vector2 } from 'babylonjs';
 import { createGroundMesh } from '@shared/ecs/systems/EnvironmentSystems';
 
 import { world as ecsWorld } from '@shared/ecs/world';
@@ -20,7 +20,7 @@ export function createSceneSystem(engine: Engine) {
     console.log('Lights setup complete');
 
     console.log('Setting up camera...');
-    const camera = setupCamera(scene);
+    const camera = setupCamera(scene, engine);
     console.log('Camera setup complete');
 
     console.log('Setting up glow layer...');
@@ -30,11 +30,6 @@ export function createSceneSystem(engine: Engine) {
     console.log('Setting up environment...');
     setupEnvironment(scene, shadowGenerator);
     console.log('Environment setup complete');
-
-    console.log('Setting up render loop...');
-    engine.runRenderLoop(() => {
-        scene.render();
-    });
 
     // Find entities with render and transform components
     const renderables = ecsWorld.with("render", "transform");
@@ -48,7 +43,6 @@ export function createSceneSystem(engine: Engine) {
             // Update entity positions and rotations
             for (const entity of renderables) {
                 if (!entity.render?.mesh || !entity.transform) continue;
-
                 // Update position
                 entity.render.mesh.position.copyFrom(entity.transform.position);
 
@@ -101,21 +95,45 @@ function setupLights(scene: Scene): ShadowGenerator {
 /**
  * Sets up the camera for the scene
  */
-function setupCamera(scene: Scene): UniversalCamera {
-    const camera = new UniversalCamera("camera", new Vector3(0, 5, 10), scene);
-    
-    // Configure camera settings
-    camera.minZ = 0.1;
-    camera.speed = 0.5;
-    camera.angularSensibility = 5000;
-    camera.inertia = 0.9;
-    camera.fov = 1.2;
-    
-    // Remove default inputs and disable camera controls
-    camera.inputs.clear();
-    camera.detachControl();
-    
-    return camera;
+function setupCamera(scene: Scene, engine: Engine): ArcRotateCamera {
+    try {
+        console.log('Setting up camera...');
+        // Create an ArcRotateCamera with initial position
+        const camera = new ArcRotateCamera(
+            "camera",
+            0, // alpha
+            1, // beta
+            10, // radius
+            Vector3.Zero(),
+            scene
+        );
+        
+        // Configure camera settings
+        camera.minZ = 0.1;
+        camera.speed = 0.5;
+        camera.angularSensibilityX = 5000;
+        camera.angularSensibilityY = 5000;
+        camera.inertia = 0.9;
+        camera.fov = 1.2;
+        
+        // Set target offset
+        camera.targetScreenOffset = new Vector2(-0.5, -1);
+        
+        // Remove default inputs and disable camera controls
+        camera.inputs.clear();
+        camera.detachControl();
+        
+        console.log('Camera setup complete:', {
+            position: camera.position,
+            target: camera.target,
+            fov: camera.fov
+        });
+
+        return camera;
+    } catch (error) {
+        console.error('Camera setup error:', error);
+        throw error;
+    }
 }
 
 /**
