@@ -20,7 +20,9 @@ export enum WeaponType {
 export enum EntityType {
     Vehicle = 'vehicle',
     Projectile = 'projectile',
-    Flag = 'flag'
+    Flag = 'flag',
+    Checkpoint = 'checkpoint',
+    Environment = 'environment'
 };
 
 /**

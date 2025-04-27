@@ -73,7 +73,7 @@ export function createVehicleEntity(
         physics: createPhysicsComponent(vehicleType, body),
         vehicle: {
             vehicleType,
-            weapons: Object.values(DefaultWeapons),
+            weapons: Object.values(DefaultWeapons).map((w, i) => ({...w, id: `${id}-weapon-${i}`})),
             activeWeaponIndex: 0
         },
         gameState: {

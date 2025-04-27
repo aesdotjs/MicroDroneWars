@@ -1,7 +1,7 @@
 import * as CANNON from 'cannon-es';
 import { Vector3, Quaternion, Mesh, MeshBuilder, StandardMaterial, Color3 } from 'babylonjs';
 import { world as ecsWorld } from '../world';
-import { GameEntity } from '../types';
+import { EntityType, GameEntity } from '../types';
 import { CollisionGroups } from '../CollisionGroups';
 
 /**
@@ -31,7 +31,7 @@ export function createEnvironmentSystem(cannonWorld: CANNON.World) {
     // Create ground entity
     const groundEntity: GameEntity = {
         id: 'ground',
-        type: 'environment',
+        type: EntityType.Environment,
         transform: {
         position: new Vector3(0, 0, 0),
         rotation: new Quaternion(0, 0, 0, 1),

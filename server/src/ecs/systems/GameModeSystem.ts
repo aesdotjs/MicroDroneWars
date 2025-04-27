@@ -1,5 +1,5 @@
 import { world as ecsWorld } from '@shared/ecs/world';
-import { GameEntity } from '@shared/ecs/types';
+import { EntityType, GameEntity } from '@shared/ecs/types';
 import { Vector3, Quaternion } from 'babylonjs';
 import { createFlagEntity } from '@shared/ecs/utils/EntityHelpers';
 import { createPhysicsWorldSystem } from '@shared/ecs/systems/PhysicsWorldSystem';
@@ -102,7 +102,7 @@ function initializeRace(config: GameModeConfig) {
     config.raceCheckpoints.forEach((position, index) => {
         const checkpoint: GameEntity = {
             id: `checkpoint_${index}`,
-            type: 'checkpoint',
+            type: EntityType.Checkpoint,
             transform: {
                 position: position.clone(),
                 rotation: Quaternion.Identity(),
