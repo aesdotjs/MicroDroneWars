@@ -1,6 +1,6 @@
 import { world as ecsWorld } from '../world';
 import { EntityType, GameEntity } from '../types';
-import { Vector3 } from 'babylonjs';
+import { Vector3 } from '@babylonjs/core';
 
 const FLAG_CAPTURE_RADIUS = 5;
 const FLAG_RETURN_RADIUS = 10;

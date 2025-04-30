@@ -2,16 +2,18 @@ import { world as ecsWorld } from '@shared/ecs/world';
 import { GameEntity, InputComponent } from '@shared/ecs/types';
 import { createInputProcessorSystem } from './InputProcessorSystem';
 import { createPhysicsSystem } from '@shared/ecs/systems/PhysicsSystem';
-
+import { createPhysicsWorldSystem } from '@shared/ecs/systems/PhysicsWorldSystem';
 const MAX_INPUT_BUFFER_SIZE = 60; // 1 second worth of inputs at 60fps
 
 export function createInputSystem(
-    physicsSystem: ReturnType<typeof createPhysicsSystem>
+    physicsSystem: ReturnType<typeof createPhysicsSystem>,
+    physicsWorldSystem: ReturnType<typeof createPhysicsWorldSystem>
 ) {
     const inputBuffers = new Map<string, InputComponent[]>();
-    const inputProcessor = createInputProcessorSystem(physicsSystem);
+    const inputProcessor = createInputProcessorSystem(physicsSystem, physicsWorldSystem);
 
     return {
+        inputProcessor,
         addInput: (id: string, input: InputComponent) => {
             if (!inputBuffers.has(id)) {
                 inputBuffers.set(id, []);

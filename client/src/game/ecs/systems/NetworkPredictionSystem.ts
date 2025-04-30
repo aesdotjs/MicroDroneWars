@@ -1,11 +1,11 @@
 import { world as ecsWorld } from '@shared/ecs/world';
 import { InputComponent, TransformBuffer, InterpolationConfig } from '@shared/ecs/types';
-import { Vector3, Quaternion } from 'babylonjs';
+import { Vector3, Quaternion } from '@babylonjs/core';
 import { createIdleInput } from '@shared/ecs/utils/InputHelpers';
 import { createPhysicsSystem } from '@shared/ecs/systems/PhysicsSystem';
 import { createPhysicsWorldSystem } from '@shared/ecs/systems/PhysicsWorldSystem';
 import { Room } from 'colyseus.js';
-import { State } from '../../schemas/State';
+import { State } from '@shared/schemas';
 
 /**
  * Creates a system that handles network prediction, reconciliation, and interpolation
@@ -21,6 +21,8 @@ export function createNetworkPredictionSystem(
         maxBufferSize: 20,
         interpolationFactor: 0.2
     };
+
+    const localPlayerEntityId = ecsWorld.with("owner").where(({owner}) => owner?.isLocal).entities[0]?.id;
 
     // State buffers for each entity
     const TransformBuffers = new Map<string, TransformBuffer[]>();
@@ -73,23 +75,68 @@ export function createNetworkPredictionSystem(
         const now = Date.now() - networkLatency;
         const targetTime = now - currentInterpolationDelay;
         TransformBuffers.forEach((buffer, id) => {
-            if (buffer.length < 2) return;
+            if (buffer.length < 1 || id === localPlayerEntityId) return;
             
+            const entity = ecsWorld.entities.find(e => e.id === id);
+            if (!entity || !entity.transform) return;
+
+            // If we only have one state, use it directly
+            if (buffer.length === 1) {
+                const state = buffer[0];
+                entity.transform.position.copyFrom(state.transform.position);
+                entity.transform.rotation.copyFrom(state.transform.rotation);
+                entity.transform.velocity.copyFrom(state.transform.velocity);
+                entity.transform.angularVelocity.copyFrom(state.transform.angularVelocity);
+                return;
+            }
+
             // Find states bracketing target time
             let i = 0;
             while (i < buffer.length - 1 && buffer[i + 1].tick.timestamp <= targetTime) {
                 i++;
             }
 
-            if (i >= buffer.length - 1) return;
+            // If we're at the end of the buffer, extrapolate from the last two states
+            if (i >= buffer.length - 1) {
+                const lastState = buffer[buffer.length - 1];
+                const secondLastState = buffer[buffer.length - 2];
+                const timeSinceLastUpdate = targetTime - lastState.tick.timestamp;
+                
+                // Only extrapolate if the time gap is reasonable (e.g., less than 1 second)
+                if (timeSinceLastUpdate < 1000) {
+                    // Calculate velocity from last two states
+                    const dt = lastState.tick.timestamp - secondLastState.tick.timestamp;
+                    if (dt > 0) {
+                        const velocity = new Vector3(
+                            (lastState.transform.position.x - secondLastState.transform.position.x) / dt,
+                            (lastState.transform.position.y - secondLastState.transform.position.y) / dt,
+                            (lastState.transform.position.z - secondLastState.transform.position.z) / dt
+                        );
+                        
+                        // Extrapolate position
+                        entity.transform.position.x = lastState.transform.position.x + velocity.x * timeSinceLastUpdate;
+                        entity.transform.position.y = lastState.transform.position.y + velocity.y * timeSinceLastUpdate;
+                        entity.transform.position.z = lastState.transform.position.z + velocity.z * timeSinceLastUpdate;
+                        
+                        // Keep last known rotation and velocities
+                        entity.transform.rotation.copyFrom(lastState.transform.rotation);
+                        entity.transform.velocity.copyFrom(lastState.transform.velocity);
+                        entity.transform.angularVelocity.copyFrom(lastState.transform.angularVelocity);
+                    }
+                } else {
+                    // If gap is too large, just use the last known state
+                    entity.transform.position.copyFrom(lastState.transform.position);
+                    entity.transform.rotation.copyFrom(lastState.transform.rotation);
+                    entity.transform.velocity.copyFrom(lastState.transform.velocity);
+                    entity.transform.angularVelocity.copyFrom(lastState.transform.angularVelocity);
+                }
+                return;
+            }
             
             const a = buffer[i];
             const b = buffer[i + 1];
             const t = (targetTime - a.tick.timestamp) / (b.tick.timestamp - a.tick.timestamp);
             
-            const entity = ecsWorld.entities.find(e => e.id === id);
-            if (!entity || !entity.transform) return;
-
             // Interpolate position
             entity.transform.position.x = a.transform.position.x + (b.transform.position.x - a.transform.position.x) * t;
             entity.transform.position.y = a.transform.position.y + (b.transform.position.y - a.transform.position.y) * t;
@@ -161,47 +208,73 @@ export function createNetworkPredictionSystem(
             const isLocalPlayer = entity.owner?.isLocal;
             
             if (isLocalPlayer) {
-                // Get current client state
-                const clientState = {
-                    position: entity.transform.position.clone(),
-                    quaternion: entity.transform.rotation.clone()
-                };
+                physicsWorldSystem.setCurrentTick(state.tick.tick);
+                // // Get current client state
+                // const clientState = {
+                //     position: entity.transform.position.clone(),
+                //     quaternion: entity.transform.rotation.clone()
+                // };
 
-                const serverState = {
-                    position: new Vector3(state.transform.position.x, state.transform.position.y, state.transform.position.z),
-                    quaternion: new Quaternion(
-                        state.transform.rotation.x,
-                        state.transform.rotation.y,
-                        state.transform.rotation.z,
-                        state.transform.rotation.w
-                    )
-                };
+                // const serverState = {
+                //     position: new Vector3(state.transform.position.x, state.transform.position.y, state.transform.position.z),
+                //     quaternion: new Quaternion(
+                //         state.transform.rotation.x,
+                //         state.transform.rotation.y,
+                //         state.transform.rotation.z,
+                //         state.transform.rotation.w
+                //     )
+                // };
 
-                // Calculate position and rotation errors
-                const positionError = serverState.position.subtract(clientState.position).length();
-                const dot = Math.abs(Quaternion.Dot(clientState.quaternion, serverState.quaternion));
-                const rotationError = Math.acos(Math.min(1, dot));
+                // // Calculate position and rotation errors
+                // const positionError = serverState.position.subtract(clientState.position).length();
+                // const dot = Math.abs(Quaternion.Dot(clientState.quaternion, serverState.quaternion));
+                // const rotationError = Math.acos(Math.min(1, dot));
 
-                // If errors are significant, reconcile
-                if (positionError > RECONCILIATION_POSITION_THRESHOLD ||
-                    rotationError > RECONCILIATION_ROTATION_THRESHOLD) {
+                // // If errors are significant, reconcile
+                // if (positionError > RECONCILIATION_POSITION_THRESHOLD ||
+                //     rotationError > RECONCILIATION_ROTATION_THRESHOLD) {
                     
-                    // Smoothly correct position
-                    entity.transform.position.x += (serverState.position.x - clientState.position.x) * RECONCILIATION_POSITION_SMOOTHING;
-                    entity.transform.position.y += (serverState.position.y - clientState.position.y) * RECONCILIATION_POSITION_SMOOTHING;
-                    entity.transform.position.z += (serverState.position.z - clientState.position.z) * RECONCILIATION_POSITION_SMOOTHING;
+                //     // Smoothly correct position
+                //     entity.transform.position.x += (serverState.position.x - clientState.position.x) * RECONCILIATION_POSITION_SMOOTHING;
+                //     entity.transform.position.y += (serverState.position.y - clientState.position.y) * RECONCILIATION_POSITION_SMOOTHING;
+                //     entity.transform.position.z += (serverState.position.z - clientState.position.z) * RECONCILIATION_POSITION_SMOOTHING;
 
-                    // Smoothly correct rotation
-                    const correction = Quaternion.Slerp(
-                        clientState.quaternion,
-                        serverState.quaternion,
-                        RECONCILIATION_ROTATION_SMOOTHING
-                    );
-                    entity.transform.rotation.x = correction.x;
-                    entity.transform.rotation.y = correction.y;
-                    entity.transform.rotation.z = correction.z;
-                    entity.transform.rotation.w = correction.w;
-                }
+                //     // Smoothly correct rotation
+                //     const correction = Quaternion.Slerp(
+                //         clientState.quaternion,
+                //         serverState.quaternion,
+                //         RECONCILIATION_ROTATION_SMOOTHING
+                //     );
+                //     entity.transform.rotation.x = correction.x;
+                //     entity.transform.rotation.y = correction.y;
+                //     entity.transform.rotation.z = correction.z;
+                //     entity.transform.rotation.w = correction.w;
+                // }
+                entity.transform.position.copyFrom(state.transform.position);
+                entity.transform.rotation.copyFrom(state.transform.rotation);
+                entity.transform.velocity.copyFrom(state.transform.velocity);
+                entity.transform.angularVelocity.copyFrom(state.transform.angularVelocity);
+                entity.physics?.body.position.set(
+                    state.transform.position.x,
+                    state.transform.position.y,
+                    state.transform.position.z
+                );
+                entity.physics?.body.quaternion.set(
+                    state.transform.rotation.x,
+                    state.transform.rotation.y,
+                    state.transform.rotation.z,
+                    state.transform.rotation.w
+                );
+                entity.physics?.body.velocity.set(
+                    state.transform.velocity.x,
+                    state.transform.velocity.y,
+                    state.transform.velocity.z
+                );
+                entity.physics?.body.angularVelocity.set(
+                    state.transform.angularVelocity.x,
+                    state.transform.angularVelocity.y,
+                    state.transform.angularVelocity.z
+                );                
 
                 // Replay unprocessed inputs
                 const lastProcessedInputTick = state.tick.lastProcessedInputTick ?? state.tick.tick;

@@ -1,10 +1,16 @@
 import { GameEntity } from '@shared/ecs/types';
-import { State, EntitySchema, WeaponSchema } from '../../schemas';
+import { State, EntitySchema, WeaponSchema } from '@shared/schemas';
 import { world as ecsWorld } from "@shared/ecs/world";
+import { createPhysicsWorldSystem } from '@shared/ecs/systems/PhysicsWorldSystem';
+import { createInputSystem } from './InputSystems';
 /**
  * Synchronizes ECS entities with Colyseus state
  */
-export function createStateSyncSystem(state: State) {
+export function createStateSyncSystem(
+    state: State,
+    inputSystem: ReturnType<typeof createInputSystem>,
+    physicsWorldSystem: ReturnType<typeof createPhysicsWorldSystem>
+) {
     /**
      * Converts a GameEntity to an EntitySchema and updates the state
      */
@@ -92,12 +98,23 @@ export function createStateSyncSystem(state: State) {
             entityState.owner.id = entity.owner.id;
         }
 
+        // Update asset data
+        if (entity.asset) {
+            entityState.asset.assetPath = entity.asset.assetPath;
+            entityState.asset.assetType = entity.asset.assetType;
+            entityState.asset.scale = entity.asset.scale;
+        }
+
         // Update tick data
         if (entity.tick) {
-            entityState.tick.tick = entity.tick.tick;
-            entityState.tick.timestamp = entity.tick.timestamp;
-            entityState.tick.lastProcessedInputTimestamp = entity.tick.lastProcessedInputTimestamp || 0;
-            entityState.tick.lastProcessedInputTick = entity.tick.lastProcessedInputTick || 0;
+            entityState.tick.tick = physicsWorldSystem.getCurrentTick();
+            entityState.tick.timestamp = Date.now();
+            entityState.tick.lastProcessedInputTimestamp = inputSystem.inputProcessor.getLastProcessedInputTimestamp(entity.id) ?? Date.now();
+            entityState.tick.lastProcessedInputTick = inputSystem.inputProcessor.getLastProcessedInputTick(entity.id) ?? physicsWorldSystem.getCurrentTick();
+            entity.tick.tick = entityState.tick.tick;
+            entity.tick.timestamp = entityState.tick.timestamp;
+            entity.tick.lastProcessedInputTimestamp = entityState.tick.lastProcessedInputTimestamp;
+            entity.tick.lastProcessedInputTick = entityState.tick.lastProcessedInputTick;
         }
         state.entities.set(entity.id, entityState);
     };

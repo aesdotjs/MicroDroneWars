@@ -1,6 +1,5 @@
-import { Vector3, Quaternion, Mesh } from 'babylonjs';
+import { Vector3, Quaternion, Mesh, TransformNode } from '@babylonjs/core';
 import type { Body as CannonBody } from 'cannon-es';
-import { CollisionGroups } from './CollisionGroups';
 
 export enum VehicleType {
     Drone = 'drone',
@@ -22,7 +21,8 @@ export enum EntityType {
     Projectile = 'projectile',
     Flag = 'flag',
     Checkpoint = 'checkpoint',
-    Environment = 'environment'
+    Environment = 'environment',
+    Level = 'level'
 };
 
 /**
@@ -94,9 +94,8 @@ export interface GameEntity {
     /** Game state component for tracking entity state */
     gameState?: GameStateComponent;
 
-    // Weapon components
-    weapons?: WeaponComponent[];
-    activeWeaponIndex?: number;
+    /** Asset component for handling meshes and sounds */
+    asset?: AssetComponent;
 }
 
 /**
@@ -142,8 +141,6 @@ export type ProjectileComponent = {
     range: number;
     distanceTraveled: number;
     sourceId: string;
-    timestamp: number;
-    tick: number;
 };
 
 
@@ -465,9 +462,84 @@ export interface DamageEvent {
     /** Amount of damage taken */
     damage: number;
     /** Type of projectile that caused the damage */
-    projectileType: 'bullet' | 'missile';
+    projectileType: ProjectileType;
     /** Position where the damage occurred */
     position: Vector3;
     /** Timestamp of the damage event */
     timestamp: number;
 }
+
+/**
+ * Asset component for handling meshes and sounds
+ */
+export interface AssetComponent {
+    /** Array of visibl meshes in the entity */
+    meshes?: Mesh[];
+    /** Array of collision meshes in the entity */
+    collisionMeshes?: Mesh[];
+    /** Array of trigger meshes in the entity */
+    triggerMeshes?: Mesh[];
+    /** Whether the assets are loaded */
+    isLoaded: boolean;
+    /** The path to the asset file */
+    assetPath: string;
+    /** The type of asset (e.g. "glb", "gltf", "babylon") */
+    assetType: string;
+    /** The scale of the asset */
+    scale: number;
+}
+
+/**
+ * Defines collision groups for different types of physics bodies in the game.
+ * Uses bit flags to enable efficient collision filtering.
+ */
+export enum CollisionGroups {
+    /** Default collision group for basic physics objects */
+    Default = 1,
+    /** Collision group for drone vehicles */
+    Drones = 2,
+    /** Collision group for plane vehicles */
+    Planes = 4,
+    /** Collision group for environment objects (ground, obstacles) */
+    Environment = 8,
+    /** Collision group for projectile objects */
+    Projectiles = 16,
+    /** Collision group for flag objects */
+    Flags = 32,
+    /** Collision group for trimesh colliders */
+    TrimeshColliders = 64
+}
+
+/**
+ * Interface defining collision masks for different vehicle types.
+ * Each mask specifies which collision groups a vehicle can collide with.
+ */
+export interface CollisionMasks {
+    /** Collision mask for drone vehicles */
+    Drone: number;
+    /** Collision mask for plane vehicles */
+    Plane: number;
+    /** Collision mask for projectile objects */
+    Projectile: number;
+    /** Collision mask for flag objects */
+    Flag: number;
+    /** Collision mask for environment objects */
+    Environment: number;
+}
+
+/**
+ * Predefined collision masks for different vehicle types.
+ * Each mask is a combination of collision groups that the vehicle can interact with.
+ */
+export const collisionMasks: CollisionMasks = {
+    /** Drone collision mask - can collide with environment, projectiles, flags, and planes */
+    Drone: CollisionGroups.Drones | CollisionGroups.Environment | CollisionGroups.Projectiles | CollisionGroups.Flags | CollisionGroups.Planes,
+    /** Plane collision mask - can collide with environment, projectiles, flags, and drones */
+    Plane: CollisionGroups.Planes | CollisionGroups.Environment | CollisionGroups.Projectiles | CollisionGroups.Flags | CollisionGroups.Drones,
+    /** Projectile collision mask - can collide with drones, planes, and environment */
+    Projectile: CollisionGroups.Drones | CollisionGroups.Planes | CollisionGroups.Environment,
+    /** Flag collision mask - can collide with drones and planes */
+    Flag: CollisionGroups.Drones | CollisionGroups.Planes,
+    /** Environment collision mask - can collide with drones, planes, projectiles, and flags */
+    Environment: CollisionGroups.Drones | CollisionGroups.Planes | CollisionGroups.Projectiles | CollisionGroups.Flags,
+}; 

@@ -1,8 +1,7 @@
 import * as CANNON from 'cannon-es';
-import { Vector3, Quaternion } from 'babylonjs';
+import { Vector3, Quaternion } from '@babylonjs/core';
 import { world as ecsWorld } from '../world';
-import { GameEntity, WeaponComponent, InputComponent, ProjectileType, EntityType } from '../types';
-import { CollisionGroups, collisionMasks } from '../CollisionGroups';
+import { GameEntity, WeaponComponent, InputComponent, ProjectileType, EntityType, CollisionGroups, collisionMasks } from '../types';
 
 /**
  * Weapon system that handles projectile creation and management
@@ -127,8 +126,6 @@ function createProjectile(
             range: weapon.range,
             distanceTraveled: 0,
             sourceId: shooter.id,
-            timestamp: Date.now(),
-            tick: 0
         },
         tick: {
             tick: 0,

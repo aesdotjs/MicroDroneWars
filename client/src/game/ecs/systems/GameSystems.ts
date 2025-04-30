@@ -1,17 +1,18 @@
-import { Engine, Vector3 } from 'babylonjs';
+import { Engine, Vector3 } from '@babylonjs/core';
 import { Room } from 'colyseus.js';
-import { State } from '../../schemas/State';
+import { State } from '@shared/schemas';
 import { createPhysicsWorldSystem } from '@shared/ecs/systems/PhysicsWorldSystem';
 import { createCameraSystem } from './CameraSystem';
 import { createClientInputSystem } from './ClientInputSystem';
 import { createEffectSystem } from './EffectSystem';
 import { createNetworkSystem } from './NetworkSystem';
 import { createCollisionSystem } from '@shared/ecs/systems/CollisionSystems';
-import { createEnvironmentSystem } from '@shared/ecs/systems/EnvironmentSystems';
 import { createFlagSystem } from '@shared/ecs/systems/FlagSystems';
 import { createSceneSystem } from './SceneSystem';
 import { createPhysicsSystem } from '@shared/ecs/systems/PhysicsSystem';
+import { createAssetSystem } from '@shared/ecs/systems/AssetSystem';
 import { world as ecsWorld } from '@shared/ecs/world';
+import CannonDebugger from "cannon-es-debugger-babylonjs";
 
 export function createGameSystems(
     engine: Engine,
@@ -25,13 +26,17 @@ export function createGameSystems(
     const sceneSystem = createSceneSystem(engine);
     const scene = sceneSystem.getScene();
     const camera = sceneSystem.getCamera();
-    const shadowGenerator = sceneSystem.getShadowGenerator();
-    console.log('Scene system initialized:', { scene, camera, shadowGenerator });
+    console.log('Scene system initialized:', { scene, camera });
 
     // Initialize physics world system
     console.log('Initializing physics world system...');
     const physicsWorldSystem = createPhysicsWorldSystem();
+    physicsWorldSystem.setCurrentTick(room.state.serverTick);
     console.log('Physics world system initialized');
+
+    // Initialize cannon-es-debugger-babylonjs
+    const cannonDebugger = new (CannonDebugger as any)(scene, physicsWorldSystem.getWorld());
+    console.log('Cannon-es-debugger-babylonjs initialized');
 
     // Initialize physics system
     console.log('Initializing physics system...');
@@ -43,10 +48,12 @@ export function createGameSystems(
     const cameraSystem = createCameraSystem(scene, camera);
     const inputSystem = createClientInputSystem(canvas);
     const effectSystem = createEffectSystem(scene);
-    const networkSystem = createNetworkSystem(room, scene, cameraSystem, physicsWorldSystem, physicsSystem, inputSystem);
+    const networkSystem = createNetworkSystem(room, physicsWorldSystem, physicsSystem, inputSystem);
     const collisionSystem = createCollisionSystem(physicsWorldSystem.getWorld());
-    const environmentSystem = createEnvironmentSystem(physicsWorldSystem.getWorld());
     const flagSystem = createFlagSystem();
+    const assetSystem = createAssetSystem(engine, scene, physicsWorldSystem);
+    assetSystem.preloadAssets();
+
     console.log('All systems initialized');
 
     // Fixed time step settings
@@ -60,10 +67,12 @@ export function createGameSystems(
             // Update systems in the correct order with fixed time step
             while (accumulator >= FIXED_TIME_STEP) {
                 physicsWorldSystem.update(FIXED_TIME_STEP);
+                cannonDebugger.update();
+                assetSystem.update(FIXED_TIME_STEP);
                 networkSystem.update(FIXED_TIME_STEP);
+                sceneSystem.update();
                 collisionSystem.update(FIXED_TIME_STEP);
                 flagSystem.update(FIXED_TIME_STEP);
-                environmentSystem.update(FIXED_TIME_STEP);
                 cameraSystem.update(FIXED_TIME_STEP);
                 effectSystem.update(FIXED_TIME_STEP);
                 
@@ -75,7 +84,7 @@ export function createGameSystems(
     }
     console.log('Setting up render loop...');
     engine.runRenderLoop(() => {
-        sceneSystem.update();
+        sceneSystem.render();
     });
     // Start the physics loop
     console.log('Starting physics loop...');
@@ -92,8 +101,8 @@ export function createGameSystems(
         effectSystem,
         networkSystem,
         collisionSystem,
-        environmentSystem,
         flagSystem,
+        assetSystem,
         update,
 
         cleanup: () => {
@@ -104,11 +113,10 @@ export function createGameSystems(
                 physicsSystem.cleanup();
                 inputSystem.cleanup();
                 effectSystem.cleanup();
-                networkSystem.cleanup();    
-                // Clean up all vehicles
-                const vehicles = ecsWorld.with("vehicle", "render");
-                console.log('Cleaning up vehicles:', vehicles.size);
-                console.log('Game systems cleanup completed');
+                networkSystem.cleanup();
+                assetSystem.cleanup();
+                // Clean up ecsWorld
+                ecsWorld.clear();
             } catch (error) {
                 console.error('Error during game systems cleanup:', error);
             }

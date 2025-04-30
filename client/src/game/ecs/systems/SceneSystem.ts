@@ -1,5 +1,4 @@
-import { Scene, Engine, Vector3, HemisphericLight, ArcRotateCamera, Color4, Quaternion, MeshBuilder, StandardMaterial, Color3, DirectionalLight, ShadowGenerator, GlowLayer, Vector2 } from 'babylonjs';
-import { createGroundMesh } from '@shared/ecs/systems/EnvironmentSystems';
+import { Scene, Engine, Vector3, HemisphericLight, ArcRotateCamera, Color4, Quaternion, MeshBuilder, StandardMaterial, Color3, DirectionalLight, ShadowGenerator, GlowLayer, Vector2 } from '@babylonjs/core';
 
 import { world as ecsWorld } from '@shared/ecs/world';
 import { GameEntity } from '@shared/ecs/types';
@@ -28,11 +27,15 @@ export function createSceneSystem(engine: Engine) {
     console.log('Glow layer setup complete');
 
     console.log('Setting up environment...');
-    setupEnvironment(scene, shadowGenerator);
     console.log('Environment setup complete');
 
-    // Find entities with render and transform components
-    const renderables = ecsWorld.with("render", "transform");
+    // Find entities that need rendering (either with assets or with direct mesh creation)
+    const renderables = ecsWorld.with("transform").where(entity => 
+        Boolean(
+            (entity.asset && !entity.render) || // Entities with assets that need mesh creation
+            (entity.render && entity.render.mesh) // Entities with existing meshes
+        )
+    );
 
     return {
         getScene: () => scene,
@@ -42,15 +45,33 @@ export function createSceneSystem(engine: Engine) {
         update: () => {
             // Update entity positions and rotations
             for (const entity of renderables) {
-                if (!entity.render?.mesh || !entity.transform) continue;
-                // Update position
-                entity.render.mesh.position.copyFrom(entity.transform.position);
+                if (!entity.transform) continue;
+                // Handle asset-based mesh creation
+                if (entity.asset?.isLoaded && entity.asset.meshes && !entity.render) {
+                    console.log('Creating mesh for entity:', entity.id);
+                    console.log('Entity asset:', entity.asset.meshes);
+                    const mainMesh = entity.asset.meshes[0].clone(`${entity.id}_mesh`, null);
+                    
+                    // Apply transformations
+                    mainMesh.scaling = new Vector3(entity.asset.scale, entity.asset.scale, entity.asset.scale);
+                    mainMesh.rotationQuaternion = entity.transform.rotation;
+                    mainMesh.position = entity.transform.position;
+                    entity.render = { mesh: mainMesh };
+                    ecsWorld.reindex(entity);
+                    // Add to shadow generator
+                    shadowGenerator.addShadowCaster(mainMesh);
+                }
 
-                // Update rotation if available
-                if (entity.transform.rotation) {
-                    entity.render.mesh.rotationQuaternion = entity.transform.rotation;
-                }   
+                // Update position and rotation for all entities with meshes
+                if (entity.render?.mesh) {
+                    entity.render.mesh.position.copyFrom(entity.transform.position);
+                    if (entity.transform.rotation) {
+                        entity.render.mesh.rotationQuaternion = entity.transform.rotation;
+                    }
+                }
             }
+        },
+        render: () => {
             scene.render();
         },
         dispose: () => {
@@ -144,30 +165,3 @@ function setupGlowLayer(scene: Scene): GlowLayer {
     glowLayer.intensity = 0.5;
     return glowLayer;
 }
-
-/**
- * Sets up the game environment
- */
-function setupEnvironment(scene: Scene, shadowGenerator: ShadowGenerator): void {
-    // Create ground
-    createGroundMesh(scene);
-
-    // Add some obstacles
-    for (let i = 0; i < 10; i++) {
-        const obstacle = MeshBuilder.CreateBox(`obstacle${i}`, { size: 5 }, scene);
-        const obstacleMaterial = new StandardMaterial(`obstacleMaterial${i}`, scene);
-        obstacleMaterial.diffuseColor = new Color3(0.5, 0.5, 0.5);
-        obstacleMaterial.specularColor = new Color3(0.1, 0.1, 0.1);
-        obstacleMaterial.ambientColor = new Color3(0.3, 0.3, 0.3);
-        obstacle.material = obstacleMaterial;
-        obstacle.position = new Vector3(
-            Math.random() * 180 - 90,
-            2.5,
-            Math.random() * 180 - 90
-        );
-        obstacle.checkCollisions = true;
-        
-        // Add obstacles to shadow generator
-        shadowGenerator.addShadowCaster(obstacle);
-    }
-} 

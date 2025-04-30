@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createVehicleEntity, createProjectileEntity, createFlagEntity } from '../../utils/EntityHelpers';
+import { createVehicleEntity, createProjectileEntity, createFlagEntity } from '../EntitySystem';
 import { DefaultWeapons } from '../../types';
 import { Vector3, Quaternion } from 'babylonjs';
 

@@ -1,21 +1,25 @@
 import { Room, Client } from "colyseus";
 import { ArraySchema, entity } from "@colyseus/schema";
-import { State, EntitySchema, WeaponSchema } from "../schemas";
+import { State, EntitySchema, WeaponSchema } from "@shared/schemas";
 import { createPhysicsWorldSystem } from "@shared/ecs/systems/PhysicsWorldSystem";
 import { createPhysicsSystem } from "@shared/ecs/systems/PhysicsSystem";
-import { GameEntity, InputComponent, VehicleType } from "@shared/ecs/types";
+import { GameEntity, InputComponent, VehicleType, EntityType } from "@shared/ecs/types";
 import { DefaultWeapons } from "@shared/ecs/types";
-import { Vector3, Quaternion } from "babylonjs";
+import { Vector3, Quaternion, NullEngine, Scene } from '@babylonjs/core';
 import { world as ecsWorld } from "@shared/ecs/world";
 import { createStateSyncSystem } from "src/ecs/systems/StateSyncSystem";
 import { createHealthSystem } from "@shared/ecs/systems/HealthSystems";
 import { createFlagSystem } from "@shared/ecs/systems/FlagSystems";
 import { createInputSystem } from "../ecs/systems/InputSystems";
 import { createCollisionSystem } from "@shared/ecs/systems/CollisionSystems";
-import { createEnvironmentSystem } from "@shared/ecs/systems/EnvironmentSystems";
 import { createGameModeSystem, GameMode, GameModeConfig } from "../ecs/systems/GameModeSystem";
-import { createClientSystem } from "../ecs/systems/ClientSystem";
-
+import { createAssetSystem } from "@shared/ecs/systems/AssetSystem";
+import { createEntitySystem } from "@shared/ecs/systems/EntitySystem";
+// import * as xhr2 from "xhr2";
+import '@babylonjs/loaders/glTF/2.0/Extensions/ExtrasAsMetadata';
+import '@babylonjs/loaders/glTF/2.0/Extensions/KHR_lights_punctual';
+import '@babylonjs/loaders/glTF/2.0/glTFLoader';
+(global as any).XMLHttpRequest = require("xhr2");
 /**
  * Represents a game room for MicroDroneWars multiplayer matches.
  * Handles player connections, game state, and physics simulation.
@@ -32,23 +36,30 @@ export class MicroDroneRoom extends Room<State> {
     private flagSystem!: ReturnType<typeof createFlagSystem>;
     private inputSystem!: ReturnType<typeof createInputSystem>;
     private collisionSystem!: ReturnType<typeof createCollisionSystem>;
-    private environmentSystem!: ReturnType<typeof createEnvironmentSystem>;
     private gameModeSystem!: ReturnType<typeof createGameModeSystem>;
-    private clientSystem!: ReturnType<typeof createClientSystem>;
+    private assetSystem!: ReturnType<typeof createAssetSystem>;
+    private entitySystem!: ReturnType<typeof createEntitySystem>;
     private accumulatedTime: number = 0;
     private isRunning: boolean = true;
+    private serverEngine: NullEngine = new NullEngine();
+    private serverScene: Scene = new Scene(this.serverEngine);
+    private isInitializing: boolean = false;
 
     /**
      * Initializes the game room when it's created.
      * Sets up room options, physics world, flags, and message handlers.
      * @param options - Room creation options
      */
-    onCreate(options: Record<string, any>) {
+    async onCreate(options: Record<string, any>) {
         this.state = new State();
         console.log("MicroDrone room created");
 
         this.autoDispose = false; // Keep room alive even when empty
         this.maxClients = 20; // Set a reasonable max clients
+
+        // Initialize server-side Babylon.js engine and scene
+        this.serverEngine = new NullEngine();
+        this.serverScene = new Scene(this.serverEngine);
 
         /**
          * Generates a unique entity ID
@@ -59,23 +70,28 @@ export class MicroDroneRoom extends Room<State> {
             return id;
         }
 
-        // Initialize state sync system
-        this.stateSyncSystem = createStateSyncSystem(this.state);
-
         // Initialize physics world system
         this.physicsWorldSystem = createPhysicsWorldSystem();
-        this.state.serverTick = this.physicsWorldSystem.getCurrentTick();
-
+        
         // Initialize physics system
         this.physicsSystem = createPhysicsSystem(this.physicsWorldSystem.getWorld());
+
+        // Initialize entity system
+        this.entitySystem = createEntitySystem();
+
+        // Initialize input system
+        this.inputSystem = createInputSystem(this.physicsSystem, this.physicsWorldSystem);
+
+        // Initialize state sync system
+        this.stateSyncSystem = createStateSyncSystem(this.state, this.inputSystem, this.physicsWorldSystem);
+        this.state.serverTick = this.physicsWorldSystem.getCurrentTick();
 
         // Initialize ECS systems
         this.healthSystem = createHealthSystem();
         this.flagSystem = createFlagSystem();
-        this.inputSystem = createInputSystem(this.physicsSystem);
         this.collisionSystem = createCollisionSystem(this.physicsWorldSystem.getWorld());
-        this.environmentSystem = createEnvironmentSystem(this.physicsWorldSystem.getWorld());
-        this.clientSystem = createClientSystem(this.physicsWorldSystem, this.stateSyncSystem, this.inputSystem, generateEntityId);
+        this.assetSystem = createAssetSystem(this.serverEngine, this.serverScene, this.physicsWorldSystem);
+        // this.assetSystem.preloadAssets();
 
         // Initialize game mode system
         const gameModeConfig: GameModeConfig = {
@@ -84,20 +100,26 @@ export class MicroDroneRoom extends Room<State> {
             maxPlayers: 20,
             timeLimit: 600, // 10 minutes
             scoreLimit: 3,
-            spawnPoints: [
-                new Vector3(-20, 10, 0),
-                new Vector3(20, 10, 0)
-            ],
-            flagPositions: [
-                new Vector3(-20, 0, 0),
-                new Vector3(20, 0, 0)
-            ]
+            map: {
+                path: "http://localhost:2568/assets/maps/CTF-test.glb",
+                type: "glb",
+                scale: 1
+            }
         };
-        this.gameModeSystem = createGameModeSystem(this.physicsWorldSystem, this.stateSyncSystem, generateEntityId, gameModeConfig);
-        this.gameModeSystem.initialize();
+
+        this.gameModeSystem = createGameModeSystem(
+            this.physicsWorldSystem,
+            this.stateSyncSystem,
+            this.entitySystem,
+            this.assetSystem,
+            generateEntityId,
+            gameModeConfig
+        );
+
+        // Start initialization in the background
+        this.initializeGameMode();
 
         // Set room options for faster connection
-        // this.patchRate = 1000 / this.TICK_RATE; // 60 updates per second
         const NS_PER_SEC = 1e9;
         const NS_PER_TICK = NS_PER_SEC / this.TICK_RATE;
         let lastTime = process.hrtime();
@@ -111,14 +133,14 @@ export class MicroDroneRoom extends Room<State> {
             lastTime = now;
 
             // Run ECS systems in the correct order
-            this.inputSystem.update(1 / this.TICK_RATE);
             this.physicsWorldSystem.update(1 / this.TICK_RATE);
+            this.assetSystem.update(1 / this.TICK_RATE);
+            this.inputSystem.update(1 / this.TICK_RATE);
             // Update server tick in state
             this.state.serverTick = this.physicsWorldSystem.getCurrentTick();
             this.collisionSystem.update(1 / this.TICK_RATE);
             this.healthSystem.update(1 / this.TICK_RATE);
             this.flagSystem.update(1 / this.TICK_RATE);
-            this.environmentSystem.update(1 / this.TICK_RATE);
             this.gameModeSystem.update(1 / this.TICK_RATE);
                 
             // Sync ECS state to Colyseus state
@@ -181,13 +203,31 @@ export class MicroDroneRoom extends Room<State> {
     }
 
     /**
+     * Initializes the game mode in the background
+     */
+    private async initializeGameMode() {
+        if (this.isInitializing) return;
+        this.isInitializing = true;
+
+        try {
+            await this.gameModeSystem.initialize();
+            console.log("Game mode initialized successfully");
+        } catch (error) {
+            console.error("Failed to initialize game mode:", error);
+        } finally {
+            this.isInitializing = false;
+        }
+    }
+
+    /**
      * Handles a new player joining the room.
      * Creates a vehicle based on the player's chosen type and team.
      * @param client - The client joining the room
      * @param options - Player options including vehicle type and team
      */
     onJoin(client: Client, options: { vehicleType: VehicleType, team: number }) {
-        this.clientSystem.handleJoin(client, options);
+        // Spawn the vehicle using the game mode system
+        this.gameModeSystem.spawnVehicle(options.vehicleType, options.team, client.sessionId);
     }
 
     /**
@@ -196,7 +236,19 @@ export class MicroDroneRoom extends Room<State> {
      * @param client - The client leaving the room
      */
     onLeave(client: Client) {
-        this.clientSystem.handleLeave(client);
+        console.log(`Client ${client.sessionId} leaving`);
+            
+        // Clean up input system
+        this.inputSystem.cleanup(client.sessionId);
+
+        // Remove all entities owned by this client
+        const ecsEntities = ecsWorld.with("owner").where(({owner}) => owner.id === client.sessionId);
+        console.log('Cleaning up entities for client:', client.sessionId, ecsEntities.size);
+        for (const entity of ecsEntities) {
+            this.physicsWorldSystem.removeBody(entity.id);
+            ecsWorld.remove(entity);
+            this.stateSyncSystem.removeEntity(entity);
+        }
     }
 
     /**
@@ -209,5 +261,11 @@ export class MicroDroneRoom extends Room<State> {
         
         // Clean up physics world
         this.physicsWorldSystem.dispose();
+        
+        // Clean up asset system
+        this.assetSystem.cleanup();
+        
+        // Dispose server scene
+        this.serverScene.dispose();
     }
 }

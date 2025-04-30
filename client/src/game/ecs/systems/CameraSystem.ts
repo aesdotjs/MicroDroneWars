@@ -1,4 +1,4 @@
-import { ArcRotateCamera, Vector3, Quaternion, Scene, Matrix } from 'babylonjs';
+import { ArcRotateCamera, Vector3, Quaternion, Scene, Matrix } from '@babylonjs/core';
 import { world as ecsWorld } from '@shared/ecs/world';
 import { GameEntity } from '@shared/ecs/types';
 
@@ -15,20 +15,36 @@ export function createCameraSystem(scene: Scene, camera: ArcRotateCamera) {
     const FOLLOW_SPEED = 0.1;
     const ROTATION_SPEED = 0.1;
 
+    // Query for local player vehicle
+    const localPlayerQuery = ecsWorld.with("owner", "transform", "vehicle", "render").where(
+        ({owner}) => owner?.isLocal
+    );
+
+    const attachCamera = (entity: GameEntity) => {
+        attachedEntity = entity;
+        console.log('Camera attached to entity:', attachedEntity.id);
+    }
+
     return {
-        attachCamera: (entity: GameEntity) => {
-            attachedEntity = entity;
-            console.log('Camera attached to entity:', attachedEntity.id);
-        },
+        attachCamera,
         detachCamera: () => {
             attachedEntity = null;
             console.log('Camera detached');
         },
         update: (dt: number) => {
-            if (!attachedEntity || !attachedEntity.transform) {
-                return;
+            // If no entity is attached, try to find and attach to local player
+            if (!attachedEntity) {
+                const localPlayer = localPlayerQuery.entities[0];
+                if (localPlayer && localPlayer.render!.mesh) {
+                    attachCamera(localPlayer);
+                } else {
+                    return;
+                }
             }
 
+            if (!attachedEntity?.transform) {
+                return;
+            }
             const position = attachedEntity.transform.position;
             const quaternion = attachedEntity.transform.rotation;
 

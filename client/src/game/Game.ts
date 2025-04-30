@@ -1,9 +1,13 @@
-import { State } from './schemas/State';
+import { State } from '@shared/schemas';
 import { InputComponent, VehicleType } from '@shared/ecs/types';
 import * as Colyseus from 'colyseus.js';
-import { Engine } from 'babylonjs';
+import { Engine } from '@babylonjs/core';
 import { useGameDebug } from '@/composables/useGameDebug';
 import { createGameSystems } from './ecs/systems/GameSystems';
+// import "@babylonjs/loaders/glTF";
+import '@babylonjs/loaders/glTF/2.0/Extensions/ExtrasAsMetadata';
+import '@babylonjs/loaders/glTF/2.0/Extensions/KHR_lights_punctual';
+import '@babylonjs/loaders/glTF/2.0/glTFLoader';
 
 const { log } = useGameDebug();
 

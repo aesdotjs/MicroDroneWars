@@ -1,4 +1,4 @@
-import { Scene, Vector3, Mesh, StandardMaterial, Color3, Color4, ParticleSystem, Texture, MeshBuilder, Quaternion, TrailMesh } from 'babylonjs';
+import { Scene, Vector3, Mesh, StandardMaterial, Color3, Color4, ParticleSystem, Texture, MeshBuilder, Quaternion, TrailMesh } from '@babylonjs/core';
 import { world as ecsWorld } from '@shared/ecs/world';
 import { GameEntity, ProjectileType } from '@shared/ecs/types';
 

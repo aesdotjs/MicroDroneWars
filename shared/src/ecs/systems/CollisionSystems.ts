@@ -1,7 +1,6 @@
-import { GameEntity, CollisionType, CollisionSeverity } from '../types';
+import { GameEntity, CollisionType, CollisionSeverity, CollisionGroups, EntityType } from '../types';
 import { Body, ContactEquation, World, Vec3, Quaternion } from 'cannon-es';
 import { world as ecsWorld } from '../world';
-import { CollisionGroups } from '../CollisionGroups';
 
 /**
  * Creates a collision system that handles all collision events in the game
@@ -123,10 +122,10 @@ function handleCollisionEvent(event: any) {
     }
 
     // Handle flag collisions
-    if (entityA.gameState!.hasFlag) {
+    if (entityA.gameState?.hasFlag) {
         handleFlagCollision(entityA, entityB, event);
     }
-    if (entityB.gameState!.hasFlag) {
+    if (entityB.gameState?.hasFlag) {
         handleFlagCollision(entityB, entityA, event);
     }
 }
@@ -135,7 +134,7 @@ function handleCollisionEvent(event: any) {
  * Handles collision events for vehicles
  */
 export function handleVehicleCollision(vehicle: GameEntity, other: GameEntity, event: any) {
-    if (!vehicle.gameState!.health) return;
+    if (!vehicle.gameState?.health) return;
 
     // Calculate damage based on impact velocity and collision severity
     let damage = 0;
@@ -152,16 +151,18 @@ export function handleVehicleCollision(vehicle: GameEntity, other: GameEntity, e
     }
 
     // Apply additional damage for environment collisions
-    if (other.gameState!.team === -1) { // Environment team
+    // Check if the other entity is an environment object (no gameState or type is Environment)
+    const isEnvironmentCollision = !other.gameState || other.type === EntityType.Environment;
+    if (isEnvironmentCollision) {
         damage *= 1.5;
     }
 
     // Apply damage
-    vehicle.gameState!.health = Math.max(0, vehicle.gameState!.health - damage);
+    vehicle.gameState.health = Math.max(0, vehicle.gameState.health - damage);
 
     // Check for destruction
-    if (vehicle.gameState!.health <= 0) {
-        vehicle.gameState!.health = 0;
+    if (vehicle.gameState.health <= 0) {
+        vehicle.gameState.health = 0;
         // TODO: Trigger destruction effects
     }
 }

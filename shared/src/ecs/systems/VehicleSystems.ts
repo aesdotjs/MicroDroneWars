@@ -1,5 +1,5 @@
 import * as CANNON from 'cannon-es';
-import { Vector3, Quaternion, Matrix } from 'babylonjs';
+import { Vector3, Quaternion, Matrix } from '@babylonjs/core';
 import { world as ecsWorld } from '../world';
 import { GameEntity, InputComponent, VehicleType } from '../types';
 import { DroneSettings, PlaneSettings } from '../types';
@@ -32,6 +32,10 @@ export function createDroneSystem(cannonWorld: CANNON.World) {
     return {
         update: (dt: number, entity: GameEntity, input: InputComponent) => {
             const body = entity.physics!.body;
+            if (!body) {
+                console.warn(`Entity ${entity.id} has no physics body`);
+                return;
+            }
             const settings = DroneSettings;
 
             // Initialize altitude tracking if needed
@@ -198,6 +202,10 @@ export function createPlaneSystem(cannonWorld: CANNON.World) {
     return {
         update: (dt: number, entity: GameEntity, input: InputComponent) => {
             const body = entity.physics!.body;
+            if (!body) {
+                console.warn(`Entity ${entity.id} has no physics body`);
+                return;
+            }
             const settings = PlaneSettings;
 
             // Initialize engine power if needed

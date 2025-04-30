@@ -99,6 +99,14 @@ export class GameStateSchema extends Schema {
     @type("boolean") atBase = true;
 }
 
+/**
+ * Asset component schema
+ */
+export class AssetSchema extends Schema {
+    @type("string") assetPath = "";
+    @type("string") assetType = "";
+    @type("number") scale = 1;
+}
 
 /**
  * Represents a unified entity in the game state.
@@ -129,6 +137,8 @@ export class EntitySchema extends Schema {
     /** Game state component */
     @type(GameStateSchema) gameState = new GameStateSchema();
 
+    /** Asset component */
+    @type(AssetSchema) asset = new AssetSchema();
 }
 
 /**

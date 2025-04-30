@@ -2,12 +2,14 @@ import { world as ecsWorld } from '@shared/ecs/world';
 import { GameEntity, InputComponent } from '@shared/ecs/types';
 import { createIdleInput } from '@shared/ecs/utils/InputHelpers';
 import { createPhysicsSystem } from '@shared/ecs/systems/PhysicsSystem';
+import { createPhysicsWorldSystem } from '@shared/ecs/systems/PhysicsWorldSystem';
 
 /**
  * Creates a system that processes inputs and applies them to vehicle and weapon systems
  */
 export function createInputProcessorSystem(
-    physicsSystem: ReturnType<typeof createPhysicsSystem>
+    physicsSystem: ReturnType<typeof createPhysicsSystem>,
+    physicsWorldSystem: ReturnType<typeof createPhysicsWorldSystem>
 ) {
     const lastProcessedInputTicks = new Map<string, number>();
     const lastProcessedInputTimestamps = new Map<string, number>();
@@ -19,7 +21,7 @@ export function createInputProcessorSystem(
         processInputs: (entity: GameEntity, inputBuffer: InputComponent[], dt: number) => {
             if (!inputBuffer || inputBuffer.length === 0) {
                 // Apply idle input if no inputs available
-                const idleInput = createIdleInput(entity.tick!.tick);
+                const idleInput = createIdleInput(physicsWorldSystem.getCurrentTick());
                 physicsSystem.update(dt, entity, idleInput);
                 return;
             }
@@ -62,6 +64,20 @@ export function createInputProcessorSystem(
          */
         getLastProcessedInputTimestamp: (id: string): number => {
             return lastProcessedInputTimestamps.get(id) || Date.now();
+        },
+
+        /**
+         * Sets the last processed input tick for an entity
+         */
+        setLastProcessedInputTick: (id: string, tick: number) => {
+            lastProcessedInputTicks.set(id, tick);
+        },
+
+        /**
+         * Sets the last processed input timestamp for an entity
+         */
+        setLastProcessedInputTimestamp: (id: string, timestamp: number) => {
+            lastProcessedInputTimestamps.set(id, timestamp);
         },
 
         /**

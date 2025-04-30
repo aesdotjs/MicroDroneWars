@@ -1,9 +1,10 @@
 import { world as ecsWorld } from '@shared/ecs/world';
-import { EntityType, GameEntity } from '@shared/ecs/types';
-import { Vector3, Quaternion } from 'babylonjs';
-import { createFlagEntity } from '@shared/ecs/utils/EntityHelpers';
+import { EntityType, GameEntity, VehicleType } from '@shared/ecs/types';
+import { Vector3, Quaternion } from '@babylonjs/core';
 import { createPhysicsWorldSystem } from '@shared/ecs/systems/PhysicsWorldSystem';
 import { createStateSyncSystem } from './StateSyncSystem';
+import { createEntitySystem } from '@shared/ecs/systems/EntitySystem';
+import { createAssetSystem } from '@shared/ecs/systems/AssetSystem';
 
 export enum GameMode {
     CTF = 'ctf',
@@ -17,8 +18,14 @@ export interface GameModeConfig {
     maxPlayers?: number;
     timeLimit?: number;
     scoreLimit?: number;
-    spawnPoints?: Vector3[];
-    flagPositions?: Vector3[];
+    map: {
+        path: string;
+        type: string;
+        scale: number;
+    };
+    // Optional spawn points and flag positions (will be loaded from map if not provided)
+    spawnPoints?: Map<number, Vector3[]>;
+    flagPositions?: Map<number, Vector3[]>;
     raceCheckpoints?: Vector3[];
 }
 
@@ -28,98 +35,158 @@ export interface GameModeConfig {
 export function createGameModeSystem(
     physicsWorldSystem: ReturnType<typeof createPhysicsWorldSystem>,
     stateSyncSystem: ReturnType<typeof createStateSyncSystem>,
+    entitySystem: ReturnType<typeof createEntitySystem>,
+    assetSystem: ReturnType<typeof createAssetSystem>,
     generateEntityId: () => string,
     config: GameModeConfig
 ) {
-    return {
-        initialize: () => {
-            switch (config.mode) {
-                case GameMode.CTF:
-                    initializeCTF(config, physicsWorldSystem, stateSyncSystem);
-                    break;
-                case GameMode.Deathmatch:
-                    initializeDeathmatch(config);
-                    break;
-                case GameMode.Race:
-                    initializeRace(config);
-                    break;
-            }
-        },
+    let mapData: ReturnType<typeof assetSystem.loadMap> extends Promise<infer T> ? T : never;
+    let isInitialized = false;
+    // Add spawn queue
+    const spawnQueue: Array<{ vehicleType: VehicleType, team: number, clientId: string }> = [];
 
-        update: (dt: number) => {
-            // Game mode specific update logic
-            switch (config.mode) {
-                case GameMode.CTF:
-                    updateCTF(dt);
-                    break;
-                case GameMode.Deathmatch:
-                    updateDeathmatch(dt);
-                    break;
-                case GameMode.Race:
-                    updateRace(dt);
-                    break;
+    const initialize = async () => {
+        if (isInitialized) return;
+
+        try {
+            // Load the map
+            mapData = await assetSystem.loadMap(config.map.path);
+
+            // Create a single environment entity for the map
+            const mapEntity = entitySystem.createEnvironmentEntity(
+                "map",
+                new Vector3(0, 0, 0)
+            );
+            
+            // Set the map asset
+            mapEntity.asset = {
+                assetPath: config.map.path,
+                assetType: config.map.type,
+                scale: config.map.scale,
+                isLoaded: false
+            };
+
+            // Create physics bodies for all colliders
+            const colliderBodies = physicsWorldSystem.createColliderBodies(mapData.colliders);
+            mapEntity.physics = {
+                body: colliderBodies[0], // Use the first body as the main body
+                mass: 0,
+                drag: 0,
+                angularDrag: 0,
+                maxSpeed: 0,
+                maxAngularSpeed: 0,
+                maxAngularAcceleration: 0,
+                angularDamping: 0,
+                forceMultiplier: 0,
+                thrust: 0,
+                lift: 0,
+                torque: 0
+            };
+
+            // Add the entity to the world
+            ecsWorld.add(mapEntity);
+            stateSyncSystem.addEntity(mapEntity);
+            // Create flags if in CTF mode
+            if (config.mode === GameMode.CTF) {
+                const flagPositions = config.flagPositions || mapData.flagPositions;
+                flagPositions.forEach((positions, team) => {
+                    positions.forEach((position, index) => {
+                        const flag = entitySystem.createFlagEntity(
+                            generateEntityId(),
+                            team,
+                            position
+                        );
+                        flag.asset = assetSystem.getDefaultAsset(EntityType.Flag);
+                        ecsWorld.add(flag);
+                        stateSyncSystem.addEntity(flag);
+                    });
+                });
             }
+
+            isInitialized = true;
+
+            // Process any queued spawns
+            while (spawnQueue.length > 0) {
+                const spawn = spawnQueue.shift();
+                if (spawn) {
+                    spawnVehicle(spawn.vehicleType, spawn.team, spawn.clientId);
+                }
+            }
+        } catch (error) {
+            console.error('Failed to initialize game mode:', error);
+            throw error;
         }
     };
-}
 
-/**
- * Initializes Capture the Flag game mode
- */
-function initializeCTF(config: GameModeConfig, physicsWorldSystem: ReturnType<typeof createPhysicsWorldSystem>, stateSyncSystem: ReturnType<typeof createStateSyncSystem>) {
-    if (!config.flagPositions || config.flagPositions.length < 2) {
-        throw new Error('CTF mode requires at least 2 flag positions');
-    }
+    const spawnVehicle = (vehicleType: VehicleType, team: number, clientId: string) => {
+        // If not initialized, queue the spawn
+        if (!isInitialized) {
+            console.log(`Queueing spawn for ${vehicleType} on team ${team}`);
+            spawnQueue.push({ vehicleType, team, clientId });
+            return null;
+        }
 
-    // Create flags for each team
-    const teamCount = config.teamCount || 2;
-    for (let i = 0; i < teamCount; i++) {
-        const flagPosition = config.flagPositions[i];
-        const flag = createFlagEntity(`flag_team${i}`, i, flagPosition);
-        ecsWorld.add(flag);
-        physicsWorldSystem.addBody(flag);
-        stateSyncSystem.addEntity(flag);
-    }
-}
+        // Get spawn positions for team
+        const spawnPoints = config.spawnPoints || mapData.spawnPoints;
+        const teamSpawns = spawnPoints.get(team) || [];
+        
+        // If no spawn points for team, use default
+        if (teamSpawns.length === 0) {
+            console.warn(`No spawn points found for team ${team}, using default position`);
+            return spawnVehicleAtPosition(vehicleType, team, new Vector3(0, 10, 0), clientId);
+        }
 
-/**
- * Initializes Deathmatch game mode
- */
-function initializeDeathmatch(config: GameModeConfig) {
-    // Deathmatch doesn't need any special initialization
-    // It just uses the default spawn points
-}
+        // Pick a random spawn point for the team
+        const spawnIndex = Math.floor(Math.random() * teamSpawns.length);
+        const spawnPosition = teamSpawns[spawnIndex];
 
-/**
- * Initializes Race game mode
- */
-function initializeRace(config: GameModeConfig) {
-    if (!config.raceCheckpoints || config.raceCheckpoints.length < 2) {
-        throw new Error('Race mode requires at least 2 checkpoints');
-    }
+        return spawnVehicleAtPosition(vehicleType, team, spawnPosition, clientId);
+    };
 
-    // Create checkpoints
-    config.raceCheckpoints.forEach((position, index) => {
-        const checkpoint: GameEntity = {
-            id: `checkpoint_${index}`,
-            type: EntityType.Checkpoint,
-            transform: {
-                position: position.clone(),
-                rotation: Quaternion.Identity(),
-                velocity: Vector3.Zero(),
-                angularVelocity: Vector3.Zero()
-            },
-            gameState: {
-                health: 100,
-                maxHealth: 100,
-                team: -1,
-                hasFlag: false,
-                carryingFlag: false,
-                atBase: true
-            }
+    const spawnVehicleAtPosition = (vehicleType: VehicleType, team: number, position: Vector3, clientId: string) => {
+        // Create vehicle entity
+        const vehicle = entitySystem.createVehicleEntity(
+            generateEntityId(),
+            vehicleType,
+            position,
+            new Quaternion(),
+            team
+        );
+
+        // Set asset component
+        vehicle.asset = assetSystem.getDefaultAsset(vehicleType);
+        vehicle.owner = {
+            id: clientId,
+            isLocal: false
         };
-        ecsWorld.add(checkpoint);
-    });
+        // Add to world and sync
+        ecsWorld.add(vehicle);
+        stateSyncSystem.addEntity(vehicle);
+
+        return vehicle;
+    };
+
+    const update = (dt: number) => {
+        // Game mode specific update logic
+        switch (config.mode) {
+            case GameMode.CTF:
+                updateCTF(dt);
+                break;
+            case GameMode.Deathmatch:
+                updateDeathmatch(dt);
+                break;
+            case GameMode.Race:
+                updateRace(dt);
+                break;
+        }
+    };
+
+    return {
+        initialize,
+        spawnVehicle,
+        update,
+        isInitialized: () => isInitialized
+    };
 }
 
 /**
