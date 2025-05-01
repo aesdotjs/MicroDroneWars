@@ -1,7 +1,7 @@
 import * as CANNON from 'cannon-es';
 import { world as ecsWorld } from '../world';
 import { GameEntity, VehicleType, DroneSettings, PlaneSettings, CollisionGroups, collisionMasks, EntityType, PhysicsComponent } from '../types';
-import { Vector3, Quaternion, Mesh, VertexBuffer } from '@babylonjs/core';
+import { Vector3, Quaternion, Mesh } from '@babylonjs/core';
 /**
  * Creates a system that manages the physics world for both client and server
  */
@@ -229,30 +229,79 @@ export function createPhysicsWorldSystem() {
             // If entity has collider meshes, use them
             if (entity.asset?.collisionMeshes && entity.asset.collisionMeshes.length > 0) {
                 entity.asset.collisionMeshes.forEach(mesh => {
-                    const position = mesh.getAbsolutePosition();
-                    const rotation = mesh.rotationQuaternion || new Quaternion();
-
-                    // Create a shape based on the mesh type
+                    // Get world matrix and bake transformations
+                    const worldMatrix = mesh.computeWorldMatrix(true);
+                    
+                    // Get the scale from the world matrix
+                    const scale = new Vector3();
+                    worldMatrix.decompose(scale, undefined, undefined);
+                    
+                    // Get absolute position and rotation
+                    const absolutePosition = mesh.absolutePosition.clone();
+                    const absoluteRotation = mesh.absoluteRotationQuaternion;
+                    
+                    // Get the size in local space and apply world scale
+                    const boundingBox = mesh.getBoundingInfo().boundingBox;
+                    const size = boundingBox.extendSize.clone();
+                    size.scaleInPlace(2); // Convert from half-size to full size
+                    size.x *= scale.x;
+                    size.y *= scale.y;
+                    size.z *= scale.z;
+                    
+                    // Create a shape based on the mesh metadata
                     let shape: CANNON.Shape;
-                    if (mesh.getClassName() === "SphereMesh") {
-                        const radius = mesh.getBoundingInfo().boundingSphere.radius;
+                    if (mesh.metadata?.gltf?.extras?.shape === "sphere") {
+                        // For spheres, use the largest dimension as radius
+                        const radius = Math.max(size.x, size.y, size.z) / 2;
                         shape = new CANNON.Sphere(radius);
+                    } else if (mesh.metadata?.gltf?.extras?.shape === "plane") {
+                        // For planes, we need to create a box shape with very small height
+                        // to approximate a plane while maintaining proper scaling
+                        shape = new CANNON.Box(new CANNON.Vec3(
+                            Math.abs(size.x / 2),
+                            0.01, // Very small height to approximate a plane
+                            Math.abs(size.z / 2)
+                        ));
+                        
+                        // Set the body quaternion to match the plane's normal
+                        const normal = new Vector3(0, 1, 0);
+                        normal.rotateByQuaternionAroundPointToRef(absoluteRotation, Vector3.Zero(), normal);
+                        const quat = new CANNON.Quaternion();
+                        quat.setFromVectors(new CANNON.Vec3(0, 1, 0), new CANNON.Vec3(normal.x, normal.y, normal.z));
+                        body.quaternion.mult(quat, body.quaternion);
                     } else {
-                        // Default to box for all other mesh types
-                        const size = mesh.getBoundingInfo().boundingBox.extendSize;
-                        shape = new CANNON.Box(new CANNON.Vec3(size.x, size.y, size.z));
+                        // For boxes, use the actual size with world scale applied
+                        shape = new CANNON.Box(new CANNON.Vec3(
+                            Math.abs(size.x / 2),
+                            Math.abs(size.y / 2),
+                            Math.abs(size.z / 2)
+                        ));
                     }
 
-                    // Add the shape to the body with the mesh's transform
-                    body.addShape(shape, new CANNON.Vec3(position.x, position.y, position.z), 
-                        new CANNON.Quaternion(rotation.x, rotation.y, rotation.z, rotation.w));
+                    // Add the shape to the body with the correct position and orientation
+                    const offset = new CANNON.Vec3(
+                        absolutePosition.x,
+                        absolutePosition.y,
+                        absolutePosition.z
+                    );
+                    const orientation = new CANNON.Quaternion(
+                        absoluteRotation.x,
+                        absoluteRotation.y,
+                        absoluteRotation.z,
+                        absoluteRotation.w
+                    );
+                    body.addShape(shape, offset, orientation);
                 });
             } else {
                 // Fallback to using the entity's bounding box
                 const mesh = entity.render?.mesh;
                 if (mesh) {
                     const size = mesh.getBoundingInfo().boundingBox.extendSize;
-                    const shape = new CANNON.Box(new CANNON.Vec3(size.x, size.y, size.z));
+                    const shape = new CANNON.Box(new CANNON.Vec3(
+                        Math.abs(size.x),
+                        Math.abs(size.y),
+                        Math.abs(size.z)
+                    ));
                     body.addShape(shape);
                 }
             }
@@ -318,7 +367,7 @@ export function createPhysicsWorldSystem() {
         // Create collider bodies from a collection of meshes
         createColliderBodies(meshes: Mesh[]): CANNON.Body[] {
             const bodies: CANNON.Body[] = [];
-            console.log(meshes.length);
+            
             meshes.forEach(mesh => {
                 // Create a body for each mesh
                 const body = new CANNON.Body({
@@ -330,42 +379,23 @@ export function createPhysicsWorldSystem() {
                         mesh.rotationQuaternion?.y || 0,
                         mesh.rotationQuaternion?.z || 0,
                         mesh.rotationQuaternion?.w || 1
-                    ),
-                    collisionFilterGroup: CollisionGroups.Environment,
-                    collisionFilterMask: collisionMasks.Environment
+                    )
                 });
-
-
-                // Get vertices and indices from the mesh
-                const positions = mesh.getVerticesData(VertexBuffer.PositionKind);
-                const indices = mesh.getIndices();
-                
-                if (positions && indices) {
-                    // Convert Float32Array to number array for Trimesh
-                    const vertices = Array.from(positions);
-                    const indicesArray = Array.from(indices);
-                    const shape = new CANNON.Trimesh(vertices, indicesArray);
+                console.log(mesh);
+                // Add collision shape based on mesh type
+                if (mesh.getClassName() === "BoxMesh") {
+                    const size = mesh.getBoundingInfo().boundingBox.extendSize;
+                    const shape = new CANNON.Box(new CANNON.Vec3(size.x, size.y, size.z));
+                    body.addShape(shape);
+                } else if (mesh.getClassName() === "SphereMesh") {
+                    const radius = mesh.getBoundingInfo().boundingSphere.radius;
+                    const shape = new CANNON.Sphere(radius);
                     body.addShape(shape);
                 } else {
-                    // For other meshes, use appropriate primitive shapes
-                    if (mesh.getClassName() === "BoxMesh") {
-                        const size = mesh.getBoundingInfo().boundingBox.extendSize;
-                        const shape = new CANNON.Box(new CANNON.Vec3(size.x, size.y, size.z));
-                        body.addShape(shape);
-                    } else if (mesh.getClassName() === "SphereMesh") {
-                        const radius = mesh.getBoundingInfo().boundingSphere.radius;
-                        const shape = new CANNON.Sphere(radius);
-                        body.addShape(shape);
-                    } else if (mesh.getClassName() === "CylinderMesh") {
-                        const size = mesh.getBoundingInfo().boundingBox.extendSize;
-                        const shape = new CANNON.Cylinder(size.y, size.y, size.x * 2, 8);
-                        body.addShape(shape);
-                    } else {
-                        // For other mesh types, use a box approximation but with more accurate size
-                        const size = mesh.getBoundingInfo().boundingBox.extendSize;
-                        const shape = new CANNON.Box(new CANNON.Vec3(size.x, size.y, size.z));
-                        body.addShape(shape);
-                    }
+                    // For other mesh types, use a box approximation
+                    const size = mesh.getBoundingInfo().boundingBox.extendSize;
+                    const shape = new CANNON.Box(new CANNON.Vec3(size.x, size.y, size.z));
+                    body.addShape(shape);
                 }
 
                 bodies.push(body);

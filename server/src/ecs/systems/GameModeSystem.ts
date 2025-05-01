@@ -63,25 +63,12 @@ export function createGameModeSystem(
                 assetPath: config.map.path,
                 assetType: config.map.type,
                 scale: config.map.scale,
-                isLoaded: false
+                isLoaded: false,
+                collisionMeshes: mapData.colliders // Add collider meshes to the asset
             };
 
-            // Create physics bodies for all colliders
-            const colliderBodies = physicsWorldSystem.createColliderBodies(mapData.colliders);
-            mapEntity.physics = {
-                body: colliderBodies[0], // Use the first body as the main body
-                mass: 0,
-                drag: 0,
-                angularDrag: 0,
-                maxSpeed: 0,
-                maxAngularSpeed: 0,
-                maxAngularAcceleration: 0,
-                angularDamping: 0,
-                forceMultiplier: 0,
-                thrust: 0,
-                lift: 0,
-                torque: 0
-            };
+            // Create physics for the map entity
+            physicsWorldSystem.createMeshPhysics(mapEntity);
 
             // Add the entity to the world
             ecsWorld.add(mapEntity);

@@ -60,7 +60,7 @@ export class MicroDroneRoom extends Room<State> {
         // Initialize server-side Babylon.js engine and scene
         this.serverEngine = new NullEngine();
         this.serverScene = new Scene(this.serverEngine);
-
+        this.serverScene.useRightHandedSystem = true;
         /**
          * Generates a unique entity ID
          * @returns A unique entity ID

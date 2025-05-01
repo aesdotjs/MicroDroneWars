@@ -103,12 +103,12 @@ export function createDroneSystem(cannonWorld: CANNON.World) {
 
             // Left/right strafing
             if (input.left) {
-                body.velocity.x -= rightDirection.x * moveSpeed;
-                body.velocity.z -= rightDirection.z * moveSpeed;
-            }
-            if (input.right) {
                 body.velocity.x += rightDirection.x * moveSpeed;
                 body.velocity.z += rightDirection.z * moveSpeed;
+            }
+            if (input.right) {
+                body.velocity.x -= rightDirection.x * moveSpeed;
+                body.velocity.z -= rightDirection.z * moveSpeed;
             }
 
             // Vertical movement
@@ -128,7 +128,7 @@ export function createDroneSystem(cannonWorld: CANNON.World) {
                     body.quaternion.y * body.quaternion.z
                 ));
                 
-                const pitchAmount = input.pitchUp ? -rotationSpeed : rotationSpeed;
+                const pitchAmount = input.pitchUp ? rotationSpeed : -rotationSpeed;
                 if (Math.abs(currentPitch + pitchAmount) < maxPitchAngle) {
                     const pitchQuat = new CANNON.Quaternion();
                     pitchQuat.setFromAxisAngle(new CANNON.Vec3(right.x, right.y, right.z), pitchAmount);
@@ -138,7 +138,7 @@ export function createDroneSystem(cannonWorld: CANNON.World) {
 
             // Apply yaw control
             if (input.yawLeft || input.yawRight) {
-                const yawAmount = input.yawLeft ? -rotationSpeed : rotationSpeed;
+                const yawAmount = input.yawLeft ? rotationSpeed : -rotationSpeed;
                 const yawQuat = new CANNON.Quaternion();
                 yawQuat.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), yawAmount);
                 body.quaternion = yawQuat.mult(body.quaternion);
@@ -149,13 +149,11 @@ export function createDroneSystem(cannonWorld: CANNON.World) {
                 // Yaw (horizontal mouse movement) - using local forward axis to prevent roll
                 if (input.mouseDelta.x !== 0) {
                     const yawAmount = input.mouseDelta.x * mouseSensitivity;
-                    // Get the current forward direction projected onto XZ plane
-                    const forwardFlat = new Vector3(forward.x, 0, forward.z).normalize();
                     // Create rotation around world up axis
                     const yawQuat = new CANNON.Quaternion();
-                    yawQuat.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), yawAmount);
-                    // Apply rotation
-                    body.quaternion = yawQuat.mult(body.quaternion);
+                    yawQuat.setFromAxisAngle(new CANNON.Vec3(0, -1, 0), yawAmount);
+                    // Apply rotation by multiplying in the correct order
+                    body.quaternion = body.quaternion.mult(yawQuat);
                 }
 
                 // Pitch (vertical mouse movement) with angle limiting
@@ -172,7 +170,8 @@ export function createDroneSystem(cannonWorld: CANNON.World) {
                     if (Math.abs(currentPitch + pitchAmount) < maxPitchAngle) {
                         const pitchQuat = new CANNON.Quaternion();
                         pitchQuat.setFromAxisAngle(new CANNON.Vec3(right.x, right.y, right.z), pitchAmount);
-                        body.quaternion = pitchQuat.mult(body.quaternion);
+                        // Apply rotation by multiplying in the correct order
+                        body.quaternion = body.quaternion.mult(pitchQuat);
                     }
                 }
             }
@@ -383,10 +382,11 @@ export function createPlaneSystem(cannonWorld: CANNON.World) {
  * Gets the orientation vectors of a physics body
  */
 function getOrientationVectors(body: CANNON.Body): { right: Vector3; up: Vector3; forward: Vector3 } {
-    // Initialize vectors in local space
-    let forward = new Vector3(0, 0, 1);
-    let right = new Vector3(1, 0, 0);
-    let up = new Vector3(0, 1, 0);
+    // Initialize vectors in local space for right-handed system
+    // In right-handed: X = right, Y = up, Z = forward
+    let forward = new Vector3(0, 0, 1);  // Z is forward
+    let right = new Vector3(1, 0, 0);    // X is right
+    let up = new Vector3(0, 1, 0);       // Y is up
 
     // Transform vectors to world space using body's quaternion
     const quaternion = body.quaternion;
@@ -412,11 +412,11 @@ function applyStabilization(entity: GameEntity, body: CANNON.Body, dt: number) {
     const currentUp = new Vector3(up.x, up.y, up.z);
     const targetUp = new Vector3(0, 1, 0);
     
-    // Calculate roll angle
+    // Calculate roll angle (around forward axis)
     const rightDotUp = Vector3.Dot(new Vector3(right.x, right.y, right.z), targetUp);
     const rollAngle = Math.asin(rightDotUp);
     
-    // Calculate pitch angle
+    // Calculate pitch angle (around right axis)
     const forwardFlat = new Vector3(forward.x, 0, forward.z).normalize();
     const pitchAngle = Math.acos(Vector3.Dot(new Vector3(forward.x, forward.y, forward.z), forwardFlat));
     

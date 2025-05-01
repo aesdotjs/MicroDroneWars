@@ -10,6 +10,7 @@ export function createSceneSystem(engine: Engine) {
     console.log('Creating scene system...');
     // Create scene
     const scene = new Scene(engine);
+    scene.useRightHandedSystem = true;
     scene.clearColor = new Color4(0.1, 0.1, 0.1, 1);
     console.log('Scene created');
 
