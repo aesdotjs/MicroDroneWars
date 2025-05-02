@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { Vector3, Quaternion } from 'babylonjs';
+import { Vector3, Quaternion } from '@babylonjs/core';
 import { createStateSyncSystem } from '../StateSyncSystem';
 import { State, EntitySchema } from '../../../schemas';
 import { GameEntity } from '@shared/ecs/types';

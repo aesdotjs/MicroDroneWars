@@ -3,21 +3,14 @@ import { Vector3, Quaternion, Matrix } from '@babylonjs/core';
 import { world as ecsWorld } from '../world';
 import { GameEntity, InputComponent, VehicleType } from '../types';
 import { DroneSettings, PlaneSettings } from '../types';
-
-function applyBodyTransform(entity: GameEntity, body: CANNON.Body) {
-    entity.transform!.position.x = body.position.x;
-    entity.transform!.position.y = body.position.y;
-    entity.transform!.position.z = body.position.z;
-    entity.transform!.rotation.x = body.quaternion.x;
-    entity.transform!.rotation.y = body.quaternion.y;
-    entity.transform!.rotation.z = body.quaternion.z;
-    entity.transform!.rotation.w = body.quaternion.w;
-}
+import { createPhysicsWorldSystem } from './PhysicsWorldSystem';
 
 /**
  * Creates a system that handles drone-specific physics
  */
-export function createDroneSystem(cannonWorld: CANNON.World) {
+export function createDroneSystem(
+    physicsWorldSystem: ReturnType<typeof createPhysicsWorldSystem>
+) {
     const drones = ecsWorld.with("vehicle", "physics", "transform").where(({vehicle}) => vehicle.vehicleType === VehicleType.Drone);
     const momentumDamping = 0.99;
     const moveSpeed = 0.2;
@@ -146,14 +139,15 @@ export function createDroneSystem(cannonWorld: CANNON.World) {
 
             // Apply mouse control with quaternion-based rotation
             if (input.mouseDelta) {
-                // Yaw (horizontal mouse movement) - using local forward axis to prevent roll
+                // Create a single quaternion for combined rotation
+                const combinedQuat = new CANNON.Quaternion();
+                
+                // Yaw (horizontal mouse movement) - using world up axis
                 if (input.mouseDelta.x !== 0) {
-                    const yawAmount = input.mouseDelta.x * mouseSensitivity;
-                    // Create rotation around world up axis
+                    const yawAmount = -input.mouseDelta.x * mouseSensitivity;
                     const yawQuat = new CANNON.Quaternion();
-                    yawQuat.setFromAxisAngle(new CANNON.Vec3(0, -1, 0), yawAmount);
-                    // Apply rotation by multiplying in the correct order
-                    body.quaternion = body.quaternion.mult(yawQuat);
+                    yawQuat.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), yawAmount);
+                    combinedQuat.mult(yawQuat, combinedQuat);
                 }
 
                 // Pitch (vertical mouse movement) with angle limiting
@@ -170,10 +164,12 @@ export function createDroneSystem(cannonWorld: CANNON.World) {
                     if (Math.abs(currentPitch + pitchAmount) < maxPitchAngle) {
                         const pitchQuat = new CANNON.Quaternion();
                         pitchQuat.setFromAxisAngle(new CANNON.Vec3(right.x, right.y, right.z), pitchAmount);
-                        // Apply rotation by multiplying in the correct order
-                        body.quaternion = body.quaternion.mult(pitchQuat);
+                        combinedQuat.mult(pitchQuat, combinedQuat);
                     }
                 }
+
+                // Apply the combined rotation
+                body.quaternion = combinedQuat.mult(body.quaternion);
             }
 
             // Apply momentum damping
@@ -185,7 +181,7 @@ export function createDroneSystem(cannonWorld: CANNON.World) {
             body.angularVelocity.x *= 0.95;
             body.angularVelocity.y *= 0.95;
             body.angularVelocity.z *= 0.95;
-            applyBodyTransform(entity, body);
+            physicsWorldSystem.applyBodyTransform(entity, body);
         }
     };
 }
@@ -193,7 +189,9 @@ export function createDroneSystem(cannonWorld: CANNON.World) {
 /**
  * Creates a system that handles plane-specific physics
  */
-export function createPlaneSystem(cannonWorld: CANNON.World) {
+export function createPlaneSystem(
+    physicsWorldSystem: ReturnType<typeof createPhysicsWorldSystem>
+) {
     const planes = ecsWorld.with("vehicle", "physics", "transform").where(({vehicle}) => vehicle.vehicleType === VehicleType.Plane);
     const enginePower = new Map<string, number>();
     const lastDrag = new Map<string, number>();
@@ -373,7 +371,7 @@ export function createPlaneSystem(cannonWorld: CANNON.World) {
             body.angularVelocity.x *= 0.95;
             body.angularVelocity.y *= 0.95;
             body.angularVelocity.z *= 0.95;
-            applyBodyTransform(entity, body);
+            physicsWorldSystem.applyBodyTransform(entity, body);
         }
     };
 }

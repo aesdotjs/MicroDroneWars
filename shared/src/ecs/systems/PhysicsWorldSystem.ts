@@ -1,6 +1,6 @@
 import * as CANNON from 'cannon-es';
 import { world as ecsWorld } from '../world';
-import { GameEntity, VehicleType, DroneSettings, PlaneSettings, CollisionGroups, collisionMasks, EntityType, PhysicsComponent } from '../types';
+import { GameEntity, VehicleType, DroneSettings, PlaneSettings, CollisionGroups, collisionMasks, EntityType, PhysicsComponent, WeaponComponent, ProjectileType } from '../types';
 import { Vector3, Quaternion, Mesh } from '@babylonjs/core';
 /**
  * Creates a system that manages the physics world for both client and server
@@ -403,6 +403,145 @@ export function createPhysicsWorldSystem() {
             });
 
             return bodies;
+        },
+        /**
+         * Creates a projectile entity based on the shooter and weapon
+         */
+        createProjectile(
+            shooter: GameEntity, 
+            weapon: WeaponComponent,
+            projectileId: string
+        ): GameEntity {
+            // Get forward direction from shooter's rotation
+            const weaponTrigger = shooter?.asset?.triggerMeshes?.find(mesh => 'missile' === mesh.metadata?.gltf?.extras?.type);
+            console.log('weaponTrigger', weaponTrigger?.id);
+            
+            // Get absolute position and rotation of the trigger mesh
+            let spawnPointPosition: Vector3;
+            let spawnPointRotation: Quaternion;
+            
+            if (weaponTrigger) {
+                // Get the local position and rotation of the trigger mesh
+                const localPosition = weaponTrigger.position.clone();
+                const localRotation = weaponTrigger.rotationQuaternion?.clone() || new Quaternion();
+                
+                // Transform the local position by the vehicle's world transform
+                spawnPointPosition = localPosition.clone();
+                spawnPointPosition.rotateByQuaternionAroundPointToRef(
+                    shooter.transform!.rotation,
+                    Vector3.Zero(),
+                    spawnPointPosition
+                );
+                spawnPointPosition.addInPlace(shooter.transform!.position);
+                
+                // Combine rotations
+                spawnPointRotation = shooter.transform!.rotation.multiply(localRotation);
+            } else {
+                // Fallback to vehicle position/rotation if no trigger mesh found
+                spawnPointPosition = shooter.transform!.position;
+                spawnPointRotation = shooter.transform!.rotation;
+            }
+            console.log('spawnPointPosition', spawnPointPosition);
+
+            const forward = new Vector3(0, 0, 1);
+            forward.rotateByQuaternionAroundPointToRef(
+                spawnPointRotation,
+                Vector3.Zero(),
+                forward
+            );
+
+            // Create projectile body
+            const body = new CANNON.Body({
+                mass: 0,
+                position: new CANNON.Vec3(
+                    spawnPointPosition.x,
+                    spawnPointPosition.y,
+                    spawnPointPosition.z
+                ),
+                velocity: new CANNON.Vec3(
+                    forward.x * weapon.projectileSpeed,
+                    forward.y * weapon.projectileSpeed,
+                    forward.z * weapon.projectileSpeed
+                ),
+                collisionFilterGroup: CollisionGroups.Projectiles,
+                collisionFilterMask: collisionMasks.Projectile,
+                type: CANNON.Body.KINEMATIC
+            });
+
+            // Add collision shape based on projectile type
+            if (weapon.projectileType === ProjectileType.Bullet) {
+                body.addShape(new CANNON.Sphere(0.05));
+            } else if (weapon.projectileType === ProjectileType.Missile) {
+                body.addShape(new CANNON.Box(new CANNON.Vec3(0.2, 0.2, 0.5)));
+            }
+
+            // Add body to CANNON world
+            world.addBody(body);
+
+            // Create and return projectile entity
+            return {
+                id: projectileId,
+                type: EntityType.Projectile,
+                transform: {
+                    position: spawnPointPosition.clone(),
+                    rotation: spawnPointRotation.clone(),
+                    velocity: forward.scale(weapon.projectileSpeed),
+                    angularVelocity: Vector3.Zero()
+                },
+                physics: {
+                    body,
+                    mass: 0,
+                    drag: 0.1,
+                    angularDrag: 0.1,
+                    maxSpeed: weapon.projectileSpeed,
+                    maxAngularSpeed: 0,
+                    maxAngularAcceleration: 0,
+                    angularDamping: 1,
+                    forceMultiplier: 1,
+                    thrust: 0,
+                    lift: 0,
+                    torque: 0,
+                },
+                projectile: {
+                    projectileType: weapon.projectileType as ProjectileType,
+                    damage: weapon.damage,
+                    range: weapon.range,
+                    distanceTraveled: 0,
+                    sourceId: shooter.id,
+                    speed: 0,
+                },
+                gameState: {
+                    health: 1,
+                    maxHealth: 1,
+                    team: shooter.gameState!.team,
+                    hasFlag: false,
+                    carryingFlag: false,
+                    atBase: false,
+                },
+                owner: {
+                    id: shooter.owner!.id,
+                    isLocal: shooter.owner!.isLocal
+                },
+                tick: {
+                    tick: 0,
+                    timestamp: Date.now()
+                }
+            };
+        },
+        applyBodyTransform(entity: GameEntity, body: CANNON.Body) {
+            entity.transform!.position.x = body.position.x;
+            entity.transform!.position.y = body.position.y;
+            entity.transform!.position.z = body.position.z;
+            entity.transform!.rotation.x = body.quaternion.x;
+            entity.transform!.rotation.y = body.quaternion.y;
+            entity.transform!.rotation.z = body.quaternion.z;
+            entity.transform!.rotation.w = body.quaternion.w;
+            entity.transform!.velocity.x = body.velocity.x;
+            entity.transform!.velocity.y = body.velocity.y;
+            entity.transform!.velocity.z = body.velocity.z;
+            entity.transform!.angularVelocity.x = body.angularVelocity.x;
+            entity.transform!.angularVelocity.y = body.angularVelocity.y;
+            entity.transform!.angularVelocity.z = body.angularVelocity.z;
         }
     };  
 }

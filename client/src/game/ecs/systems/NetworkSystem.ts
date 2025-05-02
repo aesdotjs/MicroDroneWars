@@ -8,6 +8,9 @@ import { createPhysicsWorldSystem } from '@shared/ecs/systems';
 import { createNetworkPredictionSystem } from './NetworkPredictionSystem';
 import { createClientInputSystem } from './ClientInputSystem';
 import { createPhysicsSystem } from '@shared/ecs/systems/PhysicsSystem';
+import { useGameDebug } from '../../../composables/useGameDebug';
+import { createWeaponSystem } from '@shared/ecs/systems/WeaponSystems';
+
 /**
 * Creates a system that handles network state updates and converts them to ECS entities
 */
@@ -15,7 +18,8 @@ export function createNetworkSystem(
     room: Room<State>,
     physicsWorldSystem: ReturnType<typeof createPhysicsWorldSystem>,
     physicsSystem: ReturnType<typeof createPhysicsSystem>,
-    inputSystem: ReturnType<typeof createClientInputSystem>
+    inputSystem: ReturnType<typeof createClientInputSystem>,
+    weaponSystem: ReturnType<typeof createWeaponSystem>
 ) {
     console.log('Creating network system...');
     const $ = Colyseus.getStateCallbacks(room);
@@ -23,6 +27,7 @@ export function createNetworkSystem(
     const networkPredictionSystem = createNetworkPredictionSystem(
         physicsSystem,
         physicsWorldSystem,
+        weaponSystem,
         room
     );
     
@@ -35,6 +40,8 @@ export function createNetworkSystem(
     const MIN_LATENCY = 5;
     const LATENCY_SMOOTHING = 0.1;
     
+    const { log } = useGameDebug();
+    
     // Handle network quality measurements
     room.onMessage("pong", (data: { clientTime: number, serverTime: number, latency: number }) => {
         const now = Date.now();
@@ -44,12 +51,12 @@ export function createNetworkSystem(
         
         // Update network stats with smoothing
         networkLatency = networkLatency === 0 
-        ? oneWayLatency 
-        : LATENCY_SMOOTHING * oneWayLatency + (1 - LATENCY_SMOOTHING) * networkLatency;
+            ? oneWayLatency 
+            : LATENCY_SMOOTHING * oneWayLatency + (1 - LATENCY_SMOOTHING) * networkLatency;
         
         networkJitter = networkJitter === 0
-        ? jitter
-        : LATENCY_SMOOTHING * jitter + (1 - LATENCY_SMOOTHING) * networkJitter;
+            ? jitter
+            : LATENCY_SMOOTHING * jitter + (1 - LATENCY_SMOOTHING) * networkJitter;
         
         // Update network quality
         const latencyScore = Math.max(0, 1 - (oneWayLatency / 500));
@@ -62,6 +69,18 @@ export function createNetworkSystem(
         }
         
         networkQuality = qualitySamples.reduce((a, b) => a + b, 0) / qualitySamples.length;
+
+        // Update network prediction system with new stats
+        networkPredictionSystem.updateNetworkStats(networkLatency, networkQuality, networkJitter);
+
+        log('Network Stats', {
+            rtt,
+            oneWayLatency,
+            jitter,
+            quality: networkQuality,
+            latencyScore,
+            jitterScore
+        });
     });
     
     // Handle entity updates
@@ -134,13 +153,14 @@ export function createNetworkSystem(
                         range: entity.projectile.range,
                         distanceTraveled: entity.projectile.distanceTraveled,
                         sourceId: entity.projectile.sourceId,
+                        speed: entity.projectile.speed
                     };
                 }
                 break;
         }
 
         // Add asset component if present
-        if (entity.asset) {
+        if (entity.asset?.assetPath) {
             newEntity.asset = {
                 isLoaded: false,
                 assetPath: entity.asset.assetPath,
@@ -148,16 +168,17 @@ export function createNetworkSystem(
                 scale: entity.asset.scale
             };
         }
-
-        // Add entity to ECS world
-        ecsWorld.add(newEntity);
-        console.log('Entity added to ECS world:', { id, newEntity });
+        // don't add entity to ECS world entity already exists (projectile)
+        if (!ecsWorld.entities.find(e => e.id === entity.id)) {
+            // Add entity to ECS world
+            ecsWorld.add(newEntity);
+            console.log('Entity added to ECS world:', { id, newEntity });
+        }
         const gameEntity = ecsWorld.entities.find(e => e.id === id);
 
         // Set up state change handlers
         // Transform changes
         $(entity.transform).onChange(() => {
-            console.log('transform onchange');
             if(!gameEntity) return;
             const transformBuffer: TransformBuffer = {
                 transform: {
@@ -202,8 +223,7 @@ export function createNetworkSystem(
 
         // Owner changes
         $(entity.owner).onChange(() => {
-            if (!gameEntity) return;
-
+            if (!gameEntity || !entity.owner.id) return;
             gameEntity.owner!.id = entity.owner.id;
             gameEntity.owner!.isLocal = room.sessionId === entity.owner.id;
             ecsWorld.reindex(gameEntity);
@@ -211,7 +231,7 @@ export function createNetworkSystem(
 
         // Asset changes
         $(entity.asset).onChange(() => {
-            if (!gameEntity) return;
+            if (!gameEntity || !entity.asset.assetPath) return;
             gameEntity.asset!.assetPath = entity.asset.assetPath;
             gameEntity.asset!.assetType = entity.asset.assetType;
             gameEntity.asset!.scale = entity.asset.scale;
@@ -254,6 +274,7 @@ export function createNetworkSystem(
                 gameEntity.projectile!.range = entity.projectile.range;
                 gameEntity.projectile!.distanceTraveled = entity.projectile.distanceTraveled;
                 gameEntity.projectile!.sourceId = entity.projectile.sourceId;
+                gameEntity.projectile!.speed = entity.projectile.speed;
                 ecsWorld.reindex(gameEntity);
             });
         }
@@ -282,7 +303,8 @@ export function createNetworkSystem(
             room.send("ping", Date.now());
         },
         update: (dt: number) => {
-            networkPredictionSystem.addInput(dt, room.sessionId, inputSystem.getInput(), inputSystem.isIdle());
+            const isIdle = inputSystem.isIdle();
+            networkPredictionSystem.addInput(dt, inputSystem.getInput(), isIdle);
         },
         cleanup: () => {
             networkPredictionSystem.cleanup();

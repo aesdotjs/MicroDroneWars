@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import * as CANNON from 'cannon-es'
-import { Vector3, Quaternion } from 'babylonjs'
+import { Vector3, Quaternion } from '@babylonjs/core'
 import { world as ecsWorld } from '../../world'
 import { createDroneSystem, createPlaneSystem } from '../VehicleSystems'
 import { GameEntity } from '../../types'

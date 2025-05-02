@@ -17,7 +17,6 @@ export function createCollisionSystem(cannonWorld: World) {
     cannonWorld.addEventListener('beginContact', (event: any) => {
         const { bodyA, bodyB } = event;
         const contacts = event.target.contacts;
-        
         if (!contacts || contacts.length === 0) return;
 
         // Get the first contact point
@@ -43,20 +42,15 @@ export function createCollisionSystem(cannonWorld: World) {
             timestamp: Date.now()
         };
 
+        console.log('Collision event:', collisionEvent);
+
         // Handle collision
         handleCollisionEvent(collisionEvent);
     });
 
     return {
         update: (deltaTime: number) => {
-            // Collision handling is done through the event listener
-            // This system just ensures entities are properly registered
-            const damageableEntities = ecsWorld.with("gameState", "physics");
             
-            for (const entity of damageableEntities) {
-                if (!entity.physics!.body) continue;
-                // Entity registration is handled by the physics system
-            }
         }
     };
 }
@@ -102,22 +96,23 @@ export function determineCollisionSeverity(impactVelocity: number): CollisionSev
 function handleCollisionEvent(event: any) {
     const entityA = ecsWorld.entities.find(e => e.physics?.body === event.bodyA);
     const entityB = ecsWorld.entities.find(e => e.physics?.body === event.bodyB);
-
+    console.log('Entity A:', entityA);
+    console.log('Entity B:', entityB);
     if (!entityA || !entityB) return;
 
     // Handle vehicle collisions
-    if (entityA.vehicle) {
+    if (entityA.type === EntityType.Vehicle) {
         handleVehicleCollision(entityA, entityB, event);
     }
-    if (entityB.vehicle) {
+    if (entityB.type === EntityType.Vehicle) {
         handleVehicleCollision(entityB, entityA, event);
     }
 
     // Handle projectile collisions
-    if (entityA.projectile) {
+    if (entityA.type === EntityType.Projectile) {
         handleProjectileCollision(entityA, entityB, event);
     }
-    if (entityB.projectile) {
+    if (entityB.type === EntityType.Projectile) {
         handleProjectileCollision(entityB, entityA, event);
     }
 
@@ -136,6 +131,7 @@ function handleCollisionEvent(event: any) {
 export function handleVehicleCollision(vehicle: GameEntity, other: GameEntity, event: any) {
     if (!vehicle.gameState?.health) return;
 
+    console.log('Vehicle collision:', vehicle.id, other.id);
     // Calculate damage based on impact velocity and collision severity
     let damage = 0;
     switch (event.severity) {
@@ -171,14 +167,21 @@ export function handleVehicleCollision(vehicle: GameEntity, other: GameEntity, e
  * Handles collision events for projectiles
  */
 export function handleProjectileCollision(projectile: GameEntity, other: GameEntity, event: any) {
-    // Apply damage to hit entity
-    if (other.gameState!.health !== undefined) {
-        const damage = projectile.projectile!.damage || 20; // Use projectile damage or default
-        other.gameState!.health = Math.max(0, other.gameState!.health - damage);
+    // Check if projectile has required components
+    if (!projectile.gameState || !projectile.projectile) {
+        console.warn('Projectile missing required components:', projectile.id);
+        return;
     }
 
+    console.log('Projectile collision:', projectile.id, other.id);
+    // Check if other entity has gameState and health
+    if (other.gameState && other.gameState.health !== undefined) {
+        const damage = projectile.projectile.damage || 20; // Use projectile damage or default
+        other.gameState.health = Math.max(0, other.gameState.health - damage);
+    }
     // Mark projectile for removal
-    projectile.gameState!.health = 0;
+    projectile.gameState.health = 0;
+    console.log('Projectile health:', projectile.gameState?.health);
 }
 
 /**

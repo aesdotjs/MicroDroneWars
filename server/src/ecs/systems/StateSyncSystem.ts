@@ -87,10 +87,12 @@ export function createStateSyncSystem(
 
         // Update projectile data
         if (entity.projectile) {
+            entityState.projectile.projectileType = entity.projectile.projectileType;
             entityState.projectile.damage = entity.projectile.damage;
             entityState.projectile.range = entity.projectile.range;
             entityState.projectile.distanceTraveled = entity.projectile.distanceTraveled;
             entityState.projectile.sourceId = entity.projectile.sourceId;
+            entityState.projectile.speed = entity.transform?.velocity?.length() || 0;
         }
 
         // Update Owner data

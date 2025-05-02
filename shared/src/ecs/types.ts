@@ -141,6 +141,7 @@ export type ProjectileComponent = {
     range: number;
     distanceTraveled: number;
     sourceId: string;
+    speed: number;
 };
 
 
@@ -536,7 +537,7 @@ export const collisionMasks: CollisionMasks = {
     Drone: CollisionGroups.Drones | CollisionGroups.Environment | CollisionGroups.Projectiles | CollisionGroups.Flags | CollisionGroups.Planes,
     /** Plane collision mask - can collide with environment, projectiles, flags, and drones */
     Plane: CollisionGroups.Planes | CollisionGroups.Environment | CollisionGroups.Projectiles | CollisionGroups.Flags | CollisionGroups.Drones,
-    /** Projectile collision mask - can collide with drones, planes, and environment */
+    /** Projectile collision mask - can collide with drones, planes, and environment, but not with its source */
     Projectile: CollisionGroups.Drones | CollisionGroups.Planes | CollisionGroups.Environment,
     /** Flag collision mask - can collide with drones and planes */
     Flag: CollisionGroups.Drones | CollisionGroups.Planes,

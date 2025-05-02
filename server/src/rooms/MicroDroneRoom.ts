@@ -6,7 +6,7 @@ import { createPhysicsSystem } from "@shared/ecs/systems/PhysicsSystem";
 import { GameEntity, InputComponent, VehicleType, EntityType } from "@shared/ecs/types";
 import { DefaultWeapons } from "@shared/ecs/types";
 import { Vector3, Quaternion, NullEngine, Scene } from '@babylonjs/core';
-import { world as ecsWorld } from "@shared/ecs/world";
+import { world as ecsWorld, world } from "@shared/ecs/world";
 import { createStateSyncSystem } from "src/ecs/systems/StateSyncSystem";
 import { createHealthSystem } from "@shared/ecs/systems/HealthSystems";
 import { createFlagSystem } from "@shared/ecs/systems/FlagSystems";
@@ -15,6 +15,7 @@ import { createCollisionSystem } from "@shared/ecs/systems/CollisionSystems";
 import { createGameModeSystem, GameMode, GameModeConfig } from "../ecs/systems/GameModeSystem";
 import { createAssetSystem } from "@shared/ecs/systems/AssetSystem";
 import { createEntitySystem } from "@shared/ecs/systems/EntitySystem";
+import { createWeaponSystem, createProjectileSystem } from "@shared/ecs/systems/WeaponSystems";
 // import * as xhr2 from "xhr2";
 import '@babylonjs/loaders/glTF/2.0/Extensions/ExtrasAsMetadata';
 import '@babylonjs/loaders/glTF/2.0/Extensions/KHR_lights_punctual';
@@ -39,6 +40,8 @@ export class MicroDroneRoom extends Room<State> {
     private gameModeSystem!: ReturnType<typeof createGameModeSystem>;
     private assetSystem!: ReturnType<typeof createAssetSystem>;
     private entitySystem!: ReturnType<typeof createEntitySystem>;
+    private weaponSystem!: ReturnType<typeof createWeaponSystem>;
+    private projectileSystem!: ReturnType<typeof createProjectileSystem>;
     private accumulatedTime: number = 0;
     private isRunning: boolean = true;
     private serverEngine: NullEngine = new NullEngine();
@@ -73,14 +76,17 @@ export class MicroDroneRoom extends Room<State> {
         // Initialize physics world system
         this.physicsWorldSystem = createPhysicsWorldSystem();
         
+        // Initialize weapon system
+        this.weaponSystem = createWeaponSystem(this.physicsWorldSystem);
+
         // Initialize physics system
-        this.physicsSystem = createPhysicsSystem(this.physicsWorldSystem.getWorld());
+        this.physicsSystem = createPhysicsSystem(this.physicsWorldSystem);
 
         // Initialize entity system
         this.entitySystem = createEntitySystem();
 
         // Initialize input system
-        this.inputSystem = createInputSystem(this.physicsSystem, this.physicsWorldSystem);
+        this.inputSystem = createInputSystem(this.physicsSystem, this.physicsWorldSystem, this.weaponSystem);
 
         // Initialize state sync system
         this.stateSyncSystem = createStateSyncSystem(this.state, this.inputSystem, this.physicsWorldSystem);
@@ -88,6 +94,7 @@ export class MicroDroneRoom extends Room<State> {
 
         // Initialize ECS systems
         this.healthSystem = createHealthSystem();
+        this.projectileSystem = createProjectileSystem(this.physicsWorldSystem);
         this.flagSystem = createFlagSystem();
         this.collisionSystem = createCollisionSystem(this.physicsWorldSystem.getWorld());
         this.assetSystem = createAssetSystem(this.serverEngine, this.serverScene, this.physicsWorldSystem);
@@ -139,6 +146,7 @@ export class MicroDroneRoom extends Room<State> {
             // Update server tick in state
             this.state.serverTick = this.physicsWorldSystem.getCurrentTick();
             this.collisionSystem.update(1 / this.TICK_RATE);
+            this.projectileSystem.update(1 / this.TICK_RATE);
             this.healthSystem.update(1 / this.TICK_RATE);
             this.flagSystem.update(1 / this.TICK_RATE);
             this.gameModeSystem.update(1 / this.TICK_RATE);
@@ -200,6 +208,14 @@ export class MicroDroneRoom extends Room<State> {
             console.log(`Player ${client.sessionId} left the game`);
             this.onLeave(client);
         });
+
+        // handle entity removal
+        world.onEntityRemoved.subscribe((entity) => {
+            if (entity.physics?.body) {
+                this.physicsWorldSystem.removeBody(entity.id);
+            }
+            this.stateSyncSystem.removeEntity(entity);
+        });
     }
 
     /**
@@ -245,9 +261,7 @@ export class MicroDroneRoom extends Room<State> {
         const ecsEntities = ecsWorld.with("owner").where(({owner}) => owner.id === client.sessionId);
         console.log('Cleaning up entities for client:', client.sessionId, ecsEntities.size);
         for (const entity of ecsEntities) {
-            this.physicsWorldSystem.removeBody(entity.id);
             ecsWorld.remove(entity);
-            this.stateSyncSystem.removeEntity(entity);
         }
     }
 

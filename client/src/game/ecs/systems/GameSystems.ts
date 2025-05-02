@@ -4,13 +4,13 @@ import { State } from '@shared/schemas';
 import { createPhysicsWorldSystem } from '@shared/ecs/systems/PhysicsWorldSystem';
 import { createCameraSystem } from './CameraSystem';
 import { createClientInputSystem } from './ClientInputSystem';
-import { createEffectSystem } from './EffectSystem';
 import { createNetworkSystem } from './NetworkSystem';
 import { createCollisionSystem } from '@shared/ecs/systems/CollisionSystems';
 import { createFlagSystem } from '@shared/ecs/systems/FlagSystems';
 import { createSceneSystem } from './SceneSystem';
 import { createPhysicsSystem } from '@shared/ecs/systems/PhysicsSystem';
 import { createAssetSystem } from '@shared/ecs/systems/AssetSystem';
+import { createWeaponSystem } from '@shared/ecs/systems/WeaponSystems';
 import { world as ecsWorld } from '@shared/ecs/world';
 import CannonDebugger from "cannon-es-debugger-babylonjs";
 
@@ -38,23 +38,34 @@ export function createGameSystems(
     const cannonDebugger = new (CannonDebugger as any)(scene, physicsWorldSystem.getWorld());
     console.log('Cannon-es-debugger-babylonjs initialized');
 
+    // Initialize weapon system
+    console.log('Initializing weapon system...');
+    const weaponSystem = createWeaponSystem(physicsWorldSystem);
+    console.log('Weapon system initialized');
+
     // Initialize physics system
     console.log('Initializing physics system...');
-    const physicsSystem = createPhysicsSystem(physicsWorldSystem.getWorld());
+    const physicsSystem = createPhysicsSystem(physicsWorldSystem);
     console.log('Physics system initialized');
 
     // Initialize other systems
     console.log('Initializing remaining systems...');
     const cameraSystem = createCameraSystem(scene, camera);
     const inputSystem = createClientInputSystem(canvas);
-    const effectSystem = createEffectSystem(scene);
-    const networkSystem = createNetworkSystem(room, physicsWorldSystem, physicsSystem, inputSystem);
+    const networkSystem = createNetworkSystem(room, physicsWorldSystem, physicsSystem, inputSystem, weaponSystem);
     const collisionSystem = createCollisionSystem(physicsWorldSystem.getWorld());
     const flagSystem = createFlagSystem();
     const assetSystem = createAssetSystem(engine, scene, physicsWorldSystem);
     assetSystem.preloadAssets();
 
     console.log('All systems initialized');
+
+    // handle entity removal
+    ecsWorld.onEntityRemoved.subscribe((entity) => {
+        if (entity.physics?.body) {
+            physicsWorldSystem.removeBody(entity.id);
+        }
+    });
 
     // Fixed time step settings
     const FIXED_TIME_STEP = 1/60; // 60fps
@@ -70,11 +81,10 @@ export function createGameSystems(
                 cannonDebugger.update();
                 assetSystem.update(FIXED_TIME_STEP);
                 networkSystem.update(FIXED_TIME_STEP);
-                sceneSystem.update();
+                sceneSystem.update(FIXED_TIME_STEP);
                 collisionSystem.update(FIXED_TIME_STEP);
                 flagSystem.update(FIXED_TIME_STEP);
                 cameraSystem.update(FIXED_TIME_STEP);
-                effectSystem.update(FIXED_TIME_STEP);
                 
                 accumulator -= FIXED_TIME_STEP;
             }
@@ -98,7 +108,6 @@ export function createGameSystems(
         physicsSystem,
         cameraSystem,
         inputSystem,
-        effectSystem,
         networkSystem,
         collisionSystem,
         flagSystem,
@@ -112,7 +121,6 @@ export function createGameSystems(
                 physicsWorldSystem.dispose();
                 physicsSystem.cleanup();
                 inputSystem.cleanup();
-                effectSystem.cleanup();
                 networkSystem.cleanup();
                 assetSystem.cleanup();
                 // Clean up ecsWorld

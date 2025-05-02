@@ -2,15 +2,17 @@ import * as CANNON from 'cannon-es';
 import { Vector3, Quaternion } from '@babylonjs/core';
 import { world as ecsWorld } from '../world';
 import { GameEntity, WeaponComponent, InputComponent, ProjectileType, EntityType, CollisionGroups, collisionMasks } from '../types';
-
+import { createPhysicsWorldSystem } from './PhysicsWorldSystem';
 /**
  * Weapon system that handles projectile creation and management
  */
-export function createWeaponSystem(cannonWorld: CANNON.World) {
+export function createWeaponSystem(
+    physicsWorldSystem: ReturnType<typeof createPhysicsWorldSystem>
+) {
     const armedEntities = ecsWorld.with("vehicle", "transform");
 
     return {
-        update: (dt: number, entity: GameEntity, input: InputComponent) => {
+        update: (dt: number, entity: GameEntity, input: InputComponent, isServer: boolean) => {
             const vehicle = entity.vehicle!;
             const activeWeapon = vehicle.weapons[vehicle.activeWeaponIndex];
 
@@ -30,8 +32,8 @@ export function createWeaponSystem(cannonWorld: CANNON.World) {
                 const now = Date.now();
                 if (now - activeWeapon.lastFireTime >= activeWeapon.cooldown * 1000) {
                     // Create projectile
-                    const projectile = createProjectile(entity, activeWeapon, cannonWorld);
-                    
+                    const projectileId = isServer ? `${entity.id}_${input.tick}` : `${entity.id}_${physicsWorldSystem.getCurrentTick()}`;
+                    const projectile = physicsWorldSystem.createProjectile(entity, activeWeapon, projectileId);
                     // Add to ECS world
                     ecsWorld.add(projectile);
                     
@@ -53,100 +55,20 @@ export function createWeaponSystem(cannonWorld: CANNON.World) {
 }
 
 /**
- * Creates a projectile entity based on the shooter and weapon
- */
-function createProjectile(
-    shooter: GameEntity, 
-    weapon: WeaponComponent,
-    cannonWorld: CANNON.World
-): GameEntity {
-    // Get forward direction from shooter's rotation
-    const forward = new Vector3(0, 0, 1);
-    forward.rotateByQuaternionAroundPointToRef(
-        shooter.transform!.rotation,
-        Vector3.Zero(),
-        forward
-    );
-
-    // Create projectile body
-    const body = new CANNON.Body({
-        mass: 0.1,
-        position: new CANNON.Vec3(
-            shooter.transform!.position.x,
-            shooter.transform!.position.y,
-            shooter.transform!.position.z
-        ),
-        velocity: new CANNON.Vec3(
-            forward.x * weapon.projectileSpeed,
-            forward.y * weapon.projectileSpeed,
-            forward.z * weapon.projectileSpeed
-        ),
-        collisionFilterGroup: CollisionGroups.Projectiles,
-        collisionFilterMask: collisionMasks.Projectile,
-        type: CANNON.Body.DYNAMIC
-    });
-
-    // Add collision shape based on projectile type
-    if (weapon.projectileType === ProjectileType.Bullet) {
-        body.addShape(new CANNON.Sphere(0.1));
-    } else if (weapon.projectileType === ProjectileType.Missile) {
-        body.addShape(new CANNON.Box(new CANNON.Vec3(0.2, 0.2, 0.5)));
-    }
-
-    // Add body to CANNON world
-    cannonWorld.addBody(body);
-
-    // Create and return projectile entity
-    return {
-        id: `${shooter.id}_${Date.now()}`,
-        type: EntityType.Projectile,
-        transform: {
-            position: shooter.transform!.position.clone(),
-            rotation: shooter.transform!.rotation.clone(),
-            velocity: forward.scale(weapon.projectileSpeed),
-            angularVelocity: Vector3.Zero()
-        },
-        physics: {
-            body,
-            mass: 0.1,
-            drag: 0.1,
-            angularDrag: 0.1,
-            maxSpeed: weapon.projectileSpeed,
-            maxAngularSpeed: 0,
-            maxAngularAcceleration: 0,
-            angularDamping: 1,
-            forceMultiplier: 1,
-            thrust: 0,
-            lift: 0,
-            torque: 0,
-        },
-        projectile: {
-            projectileType: weapon.projectileType as ProjectileType,
-            damage: weapon.damage,
-            range: weapon.range,
-            distanceTraveled: 0,
-            sourceId: shooter.id,
-        },
-        tick: {
-            tick: 0,
-            timestamp: Date.now()
-        }
-    };
-}
-
-/**
  * Projectile system that updates projectile positions and handles lifetime
  */
-export function createProjectileSystem() {
+export function createProjectileSystem(
+    physicsWorldSystem: ReturnType<typeof createPhysicsWorldSystem>
+) {
     const projectiles = ecsWorld.with("projectile", "transform");
 
     return {
         update: (dt: number) => {
             for (const entity of projectiles) {
+                physicsWorldSystem.applyBodyTransform(entity, entity.physics!.body);
                 // Update distance traveled
                 const distance = entity.transform!.velocity.length() * dt;
                 entity.projectile!.distanceTraveled += distance;
-
                 // Remove if exceeded range
                 if (entity.projectile!.distanceTraveled >= entity.projectile!.range) {
                     ecsWorld.remove(entity);

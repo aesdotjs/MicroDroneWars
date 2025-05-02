@@ -1,7 +1,11 @@
 import { Scene, Engine, Vector3, HemisphericLight, ArcRotateCamera, Color4, Quaternion, MeshBuilder, StandardMaterial, Color3, DirectionalLight, ShadowGenerator, GlowLayer, Vector2 } from '@babylonjs/core';
 
 import { world as ecsWorld } from '@shared/ecs/world';
-import { GameEntity } from '@shared/ecs/types';
+import { EntityType } from '@shared/ecs/types';
+import { createEffectSystem } from './EffectSystem';
+import { useGameDebug } from '@/composables/useGameDebug';
+
+const { log } = useGameDebug();
 
 /**
  * Creates a system that handles scene initialization, setup, and rendering
@@ -13,6 +17,8 @@ export function createSceneSystem(engine: Engine) {
     scene.useRightHandedSystem = true;
     scene.clearColor = new Color4(0.1, 0.1, 0.1, 1);
     console.log('Scene created');
+
+    const effectSystem = createEffectSystem(scene);
 
     // Initialize scene components
     console.log('Setting up lights...');
@@ -34,7 +40,8 @@ export function createSceneSystem(engine: Engine) {
     const renderables = ecsWorld.with("transform").where(entity => 
         Boolean(
             (entity.asset && !entity.render) || // Entities with assets that need mesh creation
-            (entity.render && entity.render.mesh) // Entities with existing meshes
+            (entity.render && entity.render.mesh) || // Entities with existing meshes
+            (entity.projectile && !entity.render) // Entities with projectiles that need mesh creation
         )
     );
 
@@ -43,7 +50,8 @@ export function createSceneSystem(engine: Engine) {
         getCamera: () => camera,
         getShadowGenerator: () => shadowGenerator,
         getGlowLayer: () => glowLayer,
-        update: () => {
+        update: (dt: number) => {
+            effectSystem.update(dt);
             // Update entity positions and rotations
             for (const entity of renderables) {
                 if (!entity.transform) continue;
@@ -52,15 +60,24 @@ export function createSceneSystem(engine: Engine) {
                     console.log('Creating mesh for entity:', entity.id);
                     console.log('Entity asset:', entity.asset.meshes);
                     const mainMesh = entity.asset.meshes[0].clone(`${entity.id}_mesh`, null);
-                    
+                    entity.asset.meshes.forEach((mesh) => {
+                        mesh.setParent(mainMesh);
+                        // Add to shadow generator
+                        shadowGenerator.addShadowCaster(mesh);
+                    });
+                    entity.asset.triggerMeshes?.forEach((mesh) => {
+                        mesh.setParent(mainMesh);
+                    });
                     // Apply transformations
                     mainMesh.scaling = new Vector3(entity.asset.scale, entity.asset.scale, entity.asset.scale);
                     mainMesh.rotationQuaternion = entity.transform.rotation;
                     mainMesh.position = entity.transform.position;
                     entity.render = { mesh: mainMesh };
                     ecsWorld.reindex(entity);
-                    // Add to shadow generator
-                    shadowGenerator.addShadowCaster(mainMesh);
+                }
+
+                if (entity.type === EntityType.Projectile && !entity.render?.mesh) {
+                    entity.render = { mesh: effectSystem.createProjectileMesh(entity) };
                 }
 
                 // Update position and rotation for all entities with meshes

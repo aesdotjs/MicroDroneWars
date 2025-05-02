@@ -6,6 +6,10 @@ import { createPhysicsSystem } from '@shared/ecs/systems/PhysicsSystem';
 import { createPhysicsWorldSystem } from '@shared/ecs/systems/PhysicsWorldSystem';
 import { Room } from 'colyseus.js';
 import { State } from '@shared/schemas';
+import { useGameDebug } from '@/composables/useGameDebug';
+import { createWeaponSystem } from '@shared/ecs/systems/WeaponSystems';
+
+const { log } = useGameDebug();
 
 /**
  * Creates a system that handles network prediction, reconciliation, and interpolation
@@ -13,6 +17,7 @@ import { State } from '@shared/schemas';
 export function createNetworkPredictionSystem(
     physicsSystem:  ReturnType<typeof createPhysicsSystem>,
     physicsWorldSystem: ReturnType<typeof createPhysicsWorldSystem>,
+    weaponSystem: ReturnType<typeof createWeaponSystem>,
     room: Room<State>
 ) {
     // Configuration
@@ -26,9 +31,7 @@ export function createNetworkPredictionSystem(
 
     // State buffers for each entity
     const TransformBuffers = new Map<string, TransformBuffer[]>();
-    const pendingInputs = new Map<string, InputComponent[]>();
-    const lastProcessedInputTicks = new Map<string, number>();
-    const lastProcessedInputTimestamps = new Map<string, number>();
+    let pendingInputs: InputComponent[] = [];
 
     // Network quality tracking
     let networkLatency = 0;
@@ -46,6 +49,8 @@ export function createNetworkPredictionSystem(
     const RECONCILIATION_POSITION_SMOOTHING = 0.2;
     const RECONCILIATION_ROTATION_SMOOTHING = 0.3;
     const MAX_PENDING_INPUTS = 60;
+    const HEARTBEAT_INTERVAL = 60; // Send heartbeat every 60 ticks
+    let lastHeartbeatTick = 0;
 
     /**
      * Updates the interpolation delay based on network quality
@@ -76,7 +81,6 @@ export function createNetworkPredictionSystem(
         const targetTime = now - currentInterpolationDelay;
         TransformBuffers.forEach((buffer, id) => {
             if (buffer.length < 1 || id === localPlayerEntityId) return;
-            
             const entity = ecsWorld.entities.find(e => e.id === id);
             if (!entity || !entity.transform) return;
 
@@ -189,101 +193,68 @@ export function createNetworkPredictionSystem(
         addEntityState: (id: string, state: TransformBuffer) => {
             const entity = ecsWorld.entities.find(e => e.id === id);
             if (!entity || !entity.transform) return;
+            const clientTick = physicsWorldSystem.getCurrentTick();
+            const isLocalPlayer = entity.owner?.isLocal;
+            if (isLocalPlayer) {
+                log('Client Tick', clientTick);
+                log('Server State Tick', state.tick.tick);
+                log('Last Processed Input Tick', state.tick.lastProcessedInputTick ?? state.tick.tick);
+                log('Pending Inputs', pendingInputs.length);
+            }
 
             // Initialize buffers if needed
             if (!TransformBuffers.has(id)) {
                 TransformBuffers.set(id, []);
             }
-            if (!pendingInputs.has(id)) {
-                pendingInputs.set(id, []);
-            }
-            if (!lastProcessedInputTicks.has(id)) {
-                lastProcessedInputTicks.set(id, 0);
-            }
-            if (!lastProcessedInputTimestamps.has(id)) {
-                lastProcessedInputTimestamps.set(id, 0);
-            }
 
             const buffers = TransformBuffers.get(id)!;
-            const isLocalPlayer = entity.owner?.isLocal;
             
             if (isLocalPlayer) {
-                physicsWorldSystem.setCurrentTick(state.tick.tick);
-                // // Get current client state
-                // const clientState = {
-                //     position: entity.transform.position.clone(),
-                //     quaternion: entity.transform.rotation.clone()
-                // };
-
-                // const serverState = {
-                //     position: new Vector3(state.transform.position.x, state.transform.position.y, state.transform.position.z),
-                //     quaternion: new Quaternion(
-                //         state.transform.rotation.x,
-                //         state.transform.rotation.y,
-                //         state.transform.rotation.z,
-                //         state.transform.rotation.w
-                //     )
-                // };
-
-                // // Calculate position and rotation errors
-                // const positionError = serverState.position.subtract(clientState.position).length();
-                // const dot = Math.abs(Quaternion.Dot(clientState.quaternion, serverState.quaternion));
-                // const rotationError = Math.acos(Math.min(1, dot));
-
-                // // If errors are significant, reconcile
-                // if (positionError > RECONCILIATION_POSITION_THRESHOLD ||
-                //     rotationError > RECONCILIATION_ROTATION_THRESHOLD) {
-                    
-                //     // Smoothly correct position
-                //     entity.transform.position.x += (serverState.position.x - clientState.position.x) * RECONCILIATION_POSITION_SMOOTHING;
-                //     entity.transform.position.y += (serverState.position.y - clientState.position.y) * RECONCILIATION_POSITION_SMOOTHING;
-                //     entity.transform.position.z += (serverState.position.z - clientState.position.z) * RECONCILIATION_POSITION_SMOOTHING;
-
-                //     // Smoothly correct rotation
-                //     const correction = Quaternion.Slerp(
-                //         clientState.quaternion,
-                //         serverState.quaternion,
-                //         RECONCILIATION_ROTATION_SMOOTHING
-                //     );
-                //     entity.transform.rotation.x = correction.x;
-                //     entity.transform.rotation.y = correction.y;
-                //     entity.transform.rotation.z = correction.z;
-                //     entity.transform.rotation.w = correction.w;
-                // }
+                // physicsWorldSystem.setCurrentTick(state.tick.tick);
                 entity.transform.position.copyFrom(state.transform.position);
                 entity.transform.rotation.copyFrom(state.transform.rotation);
                 entity.transform.velocity.copyFrom(state.transform.velocity);
                 entity.transform.angularVelocity.copyFrom(state.transform.angularVelocity);
-                entity.physics?.body.position.set(
-                    state.transform.position.x,
-                    state.transform.position.y,
-                    state.transform.position.z
-                );
-                entity.physics?.body.quaternion.set(
-                    state.transform.rotation.x,
-                    state.transform.rotation.y,
-                    state.transform.rotation.z,
-                    state.transform.rotation.w
-                );
-                entity.physics?.body.velocity.set(
-                    state.transform.velocity.x,
-                    state.transform.velocity.y,
-                    state.transform.velocity.z
-                );
-                entity.physics?.body.angularVelocity.set(
-                    state.transform.angularVelocity.x,
-                    state.transform.angularVelocity.y,
-                    state.transform.angularVelocity.z
-                );                
+                
+                // Update physics body state
+                if (entity.physics?.body) {
+                    entity.physics.body.position.set(
+                        state.transform.position.x,
+                        state.transform.position.y,
+                        state.transform.position.z
+                    );
+                    entity.physics.body.quaternion.set(
+                        state.transform.rotation.x,
+                        state.transform.rotation.y,
+                        state.transform.rotation.z,
+                        state.transform.rotation.w
+                    );
+                    entity.physics.body.velocity.set(
+                        state.transform.velocity.x,
+                        state.transform.velocity.y,
+                        state.transform.velocity.z
+                    );
+                    entity.physics.body.angularVelocity.set(
+                        state.transform.angularVelocity.x,
+                        state.transform.angularVelocity.y,
+                        state.transform.angularVelocity.z
+                    );
+                }
 
                 // Replay unprocessed inputs
                 const lastProcessedInputTick = state.tick.lastProcessedInputTick ?? state.tick.tick;
-                const unprocessedInputs = pendingInputs.get(id)!.filter((input: InputComponent) => input.tick > lastProcessedInputTick);
+                const unprocessedInputs = pendingInputs.filter((input: InputComponent) => input.tick > lastProcessedInputTick);
+                
+                log('Replaying Inputs', {
+                    count: unprocessedInputs.length,
+                    from: lastProcessedInputTick,
+                    to: unprocessedInputs.length > 0 ? Math.max(...unprocessedInputs.map(i => i.tick)) : lastProcessedInputTick
+                });
+
                 for (const input of unprocessedInputs) {
-                    // Apply input to entity
                     physicsSystem.update(1/60, entity, input);
                 }
-                pendingInputs.set(id, unprocessedInputs);
+                pendingInputs = unprocessedInputs;
             } else {
                 // Buffer remote states for interpolation
                 buffers.push(state);
@@ -297,18 +268,8 @@ export function createNetworkPredictionSystem(
         /**
          * Adds a new input to the pending inputs buffer
          */
-        addInput: (dt: number, id: string, input: InputComponent, isIdle: boolean) => {
-            if (!pendingInputs.has(id)) {
-                pendingInputs.set(id, []);
-            }
-
-            const inputs = pendingInputs.get(id)!;
+        addInput: (dt: number, input: InputComponent, isIdle: boolean) => {
             const currentTick = physicsWorldSystem.getCurrentTick();
-
-            // Skip if we've already processed this tick
-            if (currentTick === lastProcessedInputTicks.get(id)) {
-                return;
-            }
 
             // Create final input with timestamp and tick
             const finalInput: InputComponent = {
@@ -317,22 +278,35 @@ export function createNetworkPredictionSystem(
                 tick: currentTick
             };
 
+            log('Input Added', {
+                tick: currentTick,
+                isIdle,
+                pendingCount: pendingInputs.length
+            });
+
             // Update local player immediately
             const entity = ecsWorld.with("physics", "vehicle", "transform", "owner").where(({owner}) => owner?.isLocal).entities[0];
             if (entity) {
                 physicsSystem.update(dt, entity, finalInput);
+                // Always update weapon system if entity has weapons
+                if (entity.vehicle?.weapons) {
+                    weaponSystem.update(dt, entity, finalInput, false);
+                }
             }
 
             // Only send and store non-idle inputs
             if (!isIdle) {
                 room.send("command", finalInput);
-                inputs.push(finalInput);
-                lastProcessedInputTicks.set(id, currentTick);
+                pendingInputs.push(finalInput);
+            } else if (currentTick - lastHeartbeatTick >= HEARTBEAT_INTERVAL) {
+                const heartbeatInput = createIdleInput(currentTick);
+                room.send("command", heartbeatInput);
+                lastHeartbeatTick = currentTick;
             }
 
             // Keep buffer size reasonable
-            if (inputs.length > MAX_PENDING_INPUTS) {
-                inputs.splice(0, inputs.length - MAX_PENDING_INPUTS);
+            if (pendingInputs.length > MAX_PENDING_INPUTS) {
+                pendingInputs.splice(0, pendingInputs.length - MAX_PENDING_INPUTS);
             }
         },
 
@@ -356,9 +330,7 @@ export function createNetworkPredictionSystem(
          */
         cleanup: () => {
             TransformBuffers.clear();
-            pendingInputs.clear();
-            lastProcessedInputTicks.clear();
-            lastProcessedInputTimestamps.clear();
+            pendingInputs = [];
         }
     };
 }

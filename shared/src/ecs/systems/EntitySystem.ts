@@ -44,40 +44,6 @@ export function createEntitySystem() {
                 }
             };
         },
-        createProjectileEntity: (
-            id: string,
-            sourceId: string,
-            position: Vector3,
-            direction: Vector3,
-            speed: number,
-            damage: number,
-            range: number,
-            type: ProjectileType
-        ): GameEntity => {
-            return {
-                id,
-                type: EntityType.Projectile,
-                transform: {
-                    position: position.clone(),
-                    rotation: new Quaternion(0, 0, 0, 1),
-                    velocity: direction.scale(speed),
-                    angularVelocity: new Vector3(0, 0, 0)
-                },
-                projectile: {
-                    projectileType: type,
-                    damage,
-                    range,
-                    distanceTraveled: 0,
-                    sourceId,
-                },
-                tick: {
-                    tick: 0,
-                    timestamp: Date.now(),
-                    lastProcessedInputTimestamp: 0,
-                    lastProcessedInputTick: 0
-                }
-            };
-        },
         createFlagEntity: (
             id: string,
             team: number,

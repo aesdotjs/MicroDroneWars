@@ -75,31 +75,25 @@ export function createEffectSystem(scene: Scene) {
     }
 
     // Create projectile mesh
-    function createProjectileMesh(projectile: GameEntity): void {
-        if (!projectile.transform) return;
-
+    function createProjectileMesh(projectile: GameEntity): Mesh {
         removeProjectileMesh(projectile.id);
 
         let projectileMesh: Mesh;
         if (projectile.projectile?.projectileType === ProjectileType.Bullet) {
-            projectileMesh = MeshBuilder.CreateBox('bullet', {
-                width: 0.05,
-                height: 0.05,
-                depth: 0.4
-            }, scene);
+            projectileMesh = MeshBuilder.CreateSphere('bullet', { diameter: 0.05 }, scene);
             projectileMesh.material = bulletMaterial;
         } else {
             projectileMesh = MeshBuilder.CreateBox('missile', { size: 0.2 }, scene);
             projectileMesh.material = missileMaterial;
         }
 
-        projectileMesh.position = projectile.transform.position;
-        const direction = projectile.transform.velocity.normalize();
-        const rotation = Quaternion.FromLookDirectionLH(direction, Vector3.Up());
-        projectileMesh.rotationQuaternion = rotation;
+        projectileMesh.position = projectile.transform!.position;
+        projectileMesh.rotationQuaternion = projectile.transform!.rotation;
 
         activeProjectiles.set(projectile.id, projectileMesh);
+        console.log('created projectile mesh', projectile.id);
         createTrailEffect(projectile, projectileMesh);
+        return projectileMesh;
     }
 
     // Create trail effect
@@ -217,14 +211,14 @@ export function createEffectSystem(scene: Scene) {
         removeProjectileMesh,
         cleanup,
         update: (dt: number) => {
-            // Update projectile positions
-            const projectiles = ecsWorld.with("projectile", "transform");
-            for (const projectile of projectiles) {
-                const mesh = activeProjectiles.get(projectile.id);
-                if (mesh && projectile.transform) {
-                    mesh.position.copyFrom(projectile.transform.position);
-                }
-            }
+            // // Update projectile positions
+            // const projectiles = ecsWorld.with("projectile", "transform");
+            // for (const projectile of projectiles) {
+            //     const mesh = activeProjectiles.get(projectile.id);
+            //     if (mesh && projectile.transform) {
+            //         mesh.position.copyFrom(projectile.transform.position);
+            //     }
+            // }
         }
     };
 } 
