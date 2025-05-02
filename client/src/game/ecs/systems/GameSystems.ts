@@ -12,6 +12,7 @@ import { createPhysicsSystem } from '@shared/ecs/systems/PhysicsSystem';
 import { createAssetSystem } from '@shared/ecs/systems/AssetSystem';
 import { createWeaponSystem } from '@shared/ecs/systems/WeaponSystems';
 import { world as ecsWorld } from '@shared/ecs/world';
+import { createProjectileSystem } from '@shared/ecs/systems/WeaponSystems';
 import CannonDebugger from "cannon-es-debugger-babylonjs";
 
 export function createGameSystems(
@@ -43,6 +44,11 @@ export function createGameSystems(
     const weaponSystem = createWeaponSystem(physicsWorldSystem);
     console.log('Weapon system initialized');
 
+    // Initialize projectile system
+    console.log('Initializing projectile system...');
+    const projectileSystem = createProjectileSystem(physicsWorldSystem);
+    console.log('Projectile system initialized');
+
     // Initialize physics system
     console.log('Initializing physics system...');
     const physicsSystem = createPhysicsSystem(physicsWorldSystem);
@@ -55,18 +61,21 @@ export function createGameSystems(
     const networkSystem = createNetworkSystem(room, physicsWorldSystem, physicsSystem, inputSystem, weaponSystem);
     const collisionSystem = createCollisionSystem(physicsWorldSystem.getWorld());
     const flagSystem = createFlagSystem();
-    const assetSystem = createAssetSystem(engine, scene, physicsWorldSystem);
+    const assetSystem = createAssetSystem(engine, scene, physicsWorldSystem, false);
     assetSystem.preloadAssets();
 
     console.log('All systems initialized');
 
     // handle entity removal
     ecsWorld.onEntityRemoved.subscribe((entity) => {
+        console.log('Entity removed sub', entity.id);
         if (entity.physics?.body) {
             physicsWorldSystem.removeBody(entity.id);
         }
+        if (entity.projectile?.projectileType) {
+            sceneSystem.removeProjectileMesh(entity.id);
+        }
     });
-
     // Fixed time step settings
     const FIXED_TIME_STEP = 1/60; // 60fps
     let accumulator = 0;
@@ -78,9 +87,10 @@ export function createGameSystems(
             // Update systems in the correct order with fixed time step
             while (accumulator >= FIXED_TIME_STEP) {
                 physicsWorldSystem.update(FIXED_TIME_STEP);
-                cannonDebugger.update();
+                // cannonDebugger.update();
                 assetSystem.update(FIXED_TIME_STEP);
                 networkSystem.update(FIXED_TIME_STEP);
+                projectileSystem.update(FIXED_TIME_STEP);
                 sceneSystem.update(FIXED_TIME_STEP);
                 collisionSystem.update(FIXED_TIME_STEP);
                 flagSystem.update(FIXED_TIME_STEP);
