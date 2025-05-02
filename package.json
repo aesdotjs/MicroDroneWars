@@ -1,16 +1,20 @@
 {
-  "name": "microdrone-wars-server",
+  "name": "microdrone-wars",
   "version": "1.0.0",
-  "description": "MicroDrone Wars Game Server",
-  "main": "dist/index.js",
+  "private": true,
+  "workspaces": [
+    "client",
+    "server",
+    "shared"
+  ],
   "scripts": {
-    "start": "ts-node-dev -r tsconfig-paths/register dist/server/src/index.js",
-    "dev": "ts-node-dev -r tsconfig-paths/register --respawn --transpile-only -- src/index.ts",
-    "build": "tsc",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "pnpm -r build",
+    "dev": "pnpm -r dev",
+    "test": "pnpm -r test"
   },
   "dependencies": {
     "@babylonjs/core": "^8.3.1",
+    "@babylonjs/inspector": "^8.3.1",
     "@babylonjs/loaders": "^8.4.1",
     "@colyseus/auth": "^0.16.0",
     "@colyseus/core": "^0.16.0",
@@ -24,15 +28,23 @@
     "@colyseus/ws-transport": "^0.16.4",
     "cannon-es": "^0.20.0",
     "colyseus": "^0.16.0",
+    "colyseus.js": "^0.16.0",
     "express": "^4.18.2",
     "miniplex": "^2.0.0",
-    "shared": "workspace:*",
-    "xhr2": "^0.2.1"
+    "vue": "^3.4.15"
   },
   "devDependencies": {
+    "@types/babylon": "^6.16.9",
+    "@types/cannon": "^0.1.13",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.17.30",
+    "@types/ws": "^8.18.1",
+    "@vitejs/plugin-vue": "^5.2.3",
     "ts-node-dev": "^2.0.0",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.3.3",
-    "vitest": "^3.1.2"
+    "vite": "^5.1.3",
+    "vitest": "^3.1.2",
+    "vue-tsc": "^2.2.8"
   }
-}
+} 

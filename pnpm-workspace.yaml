@@ -1,0 +1,8 @@
+packages:
+  - client
+  - server
+  - shared
+onlyBuiltDependencies:
+  - babylonjs
+  - esbuild
+  - msgpackr-extract

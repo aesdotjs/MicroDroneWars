@@ -1,96 +1,195 @@
 import { Room, Client } from "colyseus";
-import { ArraySchema } from "@colyseus/schema";
-import { State, Drone, Plane, Flag, Weapon, Projectile, Vehicle } from "../schemas/index";
-import { ServerPhysicsWorld } from "../physics/ServerPhysicsWorld";
-import { VehiclePhysicsConfig, PhysicsInput } from "@shared/physics/types";
-import { DefaultWeapons } from "@shared/physics/WeaponSystem";
-import { Vector3, Quaternion } from "babylonjs";
-
+import { ArraySchema, entity } from "@colyseus/schema";
+import { State, EntitySchema, WeaponSchema } from "@shared/schemas";
+import { createPhysicsWorldSystem } from "@shared/ecs/systems/PhysicsWorldSystem";
+import { createPhysicsSystem } from "@shared/ecs/systems/PhysicsSystem";
+import { GameEntity, InputComponent, VehicleType, EntityType } from "@shared/ecs/types";
+import { DefaultWeapons } from "@shared/ecs/types";
+import { Vector3, Quaternion, NullEngine, Scene } from '@babylonjs/core';
+import { world as ecsWorld, world } from "@shared/ecs/world";
+import { createStateSyncSystem } from "src/ecs/systems/StateSyncSystem";
+import { createHealthSystem } from "@shared/ecs/systems/HealthSystems";
+import { createFlagSystem } from "@shared/ecs/systems/FlagSystems";
+import { createInputSystem } from "../ecs/systems/InputSystems";
+import { createCollisionSystem } from "@shared/ecs/systems/CollisionSystems";
+import { createGameModeSystem, GameMode, GameModeConfig } from "../ecs/systems/GameModeSystem";
+import { createAssetSystem } from "@shared/ecs/systems/AssetSystem";
+import { createEntitySystem } from "@shared/ecs/systems/EntitySystem";
+import { createWeaponSystem, createProjectileSystem } from "@shared/ecs/systems/WeaponSystems";
+// import * as xhr2 from "xhr2";
+import '@babylonjs/loaders/glTF/2.0/Extensions/ExtrasAsMetadata';
+import '@babylonjs/loaders/glTF/2.0/Extensions/KHR_lights_punctual';
+import '@babylonjs/loaders/glTF/2.0/glTFLoader';
+(global as any).XMLHttpRequest = require("xhr2");
 /**
  * Represents a game room for MicroDroneWars multiplayer matches.
  * Handles player connections, game state, and physics simulation.
  * @extends Room<State>
  */
 export class MicroDroneRoom extends Room<State> {
-    private physicsWorld!: ServerPhysicsWorld;
+    private physicsWorldSystem!: ReturnType<typeof createPhysicsWorldSystem>;
+    private physicsSystem!: ReturnType<typeof createPhysicsSystem>;
     private readonly TICK_RATE = 60;
     private readonly MAX_LATENCY = 1000; // 1 second max latency
-    private readonly MAX_INPUTS_PER_TICK = 3;
     private clientLatencies: Map<string, number> = new Map();
+    private stateSyncSystem!: ReturnType<typeof createStateSyncSystem>;
+    private healthSystem!: ReturnType<typeof createHealthSystem>;
+    private flagSystem!: ReturnType<typeof createFlagSystem>;
+    private inputSystem!: ReturnType<typeof createInputSystem>;
+    private collisionSystem!: ReturnType<typeof createCollisionSystem>;
+    private gameModeSystem!: ReturnType<typeof createGameModeSystem>;
+    private assetSystem!: ReturnType<typeof createAssetSystem>;
+    private entitySystem!: ReturnType<typeof createEntitySystem>;
+    private weaponSystem!: ReturnType<typeof createWeaponSystem>;
+    private projectileSystem!: ReturnType<typeof createProjectileSystem>;
+    private accumulatedTime: number = 0;
+    private isRunning: boolean = true;
+    private serverEngine: NullEngine = new NullEngine();
+    private serverScene: Scene = new Scene(this.serverEngine);
+    private isInitializing: boolean = false;
 
     /**
      * Initializes the game room when it's created.
      * Sets up room options, physics world, flags, and message handlers.
      * @param options - Room creation options
      */
-    onCreate(options: Record<string, any>) {
+    async onCreate(options: Record<string, any>) {
         this.state = new State();
         console.log("MicroDrone room created");
 
         this.autoDispose = false; // Keep room alive even when empty
         this.maxClients = 20; // Set a reasonable max clients
 
-        // Initialize physics world
-        this.physicsWorld = new ServerPhysicsWorld();
-        this.state.serverTick = this.physicsWorld.getCurrentTick();
+        // Initialize server-side Babylon.js engine and scene
+        this.serverEngine = new NullEngine();
+        this.serverScene = new Scene(this.serverEngine);
+        this.serverScene.useRightHandedSystem = true;
+        /**
+         * Generates a unique entity ID
+         * @returns A unique entity ID
+         */
+        const generateEntityId = (): string => {
+            const id = `entity_${this.state.nextEntityId++}`;
+            return id;
+        }
 
-         // Set room options for faster connection
-         this.patchRate = 1000 / this.TICK_RATE; // 60 updates per second
-         this.setSimulationInterval((deltaTime) =>  {
-            this.update(deltaTime);
+        // Initialize physics world system
+        this.physicsWorldSystem = createPhysicsWorldSystem();
+        
+        // Initialize weapon system
+        this.weaponSystem = createWeaponSystem(this.physicsWorldSystem);
+
+        // Initialize physics system
+        this.physicsSystem = createPhysicsSystem(this.physicsWorldSystem);
+
+        // Initialize entity system
+        this.entitySystem = createEntitySystem();
+
+        // Initialize input system
+        this.inputSystem = createInputSystem(this.physicsSystem, this.physicsWorldSystem, this.weaponSystem);
+
+        // Initialize state sync system
+        this.stateSyncSystem = createStateSyncSystem(this.state, this.inputSystem, this.physicsWorldSystem);
+        this.state.serverTick = this.physicsWorldSystem.getCurrentTick();
+
+        // Initialize ECS systems
+        this.healthSystem = createHealthSystem();
+        this.projectileSystem = createProjectileSystem(this.physicsWorldSystem);
+        this.flagSystem = createFlagSystem();
+        this.collisionSystem = createCollisionSystem(this.physicsWorldSystem.getWorld());
+        this.assetSystem = createAssetSystem(this.serverEngine, this.serverScene, this.physicsWorldSystem);
+        // this.assetSystem.preloadAssets();
+
+        // Initialize game mode system
+        const gameModeConfig: GameModeConfig = {
+            mode: GameMode.CTF,
+            teamCount: 2,
+            maxPlayers: 20,
+            timeLimit: 600, // 10 minutes
+            scoreLimit: 3,
+            map: {
+                path: "http://localhost:2568/assets/maps/CTF-test.glb",
+                type: "glb",
+                scale: 1
+            }
+        };
+
+        this.gameModeSystem = createGameModeSystem(
+            this.physicsWorldSystem,
+            this.stateSyncSystem,
+            this.entitySystem,
+            this.assetSystem,
+            generateEntityId,
+            gameModeConfig
+        );
+
+        // Start initialization in the background
+        this.initializeGameMode();
+
+        // Set room options for faster connection
+        const NS_PER_SEC = 1e9;
+        const NS_PER_TICK = NS_PER_SEC / this.TICK_RATE;
+        let lastTime = process.hrtime();
+
+        const step = () => {
+            if (!this.isRunning) return;
+
+            const now = process.hrtime();
+            const diff = process.hrtime(lastTime);
+            const deltaTime = (diff[0] * NS_PER_SEC + diff[1]) / NS_PER_SEC;
+            lastTime = now;
+
+            // Run ECS systems in the correct order
+            this.physicsWorldSystem.update(1 / this.TICK_RATE);
+            this.assetSystem.update(1 / this.TICK_RATE);
+            this.inputSystem.update(1 / this.TICK_RATE);
+            // Update server tick in state
+            this.state.serverTick = this.physicsWorldSystem.getCurrentTick();
+            this.collisionSystem.update(1 / this.TICK_RATE);
+            this.projectileSystem.update(1 / this.TICK_RATE);
+            this.healthSystem.update(1 / this.TICK_RATE);
+            this.flagSystem.update(1 / this.TICK_RATE);
+            this.gameModeSystem.update(1 / this.TICK_RATE);
+                
+            // Sync ECS state to Colyseus state
+            this.stateSyncSystem.update();
             this.broadcastPatch();
-        }, 1000 / this.TICK_RATE);
 
-        // Initialize flags
-        const teamAFlag = new Flag();
-        teamAFlag.team = 0;
-        teamAFlag.x = -20;
-        teamAFlag.z = 0;
-        this.state.flags.set("teamA", teamAFlag);
+            // Calculate time taken by this tick
+            const tickDiff = process.hrtime(lastTime);
+            const tickTime = tickDiff[0] * NS_PER_SEC + tickDiff[1];
 
-        const teamBFlag = new Flag();
-        teamBFlag.team = 1;
-        teamBFlag.x = 20;
-        teamBFlag.z = 0;
-        this.state.flags.set("teamB", teamBFlag);
+            // If we're running too fast, sleep for the remaining time
+            if (tickTime < NS_PER_TICK) {
+                const sleepTime = NS_PER_TICK - tickTime;
+                const end = process.hrtime.bigint() + BigInt(Math.floor(sleepTime));
+                while (process.hrtime.bigint() < end) {
+                    // Busy wait
+                }
+            }
+
+            // Use setImmediate for the next frame
+            setImmediate(step);
+        };
+
+        // Start the game loop
+        step();
 
         // Set up message handlers
-        this.onMessage("command", (client, input: PhysicsInput) => {
-            const vehicle = this.state.vehicles.get(client.sessionId);
-            if (vehicle) {
-                // Validate input timestamp - convert to milliseconds if needed
-                const now = Date.now();
-                const inputTime = typeof input.timestamp === 'number' ? input.timestamp : now;
-                const latency = this.clientLatencies.get(client.sessionId) || 0;
-                const maxAge = (this.MAX_LATENCY + latency);
-                
-                // Only drop inputs that are truly old
-                if (now - inputTime > maxAge) {
-                    console.log(`Dropping old input from ${client.sessionId}, age: ${now - inputTime}ms`);
-                    return;
-                }
-
-                // Handle weapon switching
-                if (input.nextWeapon) {
-                    vehicle.activeWeaponIndex = (vehicle.activeWeaponIndex + 1) % vehicle.weapons.length;
-                } else if (input.previousWeapon) {
-                    vehicle.activeWeaponIndex = (vehicle.activeWeaponIndex - 1 + vehicle.weapons.length) % vehicle.weapons.length;
-                } else if (input.weapon1) {
-                    vehicle.activeWeaponIndex = 0;
-                } else if (input.weapon2) {
-                    vehicle.activeWeaponIndex = 1;
-                } else if (input.weapon3) {
-                    vehicle.activeWeaponIndex = 2;
-                }
-
-                // Handle weapon firing
-                if (input.fire) {
-                    this.handleFire(vehicle, client);
-                }
-
-                // Store input for processing
-                this.physicsWorld.addInput(client.sessionId, input);
+        this.onMessage("command", (client, input: InputComponent) => {
+            // Validate input timestamp - convert to milliseconds if needed
+            const now = Date.now();
+            const inputTime = typeof input.timestamp === 'number' ? input.timestamp : now;
+            const latency = this.clientLatencies.get(client.sessionId) || 0;
+            const maxAge = (this.MAX_LATENCY + latency);
+            
+            // Only drop inputs that are truly old
+            if (now - inputTime > maxAge) {
+                console.log(`Dropping old input from ${client.sessionId}, age: ${now - inputTime}ms`);
+                return;
             }
+
+            this.inputSystem.addInput(client.sessionId, input);
         });
 
         // Add ping/pong handlers for latency measurement
@@ -109,6 +208,31 @@ export class MicroDroneRoom extends Room<State> {
             console.log(`Player ${client.sessionId} left the game`);
             this.onLeave(client);
         });
+
+        // handle entity removal
+        world.onEntityRemoved.subscribe((entity) => {
+            if (entity.physics?.body) {
+                this.physicsWorldSystem.removeBody(entity.id);
+            }
+            this.stateSyncSystem.removeEntity(entity);
+        });
+    }
+
+    /**
+     * Initializes the game mode in the background
+     */
+    private async initializeGameMode() {
+        if (this.isInitializing) return;
+        this.isInitializing = true;
+
+        try {
+            await this.gameModeSystem.initialize();
+            console.log("Game mode initialized successfully");
+        } catch (error) {
+            console.error("Failed to initialize game mode:", error);
+        } finally {
+            this.isInitializing = false;
+        }
     }
 
     /**
@@ -117,59 +241,9 @@ export class MicroDroneRoom extends Room<State> {
      * @param client - The client joining the room
      * @param options - Player options including vehicle type and team
      */
-    onJoin(client: Client, options: { vehicleType: "drone" | "plane", team: number }) {
-        console.log(`Client ${client.sessionId} joining with options:`, options);
-        
-        // Create vehicle based on type
-        let vehicle;
-        if (options.vehicleType === "drone") {
-            vehicle = new Drone();
-        } else {
-            vehicle = new Plane();
-        }
-
-        // Set initial position based on team
-        vehicle.team = options.team;
-        // Use team-based spawn points
-        vehicle.positionX = 0;
-        vehicle.positionY = 10;
-        vehicle.positionZ = 0;
-        vehicle.vehicleType = options.vehicleType;
-        vehicle.lastProcessedInputTimestamp = Date.now();
-        vehicle.lastProcessedInputTick = this.physicsWorld.getCurrentTick();
-        vehicle.tick = this.physicsWorld.getCurrentTick();
-        
-        // Initialize weapons
-        const weapons = new ArraySchema<Weapon>();
-        Object.values(DefaultWeapons).forEach(weapon => {
-            const w = new Weapon();
-            w.id = weapon.id;
-            w.name = weapon.name;
-            w.projectileType = weapon.projectileType;
-            w.damage = weapon.damage;
-            w.fireRate = weapon.fireRate;
-            w.projectileSpeed = weapon.projectileSpeed;
-            w.cooldown = weapon.cooldown;
-            w.range = weapon.range;
-            w.isOnCooldown = false;
-            w.lastFireTime = 0;
-            weapons.push(w);
-        });
-        vehicle.weapons = weapons;
-        vehicle.activeWeaponIndex = 0;
-        
-        // Create vehicle and add to state
-        this.physicsWorld.createVehicle(client.sessionId, vehicle);
-        this.state.serverTick = this.physicsWorld.getCurrentTick();
-        this.state.vehicles.set(client.sessionId, vehicle);
-        
-        console.log(`Vehicle created for ${client.sessionId}:`, {
-            type: options.vehicleType,
-            team: options.team,
-            position: { x: vehicle.positionX, y: vehicle.positionY, z: vehicle.positionZ }
-        });
-        //log how much vehicle in the room
-        console.log(`There are ${this.state.vehicles.size} vehicles in the room`);
+    onJoin(client: Client, options: { vehicleType: VehicleType, team: number }) {
+        // Spawn the vehicle using the game mode system
+        this.gameModeSystem.spawnVehicle(options.vehicleType, options.team, client.sessionId);
     }
 
     /**
@@ -178,24 +252,17 @@ export class MicroDroneRoom extends Room<State> {
      * @param client - The client leaving the room
      */
     onLeave(client: Client) {
-        // If vehicle was carrying a flag, return it to base
-        const vehicle = this.state.vehicles.get(client.sessionId);
-        if (vehicle && vehicle.hasFlag) {
-            const flag = Array.from(this.state.flags.values()).find((f: Flag) => f.carriedBy === client.sessionId);
-            if (flag) {
-                flag.carriedBy = null;
-                flag.atBase = true;
-                flag.x = flag.team === 0 ? -20 : 20;
-                flag.z = 0;
-            }
+        console.log(`Client ${client.sessionId} leaving`);
+            
+        // Clean up input system
+        this.inputSystem.cleanup(client.sessionId);
+
+        // Remove all entities owned by this client
+        const ecsEntities = ecsWorld.with("owner").where(({owner}) => owner.id === client.sessionId);
+        console.log('Cleaning up entities for client:', client.sessionId, ecsEntities.size);
+        for (const entity of ecsEntities) {
+            ecsWorld.remove(entity);
         }
-
-        // Remove physics controller
-        this.physicsWorld.removeVehicle(client.sessionId);
-
-        this.state.vehicles.delete(client.sessionId);
-        this.clientLatencies.delete(client.sessionId);
-        console.log(`Vehicle left: ${client.sessionId}`);
     }
 
     /**
@@ -203,96 +270,16 @@ export class MicroDroneRoom extends Room<State> {
      * Currently handles physics world cleanup.
      */
     onDispose() {
+        // Stop the game loop
+        this.isRunning = false;
+        
         // Clean up physics world
-        this.physicsWorld.dispose();
-    }
-
-    private update(deltaTime: number) {
-        // Convert deltaTime to seconds and update physics
-        this.physicsWorld.update(deltaTime, this.state);
-        // Update server tick in state
-        this.state.serverTick = this.physicsWorld.getCurrentTick();
-
-        // Update weapon cooldowns
-        this.state.vehicles.forEach((vehicle: Vehicle) => {
-            vehicle.weapons.forEach((weapon: Weapon) => {
-                if (weapon.isOnCooldown) {
-                    const timeSinceLastFire = Date.now() - weapon.lastFireTime;
-                    if (timeSinceLastFire >= weapon.cooldown * 1000) {
-                        weapon.isOnCooldown = false;
-                    }
-                }
-            });
-        });
-
-        // Update projectiles
-        this.state.projectiles.forEach((projectile: Projectile, id: string) => {
-            // Convert deltaTime to seconds
-            const deltaTimeSeconds = deltaTime / 1000;
-            
-            // Move projectile
-            const direction = new Vector3(
-                projectile.directionX,
-                projectile.directionY,
-                projectile.directionZ
-            ).normalize();
-            
-            projectile.positionX += direction.x * projectile.speed * deltaTimeSeconds;
-            projectile.positionY += direction.y * projectile.speed * deltaTimeSeconds;
-            projectile.positionZ += direction.z * projectile.speed * deltaTimeSeconds;
-            
-            // Update distance traveled
-            projectile.distanceTraveled += projectile.speed * deltaTimeSeconds;
-            
-            // Remove projectile if it exceeds range
-            if (projectile.distanceTraveled >= projectile.range) {
-                this.state.projectiles.delete(id);
-            }
-        });
-    }
-
-    private handleFire(vehicle: Vehicle, client: Client): void {
-        const activeWeapon = vehicle.weapons[vehicle.activeWeaponIndex];
-        if (activeWeapon && !activeWeapon.isOnCooldown) {
-            // Calculate spread based on weapon type
-            const spread = activeWeapon.projectileType === 'bullet' ? 0.01 : 0;
-            const spreadX = (Math.random() - 0.5) * spread;
-            const spreadY = (Math.random() - 0.5) * spread;
-            const spreadZ = (Math.random() - 0.5) * spread;
-
-            // Get vehicle's forward direction from quaternion
-            const forward = new Vector3(0, 0, 1);
-            const rotation = new Quaternion(
-                vehicle.quaternionX,
-                vehicle.quaternionY,
-                vehicle.quaternionZ,
-                vehicle.quaternionW
-            );
-            forward.rotateByQuaternionToRef(rotation, forward);
-
-            // Create projectile
-            const projectile = new Projectile();
-            projectile.id = `${client.sessionId}_${Date.now()}`;
-            projectile.type = activeWeapon.projectileType;
-            projectile.positionX = vehicle.positionX;
-            projectile.positionY = vehicle.positionY;
-            projectile.positionZ = vehicle.positionZ;
-            projectile.directionX = forward.x + spreadX;
-            projectile.directionY = forward.y + spreadY;
-            projectile.directionZ = forward.z + spreadZ;
-            projectile.speed = activeWeapon.projectileSpeed;
-            projectile.damage = activeWeapon.damage;
-            projectile.range = activeWeapon.range;
-            projectile.sourceId = client.sessionId;
-            projectile.timestamp = Date.now();
-            projectile.tick = this.physicsWorld.getCurrentTick();
-
-            // Add projectile to state
-            this.state.projectiles.set(projectile.id, projectile);
-
-            // Set weapon cooldown
-            activeWeapon.isOnCooldown = true;
-            activeWeapon.lastFireTime = Date.now();
-        }
+        this.physicsWorldSystem.dispose();
+        
+        // Clean up asset system
+        this.assetSystem.cleanup();
+        
+        // Dispose server scene
+        this.serverScene.dispose();
     }
 }

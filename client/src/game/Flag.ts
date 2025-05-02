@@ -1,4 +1,4 @@
-import { Vector3, Scene, Mesh, StandardMaterial, Color3 } from 'babylonjs';
+import { Vector3, Scene, Mesh, StandardMaterial, Color3 } from '@babylonjs/core';
 
 /**
  * Represents a flag in the game that can be captured and carried by vehicles.

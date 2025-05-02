@@ -24,6 +24,5 @@
             "@shared/*": ["../shared/src/*"]
         }
     },
-    "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue", "src/*.vue","../shared/src/**/*", "../server/src/schemas"],
-    "references": [{ "path": "./tsconfig.node.json" }, { "path": "../shared/tsconfig.json" }]
+    "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue", "src/*.vue","../shared/src/**/*"],
 } 
