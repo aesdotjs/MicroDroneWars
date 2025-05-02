@@ -36,7 +36,8 @@ interface MapData {
 export function createAssetSystem(
     engine: Engine,
     scene: Scene,
-    physicsWorldSystem: ReturnType<typeof createPhysicsWorldSystem>
+    physicsWorldSystem: ReturnType<typeof createPhysicsWorldSystem>,
+    isServer: boolean
 ) {
     // Map to store loading promises for each entity
     const loadingPromises = new Map<string, Promise<AssetContainer>>();
@@ -213,8 +214,14 @@ export function createAssetSystem(
                     entity.asset!.collisionMeshes = collisionMeshes;
                     entity.asset!.triggerMeshes = triggerMeshes;
                     entity.asset!.isLoaded = true;
-                    physicsWorldSystem.createMeshPhysics(entity);
-                    console.log('created physics body for entity', entity.id);
+                    if (
+                        isServer ||
+                        entity.type === EntityType.Environment ||
+                        (entity.type === EntityType.Vehicle && entity.owner?.isLocal)
+                    ) {
+                        physicsWorldSystem.createMeshPhysics(entity);
+                        console.log('created physics body for entity', entity.id);
+                    }
                     ecsWorld.reindex(entity);
                     console.log('loaded asset for entity', entity.id);
                     return;
@@ -246,8 +253,14 @@ export function createAssetSystem(
                 entity.asset!.meshes = visibleMeshes;
                 entity.asset!.collisionMeshes = collisionMeshes;
                 entity.asset!.triggerMeshes = triggerMeshes;
-                physicsWorldSystem.createMeshPhysics(entity);
-                console.log('created physics body for entity', entity.id);
+                if (
+                    isServer ||
+                    entity.type === EntityType.Environment ||
+                    (entity.type === EntityType.Vehicle && entity.owner?.isLocal)
+                ) {
+                    physicsWorldSystem.createMeshPhysics(entity);
+                    console.log('created physics body for entity', entity.id);
+                }
                 entity.asset!.isLoaded = true;
                 ecsWorld.reindex(entity);
                 console.log('loaded asset for entity after promise', entity.id);

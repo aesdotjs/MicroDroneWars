@@ -46,7 +46,8 @@ export function createNetworkSystem(
     room.onMessage("pong", (data: { clientTime: number, serverTime: number, latency: number }) => {
         const now = Date.now();
         const rtt = now - data.clientTime;
-        const oneWayLatency = Math.max(MIN_LATENCY, rtt / 2);
+        // Use the server-provided latency if available, otherwise calculate it
+        const oneWayLatency = Math.max(MIN_LATENCY, data.latency || rtt / 2);
         const jitter = Math.abs(rtt/2 - oneWayLatency);
         
         // Update network stats with smoothing
@@ -134,11 +135,16 @@ export function createNetworkSystem(
                             projectileType: w.projectileType as ProjectileType,
                             damage: w.damage,
                             fireRate: w.fireRate,
+                            minFireRate: w.minFireRate,
+                            maxFireRate: w.maxFireRate,
+                            heatAccumulator: w.heatAccumulator,
+                            heatPerShot: w.heatPerShot,
+                            heatDissipationRate: w.heatDissipationRate,
                             projectileSpeed: w.projectileSpeed,
                             cooldown: w.cooldown,
                             range: w.range,
                             isOnCooldown: w.isOnCooldown,
-                            lastFireTime: w.lastFireTime
+                            lastFireTick: w.lastFireTick
                         })),
                         activeWeaponIndex: entity.vehicle.activeWeaponIndex
                     };
@@ -173,6 +179,61 @@ export function createNetworkSystem(
             // Add entity to ECS world
             ecsWorld.add(newEntity);
             console.log('Entity added to ECS world:', { id, newEntity });
+        } else { // Entity already exists in ECS world (most likely a projectile)
+            const gameEntity = ecsWorld.entities.find(e => e.id === id);
+            if (gameEntity) {
+                if (newEntity.transform) {
+                    const transformBuffer: TransformBuffer = {
+                        transform: {
+                            position: newEntity.transform!.position,
+                            rotation: newEntity.transform!.rotation,
+                            velocity: newEntity.transform!.velocity,
+                            angularVelocity: newEntity.transform!.angularVelocity
+                        },
+                        tick: {
+                            tick: newEntity.tick!.tick,
+                            timestamp: newEntity.tick!.timestamp,
+                            lastProcessedInputTimestamp: newEntity.tick!.lastProcessedInputTimestamp,
+                            lastProcessedInputTick: newEntity.tick!.lastProcessedInputTick
+                        }
+                    };
+                    networkPredictionSystem.addEntityState(id, transformBuffer);  
+                }
+                if (newEntity.vehicle) {
+                    gameEntity.vehicle!.weapons = newEntity.vehicle!.weapons;
+                    gameEntity.vehicle!.activeWeaponIndex = newEntity.vehicle!.activeWeaponIndex;
+                }
+                if (newEntity.gameState) {
+                    gameEntity.gameState!.health = newEntity.gameState!.health;
+                    gameEntity.gameState!.maxHealth = newEntity.gameState!.maxHealth;
+                    gameEntity.gameState!.team = newEntity.gameState!.team;
+                    gameEntity.gameState!.hasFlag = newEntity.gameState!.hasFlag;
+                    
+                }
+                if (newEntity.tick) {
+                    gameEntity.tick!.tick = newEntity.tick!.tick;
+                    gameEntity.tick!.timestamp = newEntity.tick!.timestamp;
+                    gameEntity.tick!.lastProcessedInputTimestamp = newEntity.tick!.lastProcessedInputTimestamp;
+                    gameEntity.tick!.lastProcessedInputTick = newEntity.tick!.lastProcessedInputTick;
+                }
+                if (newEntity.owner) {
+                    gameEntity.owner!.id = newEntity.owner!.id;
+                    gameEntity.owner!.isLocal = room.sessionId === newEntity.owner!.id;
+                }
+                if (newEntity.asset) {
+                    gameEntity.asset!.assetPath = newEntity.asset!.assetPath;
+                    gameEntity.asset!.assetType = newEntity.asset!.assetType;
+                    gameEntity.asset!.scale = newEntity.asset!.scale;
+                }
+                if (newEntity.projectile) {
+                    gameEntity.projectile!.damage = newEntity.projectile!.damage;
+                    gameEntity.projectile!.range = newEntity.projectile!.range;
+                    gameEntity.projectile!.distanceTraveled = newEntity.projectile!.distanceTraveled;
+                    gameEntity.projectile!.sourceId = newEntity.projectile!.sourceId;
+                    gameEntity.projectile!.speed = newEntity.projectile!.speed;
+                }
+                ecsWorld.reindex(gameEntity);
+            }
         }
         const gameEntity = ecsWorld.entities.find(e => e.id === id);
 
@@ -254,11 +315,16 @@ export function createNetworkSystem(
                         projectileType: weapon.projectileType as ProjectileType,
                         damage: weapon.damage,
                         fireRate: weapon.fireRate,
+                        minFireRate: weapon.minFireRate,
+                        maxFireRate: weapon.maxFireRate,
+                        heatAccumulator: weapon.heatAccumulator,
+                        heatPerShot: weapon.heatPerShot,
+                        heatDissipationRate: weapon.heatDissipationRate,
                         projectileSpeed: weapon.projectileSpeed,
                         cooldown: weapon.cooldown,
                         range: weapon.range,
                         isOnCooldown: weapon.isOnCooldown,
-                        lastFireTime: weapon.lastFireTime
+                        lastFireTick: weapon.lastFireTick
                     }
                     ecsWorld.reindex(gameEntity);
                 });

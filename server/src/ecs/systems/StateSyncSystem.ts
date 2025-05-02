@@ -74,11 +74,16 @@ export function createStateSyncSystem(
                     newWeapon.projectileType = weapon.projectileType;
                     newWeapon.damage = weapon.damage;
                     newWeapon.fireRate = weapon.fireRate;
+                    newWeapon.minFireRate = weapon.minFireRate;
+                    newWeapon.maxFireRate = weapon.maxFireRate;
+                    newWeapon.heatAccumulator = weapon.heatAccumulator;
+                    newWeapon.heatPerShot = weapon.heatPerShot;
+                    newWeapon.heatDissipationRate = weapon.heatDissipationRate;
                     newWeapon.projectileSpeed = weapon.projectileSpeed;
                     newWeapon.cooldown = weapon.cooldown;
                     newWeapon.range = weapon.range;
                     newWeapon.isOnCooldown = weapon.isOnCooldown;
-                    newWeapon.lastFireTime = weapon.lastFireTime;
+                    newWeapon.lastFireTick = weapon.lastFireTick;
                     entityState.vehicle.weapons.push(newWeapon);
                 }
             }

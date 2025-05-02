@@ -410,8 +410,18 @@ export interface WeaponComponent {
     projectileType: 'bullet' | 'missile';
     /** Damage dealt by the weapon */
     damage: number;
-    /** Fire rate in rounds per second */
+    /** Base fire rate in rounds per second */
     fireRate: number;
+    /** Minimum fire rate in rounds per second (when overheated) */
+    minFireRate: number;
+    /** Maximum fire rate in rounds per second (when fully cooled) */
+    maxFireRate: number;
+    /** Current heat accumulator (0-1) */
+    heatAccumulator: number;
+    /** Heat generation per shot (0-1) */
+    heatPerShot: number;
+    /** Heat dissipation rate per second (0-1) */
+    heatDissipationRate: number;
     /** Speed of the projectile in m/s */
     projectileSpeed: number;
     /** Cooldown time between shots in seconds */
@@ -420,8 +430,8 @@ export interface WeaponComponent {
     range: number;
     /** Whether the weapon is currently on cooldown */
     isOnCooldown: boolean;
-    /** Last time the weapon was fired */
-    lastFireTime: number;
+    /** Last tick the weapon was fired */
+    lastFireTick: number;
 }
 
 /**
@@ -436,9 +446,14 @@ export const DefaultWeapons: { [key: string]: WeaponComponent } = {
         fireRate: 10,
         projectileSpeed: 100,
         cooldown: 0.1,
-        range: 1000,
+        range: 250,
         isOnCooldown: false,
-        lastFireTime: 0
+        lastFireTick: 0,
+        minFireRate: 2,
+        maxFireRate: 5,
+        heatAccumulator: 0,
+        heatPerShot: 0.08,
+        heatDissipationRate: 0.5,
     },
     missile: {
         id: 'missile',
@@ -448,9 +463,14 @@ export const DefaultWeapons: { [key: string]: WeaponComponent } = {
         fireRate: 1,
         projectileSpeed: 50,
         cooldown: 1,
-        range: 2000,
+        range: 500,
         isOnCooldown: false,
-        lastFireTime: 0
+        lastFireTick: 0,
+        minFireRate: .5,
+        maxFireRate: .5,
+        heatAccumulator: 0,
+        heatPerShot: 0,
+        heatDissipationRate: 0
     }
 };
 

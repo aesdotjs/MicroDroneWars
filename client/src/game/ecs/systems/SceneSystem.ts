@@ -89,6 +89,9 @@ export function createSceneSystem(engine: Engine) {
                 }
             }
         },
+        removeProjectileMesh: (projectileId: string) => {
+            effectSystem.removeProjectileMesh(projectileId);
+        },
         render: () => {
             scene.render();
         },

@@ -1,5 +1,5 @@
 import { world as ecsWorld } from '@shared/ecs/world';
-import { InputComponent, TransformBuffer, InterpolationConfig } from '@shared/ecs/types';
+import { InputComponent, TransformBuffer, InterpolationConfig, EntityType } from '@shared/ecs/types';
 import { Vector3, Quaternion } from '@babylonjs/core';
 import { createIdleInput } from '@shared/ecs/utils/InputHelpers';
 import { createPhysicsSystem } from '@shared/ecs/systems/PhysicsSystem';
@@ -71,28 +71,23 @@ export function createNetworkPredictionSystem(
         
         // Smoothly adjust current delay
         currentInterpolationDelay += (targetInterpolationDelay - currentInterpolationDelay) * INTERPOLATION_DELAY_SMOOTHING;
+        log('Current Interpolation Delay', currentInterpolationDelay);
     }
 
     /**
      * Interpolates remote entity states
      */
     function interpolateRemotes() {
-        const now = Date.now() - networkLatency;
+        const now = Date.now();
         const targetTime = now - currentInterpolationDelay;
+        
         TransformBuffers.forEach((buffer, id) => {
-            if (buffer.length < 1 || id === localPlayerEntityId) return;
+            if (buffer.length < 2 || id === localPlayerEntityId) return;
             const entity = ecsWorld.entities.find(e => e.id === id);
             if (!entity || !entity.transform) return;
 
-            // If we only have one state, use it directly
-            if (buffer.length === 1) {
-                const state = buffer[0];
-                entity.transform.position.copyFrom(state.transform.position);
-                entity.transform.rotation.copyFrom(state.transform.rotation);
-                entity.transform.velocity.copyFrom(state.transform.velocity);
-                entity.transform.angularVelocity.copyFrom(state.transform.angularVelocity);
-                return;
-            }
+            // Sort buffer by timestamp to ensure correct order
+            buffer.sort((a, b) => a.tick.timestamp - b.tick.timestamp);
 
             // Find states bracketing target time
             let i = 0;
@@ -100,17 +95,17 @@ export function createNetworkPredictionSystem(
                 i++;
             }
 
-            // If we're at the end of the buffer, extrapolate from the last two states
+            // If we're at the end of the buffer, extrapolate
             if (i >= buffer.length - 1) {
                 const lastState = buffer[buffer.length - 1];
                 const secondLastState = buffer[buffer.length - 2];
                 const timeSinceLastUpdate = targetTime - lastState.tick.timestamp;
                 
-                // Only extrapolate if the time gap is reasonable (e.g., less than 1 second)
+                // Only extrapolate if the time gap is reasonable
                 if (timeSinceLastUpdate < 1000) {
-                    // Calculate velocity from last two states
                     const dt = lastState.tick.timestamp - secondLastState.tick.timestamp;
                     if (dt > 0) {
+                        // Calculate velocity from last two states
                         const velocity = new Vector3(
                             (lastState.transform.position.x - secondLastState.transform.position.x) / dt,
                             (lastState.transform.position.y - secondLastState.transform.position.y) / dt,
@@ -128,7 +123,7 @@ export function createNetworkPredictionSystem(
                         entity.transform.angularVelocity.copyFrom(lastState.transform.angularVelocity);
                     }
                 } else {
-                    // If gap is too large, just use the last known state
+                    // If gap is too large, use the last known state
                     entity.transform.position.copyFrom(lastState.transform.position);
                     entity.transform.rotation.copyFrom(lastState.transform.rotation);
                     entity.transform.velocity.copyFrom(lastState.transform.velocity);
@@ -136,15 +131,39 @@ export function createNetworkPredictionSystem(
                 }
                 return;
             }
-            
+
+            // Interpolate between two states
             const a = buffer[i];
             const b = buffer[i + 1];
+            
+            // Handle identical timestamps
+            if (b.tick.timestamp === a.tick.timestamp) {
+                // For projectiles, use the newer state
+                if (entity.type === EntityType.Projectile) {
+                    entity.transform.position.copyFrom(b.transform.position);
+                    entity.transform.rotation.copyFrom(b.transform.rotation);
+                    entity.transform.velocity.copyFrom(b.transform.velocity);
+                    entity.transform.angularVelocity.copyFrom(b.transform.angularVelocity);
+                    return;
+                }
+                // For other entities, use the older state
+                entity.transform.position.copyFrom(a.transform.position);
+                entity.transform.rotation.copyFrom(a.transform.rotation);
+                entity.transform.velocity.copyFrom(a.transform.velocity);
+                entity.transform.angularVelocity.copyFrom(a.transform.angularVelocity);
+                return;
+            }
+
+
             const t = (targetTime - a.tick.timestamp) / (b.tick.timestamp - a.tick.timestamp);
             
+            // Clamp interpolation factor
+            const clampedT = Math.max(0, Math.min(1, t));
+            
             // Interpolate position
-            entity.transform.position.x = a.transform.position.x + (b.transform.position.x - a.transform.position.x) * t;
-            entity.transform.position.y = a.transform.position.y + (b.transform.position.y - a.transform.position.y) * t;
-            entity.transform.position.z = a.transform.position.z + (b.transform.position.z - a.transform.position.z) * t;
+            entity.transform.position.x = a.transform.position.x + (b.transform.position.x - a.transform.position.x) * clampedT;
+            entity.transform.position.y = a.transform.position.y + (b.transform.position.y - a.transform.position.y) * clampedT;
+            entity.transform.position.z = a.transform.position.z + (b.transform.position.z - a.transform.position.z) * clampedT;
 
             // Interpolate rotation
             const qa = new Quaternion(
@@ -159,20 +178,20 @@ export function createNetworkPredictionSystem(
                 b.transform.rotation.z,
                 b.transform.rotation.w
             );
-            const q = Quaternion.Slerp(qa, qb, t);
+            const q = Quaternion.Slerp(qa, qb, clampedT);
             entity.transform.rotation.x = q.x;
             entity.transform.rotation.y = q.y;
             entity.transform.rotation.z = q.z;
             entity.transform.rotation.w = q.w;
 
             // Interpolate velocities
-            entity.transform.velocity.x = a.transform.velocity.x + (b.transform.velocity.x - a.transform.velocity.x) * t;
-            entity.transform.velocity.y = a.transform.velocity.y + (b.transform.velocity.y - a.transform.velocity.y) * t;
-            entity.transform.velocity.z = a.transform.velocity.z + (b.transform.velocity.z - a.transform.velocity.z) * t;
+            entity.transform.velocity.x = a.transform.velocity.x + (b.transform.velocity.x - a.transform.velocity.x) * clampedT;
+            entity.transform.velocity.y = a.transform.velocity.y + (b.transform.velocity.y - a.transform.velocity.y) * clampedT;
+            entity.transform.velocity.z = a.transform.velocity.z + (b.transform.velocity.z - a.transform.velocity.z) * clampedT;
 
-            entity.transform.angularVelocity.x = a.transform.angularVelocity.x + (b.transform.angularVelocity.x - a.transform.angularVelocity.x) * t;
-            entity.transform.angularVelocity.y = a.transform.angularVelocity.y + (b.transform.angularVelocity.y - a.transform.angularVelocity.y) * t;
-            entity.transform.angularVelocity.z = a.transform.angularVelocity.z + (b.transform.angularVelocity.z - a.transform.angularVelocity.z) * t;
+            entity.transform.angularVelocity.x = a.transform.angularVelocity.x + (b.transform.angularVelocity.x - a.transform.angularVelocity.x) * clampedT;
+            entity.transform.angularVelocity.y = a.transform.angularVelocity.y + (b.transform.angularVelocity.y - a.transform.angularVelocity.y) * clampedT;
+            entity.transform.angularVelocity.z = a.transform.angularVelocity.z + (b.transform.angularVelocity.z - a.transform.angularVelocity.z) * clampedT;
         });
     }
 
@@ -193,10 +212,9 @@ export function createNetworkPredictionSystem(
         addEntityState: (id: string, state: TransformBuffer) => {
             const entity = ecsWorld.entities.find(e => e.id === id);
             if (!entity || !entity.transform) return;
-            const clientTick = physicsWorldSystem.getCurrentTick();
+            physicsWorldSystem.setCurrentTick(state.tick.tick);
             const isLocalPlayer = entity.owner?.isLocal;
             if (isLocalPlayer) {
-                log('Client Tick', clientTick);
                 log('Server State Tick', state.tick.tick);
                 log('Last Processed Input Tick', state.tick.lastProcessedInputTick ?? state.tick.tick);
                 log('Pending Inputs', pendingInputs.length);
@@ -209,7 +227,7 @@ export function createNetworkPredictionSystem(
 
             const buffers = TransformBuffers.get(id)!;
             
-            if (isLocalPlayer) {
+            if (isLocalPlayer && entity.type === EntityType.Vehicle) {
                 // physicsWorldSystem.setCurrentTick(state.tick.tick);
                 entity.transform.position.copyFrom(state.transform.position);
                 entity.transform.rotation.copyFrom(state.transform.rotation);
@@ -286,16 +304,22 @@ export function createNetworkPredictionSystem(
 
             // Update local player immediately
             const entity = ecsWorld.with("physics", "vehicle", "transform", "owner").where(({owner}) => owner?.isLocal).entities[0];
+            let isOnCooldown = false;
             if (entity) {
                 physicsSystem.update(dt, entity, finalInput);
                 // Always update weapon system if entity has weapons
                 if (entity.vehicle?.weapons) {
+                    isOnCooldown = weaponSystem.isOnCooldown(entity);
                     weaponSystem.update(dt, entity, finalInput, false);
                 }
             }
 
             // Only send and store non-idle inputs
             if (!isIdle) {
+                // Prevent firing if weapons are on cooldown
+                if (isOnCooldown) {
+                    finalInput.fire = false;
+                }
                 room.send("command", finalInput);
                 pendingInputs.push(finalInput);
             } else if (currentTick - lastHeartbeatTick >= HEARTBEAT_INTERVAL) {

@@ -412,11 +412,7 @@ export function createPhysicsWorldSystem() {
             weapon: WeaponComponent,
             projectileId: string
         ): GameEntity {
-            // Get forward direction from shooter's rotation
             const weaponTrigger = shooter?.asset?.triggerMeshes?.find(mesh => 'missile' === mesh.metadata?.gltf?.extras?.type);
-            console.log('weaponTrigger', weaponTrigger?.id);
-            
-            // Get absolute position and rotation of the trigger mesh
             let spawnPointPosition: Vector3;
             let spawnPointRotation: Quaternion;
             
@@ -465,7 +461,7 @@ export function createPhysicsWorldSystem() {
                 ),
                 collisionFilterGroup: CollisionGroups.Projectiles,
                 collisionFilterMask: collisionMasks.Projectile,
-                type: CANNON.Body.KINEMATIC
+                type: CANNON.Body.DYNAMIC
             });
 
             // Add collision shape based on projectile type

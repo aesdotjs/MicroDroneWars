@@ -97,7 +97,7 @@ export class MicroDroneRoom extends Room<State> {
         this.projectileSystem = createProjectileSystem(this.physicsWorldSystem);
         this.flagSystem = createFlagSystem();
         this.collisionSystem = createCollisionSystem(this.physicsWorldSystem.getWorld());
-        this.assetSystem = createAssetSystem(this.serverEngine, this.serverScene, this.physicsWorldSystem);
+        this.assetSystem = createAssetSystem(this.serverEngine, this.serverScene, this.physicsWorldSystem, true);
         // this.assetSystem.preloadAssets();
 
         // Initialize game mode system
@@ -174,7 +174,6 @@ export class MicroDroneRoom extends Room<State> {
 
         // Start the game loop
         step();
-
         // Set up message handlers
         this.onMessage("command", (client, input: InputComponent) => {
             // Validate input timestamp - convert to milliseconds if needed

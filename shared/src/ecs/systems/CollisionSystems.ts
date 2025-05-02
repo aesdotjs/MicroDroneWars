@@ -179,9 +179,7 @@ export function handleProjectileCollision(projectile: GameEntity, other: GameEnt
         const damage = projectile.projectile.damage || 20; // Use projectile damage or default
         other.gameState.health = Math.max(0, other.gameState.health - damage);
     }
-    // Mark projectile for removal
-    projectile.gameState.health = 0;
-    console.log('Projectile health:', projectile.gameState?.health);
+    ecsWorld.remove(projectile);
 }
 
 /**
