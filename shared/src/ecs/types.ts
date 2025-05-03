@@ -164,50 +164,82 @@ export type TickComponent = {
  * Represents all possible control inputs for vehicles.
  */
 export interface InputComponent {
-    /** Forward movement input */
+    /** Forward movement is currently held down */
     forward: boolean;
-    /** Backward movement input */
+    /** Forward key went down this frame (+forward) */
+    forwardPressed: boolean;
+    /** Forward key went up   this frame (−forward) */
+    forwardReleased: boolean;
+
     backward: boolean;
-    /** Left movement input */
+    backwardPressed: boolean;
+    backwardReleased: boolean;
+
     left: boolean;
-    /** Right movement input */
+    leftPressed: boolean;
+    leftReleased: boolean;
+
     right: boolean;
-    /** Upward movement input */
+    rightPressed: boolean;
+    rightReleased: boolean;
+
     up: boolean;
-    /** Downward movement input */
+    upPressed: boolean;
+    upReleased: boolean;
+
     down: boolean;
-    /** Pitch up input */
+    downPressed: boolean;
+    downReleased: boolean;
+
     pitchUp: boolean;
-    /** Pitch down input */
+    pitchUpPressed: boolean;
+    pitchUpReleased: boolean;
+
     pitchDown: boolean;
-    /** Yaw left input */
+    pitchDownPressed: boolean;
+    pitchDownReleased: boolean;
+
     yawLeft: boolean;
-    /** Yaw right input */
+    yawLeftPressed: boolean;
+    yawLeftReleased: boolean;
+
     yawRight: boolean;
-    /** Roll left input */
+    yawRightPressed: boolean;
+    yawRightReleased: boolean;
+
     rollLeft: boolean;
-    /** Roll right input */
+    rollLeftPressed: boolean;
+    rollLeftReleased: boolean;
+
     rollRight: boolean;
-    /** Fire weapon input */
+    rollRightPressed: boolean;
+    rollRightReleased: boolean;
+
+    /** Fire weapon edge‐trigger only */
+    firePressed: boolean;
+    fireReleased: boolean;
+    /** “Held” flag if you still want it client‐side */
     fire: boolean;
-    /** Zoom input */
+
+    /** Zoom edge‐trigger only */
+    zoomPressed: boolean;
+    zoomReleased: boolean;
     zoom: boolean;
-    /** Switch to next weapon input */
+
+    /** Switch weapons (one‐offs, edge only) */
     nextWeapon: boolean;
-    /** Switch to previous weapon input */
     previousWeapon: boolean;
-    /** Switch to weapon 1 */
     weapon1: boolean;
-    /** Switch to weapon 2 */
     weapon2: boolean;
-    /** Switch to weapon 3 */
     weapon3: boolean;
+
     /** Mouse movement delta */
     mouseDelta: { x: number; y: number };
-    /** Current simulation tick */
+
+    /** Filled in by the physics/network systems */
     tick: number;
-    /** Timestamp of the input in milliseconds */
     timestamp: number;
+    projectileId: number;
 }
 
 /**
@@ -411,27 +443,25 @@ export interface WeaponComponent {
     /** Damage dealt by the weapon */
     damage: number;
     /** Base fire rate in rounds per second */
-    fireRate: number;
+    fireRate?: number;
     /** Minimum fire rate in rounds per second (when overheated) */
     minFireRate: number;
     /** Maximum fire rate in rounds per second (when fully cooled) */
     maxFireRate: number;
     /** Current heat accumulator (0-1) */
-    heatAccumulator: number;
+    heatAccumulator?: number;
     /** Heat generation per shot (0-1) */
     heatPerShot: number;
     /** Heat dissipation rate per second (0-1) */
     heatDissipationRate: number;
     /** Speed of the projectile in m/s */
     projectileSpeed: number;
-    /** Cooldown time between shots in seconds */
-    cooldown: number;
     /** Maximum range of the weapon in meters */
     range: number;
     /** Whether the weapon is currently on cooldown */
-    isOnCooldown: boolean;
+    isOnCooldown?: boolean;
     /** Last tick the weapon was fired */
-    lastFireTick: number;
+    lastFireTick?: number;
 }
 
 /**
@@ -445,7 +475,6 @@ export const DefaultWeapons: { [key: string]: WeaponComponent } = {
         damage: 10,
         fireRate: 10,
         projectileSpeed: 100,
-        cooldown: 0.1,
         range: 250,
         isOnCooldown: false,
         lastFireTick: 0,
@@ -462,7 +491,6 @@ export const DefaultWeapons: { [key: string]: WeaponComponent } = {
         damage: 50,
         fireRate: 1,
         projectileSpeed: 50,
-        cooldown: 1,
         range: 500,
         isOnCooldown: false,
         lastFireTick: 0,

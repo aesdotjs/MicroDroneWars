@@ -45,33 +45,63 @@ export function createEffectSystem(scene: Scene) {
     const muzzleFlashTimeouts = new Map<string, NodeJS.Timeout>();
 
     // Create muzzle flash effect
-    function createMuzzleFlash(position: Vector3, direction: Vector3, weaponId: string): void {
+    function createMuzzleFlash(entity: GameEntity): void {
+        // Get the active weapon's trigger mesh
+        const weaponTrigger = entity.asset?.triggerMeshes?.find(mesh => 
+            'missile' === mesh.metadata?.gltf?.extras?.type
+        );
+
+        let spawnPointPosition: Vector3;
+        let spawnPointRotation: Quaternion;
+        
+        if (weaponTrigger) {
+            // Get the local position and rotation of the trigger mesh
+            const localPosition = weaponTrigger.position.clone();
+            const localRotation = weaponTrigger.rotationQuaternion?.clone() || new Quaternion();
+            
+            // Transform the local position by the vehicle's world transform
+            spawnPointPosition = localPosition.clone();
+            spawnPointPosition.rotateByQuaternionAroundPointToRef(
+                entity.transform!.rotation,
+                Vector3.Zero(),
+                spawnPointPosition
+            );
+            spawnPointPosition.addInPlace(entity.transform!.position);
+            
+            // Combine rotations
+            spawnPointRotation = entity.transform!.rotation.multiply(localRotation);
+        } else {
+            // Fallback to vehicle position/rotation if no trigger mesh found
+            spawnPointPosition = entity.transform!.position;
+            spawnPointRotation = entity.transform!.rotation;
+        }
+
         // Clear any existing timeout
-        const existingTimeout = muzzleFlashTimeouts.get(weaponId);
+        const existingTimeout = muzzleFlashTimeouts.get(entity.id);
         if (existingTimeout) {
             clearTimeout(existingTimeout);
-            muzzleFlashTimeouts.delete(weaponId);
+            muzzleFlashTimeouts.delete(entity.id);
         }
 
         // Remove existing muzzle flash
-        removeMuzzleFlash(weaponId);
+        removeMuzzleFlash(entity.id);
 
         // Create muzzle flash mesh
         const muzzleFlash = MeshBuilder.CreatePlane('muzzleFlash', { size: 1.0 }, scene);
-        muzzleFlash.position = position;
+        muzzleFlash.position = spawnPointPosition;
         muzzleFlash.material = muzzleFlashMaterial;
         muzzleFlash.billboardMode = Mesh.BILLBOARDMODE_ALL;
         muzzleFlash.rotation.y = Math.PI;
 
-        activeMuzzleFlashes.set(weaponId, muzzleFlash);
+        activeMuzzleFlashes.set(entity.id, muzzleFlash);
 
         // Set timeout to remove
         const timeout = setTimeout(() => {
-            if (activeMuzzleFlashes.get(weaponId) === muzzleFlash) {
-                removeMuzzleFlash(weaponId);
+            if (activeMuzzleFlashes.get(entity.id) === muzzleFlash) {
+                removeMuzzleFlash(entity.id);
             }
         }, 50);
-        muzzleFlashTimeouts.set(weaponId, timeout);
+        muzzleFlashTimeouts.set(entity.id, timeout);
     }
 
     // Create projectile mesh

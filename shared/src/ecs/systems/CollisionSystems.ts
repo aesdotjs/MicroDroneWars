@@ -42,8 +42,6 @@ export function createCollisionSystem(cannonWorld: World) {
             timestamp: Date.now()
         };
 
-        console.log('Collision event:', collisionEvent);
-
         // Handle collision
         handleCollisionEvent(collisionEvent);
     });
@@ -96,8 +94,6 @@ export function determineCollisionSeverity(impactVelocity: number): CollisionSev
 function handleCollisionEvent(event: any) {
     const entityA = ecsWorld.entities.find(e => e.physics?.body === event.bodyA);
     const entityB = ecsWorld.entities.find(e => e.physics?.body === event.bodyB);
-    console.log('Entity A:', entityA);
-    console.log('Entity B:', entityB);
     if (!entityA || !entityB) return;
 
     // Handle vehicle collisions
@@ -131,7 +127,6 @@ function handleCollisionEvent(event: any) {
 export function handleVehicleCollision(vehicle: GameEntity, other: GameEntity, event: any) {
     if (!vehicle.gameState?.health) return;
 
-    console.log('Vehicle collision:', vehicle.id, other.id);
     // Calculate damage based on impact velocity and collision severity
     let damage = 0;
     switch (event.severity) {
@@ -173,7 +168,6 @@ export function handleProjectileCollision(projectile: GameEntity, other: GameEnt
         return;
     }
 
-    console.log('Projectile collision:', projectile.id, other.id);
     // Check if other entity has gameState and health
     if (other.gameState && other.gameState.health !== undefined) {
         const damage = projectile.projectile.damage || 20; // Use projectile damage or default

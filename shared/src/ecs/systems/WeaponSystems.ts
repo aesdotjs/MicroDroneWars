@@ -10,31 +10,33 @@ const TICKS_PER_SECOND = 60; // Assuming 60 ticks per second
  * Weapon system that handles projectile creation and management
  */
 export function createWeaponSystem(
-    physicsWorldSystem: ReturnType<typeof createPhysicsWorldSystem>
+    physicsWorldSystem: ReturnType<typeof createPhysicsWorldSystem>,
+    isServer: boolean
 ) {
     const armedEntities = ecsWorld.with("vehicle", "transform");
-
+    const bulletCounters = new Map<string, number>();
     return {
-        update: (dt: number, entity: GameEntity, input: InputComponent, isServer: boolean) => {
+        update: (dt: number, entity: GameEntity, input: InputComponent, currentTick: number) => {
             const vehicle = entity.vehicle!;
             const activeWeapon = vehicle.weapons[vehicle.activeWeaponIndex];
-            const currentTick = physicsWorldSystem.getCurrentTick();
 
             // Update weapon cooldowns and heat
             vehicle.weapons.forEach(weapon => {
                 // Calculate current fire rate based on heat
-                const heatFactor = 1 - weapon.heatAccumulator;
-                const currentFireRate = weapon.minFireRate + (weapon.maxFireRate - weapon.minFireRate) * heatFactor;
+                const heatAccumulator = weapon.heatAccumulator ?? 0;
+                const lastFireTick = weapon.lastFireTick ?? currentTick;
+                const heatFactor = 1 - heatAccumulator;
+                const currentFireRate = weapon.maxFireRate - (weapon.maxFireRate - weapon.minFireRate) * heatAccumulator;
                 const currentCooldownTicks = Math.ceil(TICKS_PER_SECOND / currentFireRate);
 
                 // Update cooldown state
-                if (weapon.isOnCooldown && currentTick - weapon.lastFireTick >= currentCooldownTicks) {
+                if (weapon.isOnCooldown && currentTick - lastFireTick >= currentCooldownTicks) {
                     weapon.isOnCooldown = false;
                 }
 
                 // Update heat accumulator
-                if (weapon.heatAccumulator > 0) {
-                    weapon.heatAccumulator = Math.max(0, weapon.heatAccumulator - weapon.heatDissipationRate * dt);
+                if (heatAccumulator > 0) {
+                    weapon.heatAccumulator = Math.max(0, heatAccumulator - weapon.heatDissipationRate * dt);
                 }
             });
 
@@ -51,15 +53,22 @@ export function createWeaponSystem(
             // Handle firing
             if (input.fire && activeWeapon && !activeWeapon.isOnCooldown) {
                 // Calculate current fire rate and cooldown
-                const heatFactor = 1 - activeWeapon.heatAccumulator;
-                const currentFireRate = activeWeapon.minFireRate + (activeWeapon.maxFireRate - activeWeapon.minFireRate) * heatFactor;
+                const heatAccumulator = activeWeapon!.heatAccumulator ?? 0;
+                const lastFireTick = activeWeapon!.lastFireTick ?? currentTick;
+                const currentFireRate = activeWeapon.maxFireRate - (activeWeapon.maxFireRate - activeWeapon.minFireRate) * heatAccumulator;
                 const currentCooldownTicks = Math.ceil(TICKS_PER_SECOND / currentFireRate);
 
-                if (currentTick - activeWeapon.lastFireTick >= currentCooldownTicks) {
-                    // Create projectile
-                    const projectileId = isServer ? `${entity.id}_${input.tick}` : `${entity.id}_${currentTick}`;
-                    const projectile = physicsWorldSystem.createProjectile(entity, activeWeapon, projectileId);
-                    
+                if (currentTick - lastFireTick >= currentCooldownTicks) {
+                    let projectileId: number;
+                    if (isServer && input.projectileId) {
+                        projectileId = input.projectileId;
+                    } else {
+                        const count = (bulletCounters.get(entity.id)||0) + 1;
+                        bulletCounters.set(entity.id, count);
+                        projectileId = count;
+                    }
+
+                    const projectile = physicsWorldSystem.createProjectile(entity, activeWeapon, `${entity.id}_${projectileId}`);
                     // Add to ECS world
                     ecsWorld.add(projectile);
                     
@@ -68,15 +77,17 @@ export function createWeaponSystem(
                     activeWeapon.lastFireTick = currentTick;
                     
                     // Update heat accumulator
-                    activeWeapon.heatAccumulator = Math.min(1, activeWeapon.heatAccumulator + activeWeapon.heatPerShot);
+                    activeWeapon.heatAccumulator = Math.min(1, heatAccumulator + activeWeapon.heatPerShot);
+                    return projectileId;
                 }
             }
+            return undefined;
         },
         isOnCooldown: (vehicle: GameEntity) => {
             if (!vehicle.vehicle) return false;
             const activeWeapon = vehicle.vehicle.weapons?.[vehicle.vehicle.activeWeaponIndex];
             if (!activeWeapon) return false;
-            return activeWeapon.isOnCooldown;
+            return activeWeapon.isOnCooldown ?? false;
         },
         // Helper function to convert seconds to ticks
         secondsToTicks: (seconds: number) => Math.ceil(seconds * TICKS_PER_SECOND)

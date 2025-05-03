@@ -17,7 +17,6 @@ export function createStateSyncSystem(
     const syncEntityToState = (entity: GameEntity) => {
         let entityState = state.entities.get(entity.id)
         if (!entityState) {
-            console.log(`Creating entity state for:`, entity.id);
             entityState = new EntitySchema();
             entityState.id = entity.id;
             entityState.type = entity.type || "";
@@ -73,17 +72,12 @@ export function createStateSyncSystem(
                     newWeapon.name = weapon.name;
                     newWeapon.projectileType = weapon.projectileType;
                     newWeapon.damage = weapon.damage;
-                    newWeapon.fireRate = weapon.fireRate;
                     newWeapon.minFireRate = weapon.minFireRate;
                     newWeapon.maxFireRate = weapon.maxFireRate;
-                    newWeapon.heatAccumulator = weapon.heatAccumulator;
                     newWeapon.heatPerShot = weapon.heatPerShot;
                     newWeapon.heatDissipationRate = weapon.heatDissipationRate;
                     newWeapon.projectileSpeed = weapon.projectileSpeed;
-                    newWeapon.cooldown = weapon.cooldown;
                     newWeapon.range = weapon.range;
-                    newWeapon.isOnCooldown = weapon.isOnCooldown;
-                    newWeapon.lastFireTick = weapon.lastFireTick;
                     entityState.vehicle.weapons.push(newWeapon);
                 }
             }
@@ -132,7 +126,6 @@ export function createStateSyncSystem(
         },
 
         removeEntity: (entity: GameEntity) => {
-            console.log(`Removing entity:`, entity.id, state.entities.get(entity.id));
             state.entities.delete(entity.id);
         },
         

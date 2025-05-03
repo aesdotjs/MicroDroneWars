@@ -1,167 +1,252 @@
-import { world as ecsWorld } from '@shared/ecs/world';
-import { GameEntity, InputComponent } from '@shared/ecs/types';
+import { InputComponent } from '@shared/ecs/types';
+import { KeyBinding }  from "./KeyBinding";
 
-/**
- * Creates a system that handles client-side input processing
- */
 export function createClientInputSystem(canvas: HTMLCanvasElement) {
-    const keys = new Map<string, boolean>();
+    // track raw key states (so we can feed them into each KeyBinding.update)
+    const rawKeys = new Map<string,boolean>();
     const mouseDelta = { x: 0, y: 0 };
-    let hasFocus = false;
-    let isPointerLocked = false;
-
-    // Key bindings
-    const keyBindings = {
-        // Movement
-        forward: 'KeyW',
-        backward: 'KeyS',
-        left: 'KeyA',
-        right: 'KeyD',
-        up: 'Space',
-        down: 'ShiftLeft',
+    const frameMouseDelta = { x: 0, y: 0 };
+    let hasFocus = false, isPointerLocked = false;
+    
+    // 1) build a KeyBinding for every action
+    const bindings: Record<keyof InputComponent, KeyBinding> = {
+        forward:    new KeyBinding("KeyW"),
+        backward:   new KeyBinding("KeyS"),
+        left:       new KeyBinding("KeyA"),
+        right:      new KeyBinding("KeyD"),
+        up:         new KeyBinding("Space"),
+        down:       new KeyBinding("ShiftLeft"),
         
-        // Rotation
-        pitchUp: 'ArrowUp',
-        pitchDown: 'ArrowDown',
-        yawLeft: 'ArrowLeft',
-        yawRight: 'ArrowRight',
-        rollLeft: 'KeyQ',
-        rollRight: 'KeyE',
+        pitchUp:    new KeyBinding("ArrowUp"),
+        pitchDown:  new KeyBinding("ArrowDown"),
+        yawLeft:    new KeyBinding("ArrowLeft"),
+        yawRight:   new KeyBinding("ArrowRight"),
+        rollLeft:   new KeyBinding("KeyQ"),
+        rollRight:  new KeyBinding("KeyE"),
         
-        // Weapon controls
-        fire: 'MouseLeft',
-        nextWeapon: 'MouseWheelUp',
-        previousWeapon: 'MouseWheelDown',
-        weapon1: '1',
-        weapon2: '2',
-        weapon3: '3',
-        zoom: 'MouseRight'
+        fire:       new KeyBinding("MouseLeft"),
+        zoom:       new KeyBinding("MouseRight"),
+        
+        nextWeapon:    new KeyBinding("WheelUp"),   // we'll hook wheel manually
+        previousWeapon:new KeyBinding("WheelDown"),
+        weapon1:       new KeyBinding("Digit1"),
+        weapon2:       new KeyBinding("Digit2"),
+        weapon3:       new KeyBinding("Digit3"),
+        
+        // the rest are not real keys but we'll never query them
+        forwardPressed:   new KeyBinding(""),
+        forwardReleased:  new KeyBinding(""),
+        backwardPressed:  new KeyBinding(""),
+        backwardReleased: new KeyBinding(""),
+        leftPressed:      new KeyBinding(""),
+        leftReleased:     new KeyBinding(""),
+        rightPressed:     new KeyBinding(""),
+        rightReleased:    new KeyBinding(""),
+        
+        upPressed:        new KeyBinding(""),
+        upReleased:       new KeyBinding(""),
+        downPressed:      new KeyBinding(""),
+        downReleased:     new KeyBinding(""),
+        
+        pitchUpPressed:    new KeyBinding(""),
+        pitchUpReleased:   new KeyBinding(""),
+        pitchDownPressed:  new KeyBinding(""),
+        pitchDownReleased: new KeyBinding(""),
+        yawLeftPressed:    new KeyBinding(""),
+        yawLeftReleased:   new KeyBinding(""),
+        yawRightPressed:   new KeyBinding(""),
+        yawRightReleased:  new KeyBinding(""),
+        rollLeftPressed:   new KeyBinding(""),
+        rollLeftReleased:  new KeyBinding(""),
+        rollRightPressed:  new KeyBinding(""),
+        rollRightReleased: new KeyBinding(""),
+        
+        firePressed:  new KeyBinding(""),
+        fireReleased: new KeyBinding(""),
+        zoomPressed:  new KeyBinding(""),
+        zoomReleased: new KeyBinding(""),
+        
+        mouseDelta:   new KeyBinding(""),
+        tick:         new KeyBinding(""),
+        timestamp:    new KeyBinding(""),
+        projectileId: new KeyBinding(""),
     };
+    
+    // helper to map rawKeys → bindings.update
+    function sampleBindings() {
+        for (const key of Object.values(bindings)) {
+            key.beginFrame();
+            if (key.code === "WheelUp" || key.code === "WheelDown") continue;
+            key.update( !!rawKeys.get(key.code) );
+        }
+    }
 
-    // Event handlers
-    const handleKeyDown = (event: KeyboardEvent) => {
+      // frame‐start: snapshot everything once
+    function beginFrame() {
+        sampleBindings();
+        // grab & zero out the raw mouseDelta
+        frameMouseDelta.x = mouseDelta.x;
+        frameMouseDelta.y = mouseDelta.y;
+        mouseDelta.x = mouseDelta.y = 0;
+    }
+    
+    // --- DOM event handlers ------------------------------------------
+    
+    const onKeyDown = (e: KeyboardEvent) => {
         if (!hasFocus && !isPointerLocked) return;
-        if (hasFocus || isPointerLocked) event.preventDefault();
-        keys.set(event.code, true);
+        e.preventDefault();
+        rawKeys.set(e.code, true);
     };
-
-    const handleKeyUp = (event: KeyboardEvent) => {
+    const onKeyUp = (e: KeyboardEvent) => {
         if (!hasFocus && !isPointerLocked) return;
-        keys.set(event.code, false);
+        rawKeys.set(e.code, false);
     };
-
-    const handleMouseMove = (event: MouseEvent) => {
+    const onMouseMove = (e: MouseEvent) => {
         if (!hasFocus || !isPointerLocked) return;
-        mouseDelta.x += event.movementX;
-        mouseDelta.y += event.movementY;
+        mouseDelta.x += e.movementX;
+        mouseDelta.y += e.movementY;
     };
-
-    const handleFocus = () => {
-        hasFocus = true;
+    const onWheel = (e: WheelEvent) => {
+        // wheels only fire edge‐trigger
+        if (e.deltaY < 0) bindings.nextWeapon.triggerPress();
+        else             bindings.previousWeapon.triggerPress();
     };
-
-    const handleBlur = () => {
-        hasFocus = false;
+    const onMouseDown = (e: MouseEvent) => {
+        if (e.button === 0) rawKeys.set("MouseLeft", true);
+        if (e.button === 2) rawKeys.set("MouseRight", true);
     };
-
-    const handleClick = () => {
+    const onMouseUp = (e: MouseEvent) => {
+        if (e.button === 0) rawKeys.set("MouseLeft", false);
+        if (e.button === 2) rawKeys.set("MouseRight", false);
+    };
+    const onClick = () => {
         if (!isPointerLocked) {
-            const promise = (canvas as any).requestPointerLock();
-            if (promise) {
-                promise.then(() => {
-                    hasFocus = true;
-                }).catch((err: Error) => {
-                    console.warn('Pointer lock request failed:', err);
-                });
-            }
+            (canvas as any).requestPointerLock()
+            .then(() => { hasFocus = true; })
+            .catch(console.warn);
         }
     };
-
-    const handleMouseDown = (event: MouseEvent) => {
-        handleClick();
-        if (event.button === 0) keys.set('MouseLeft', true);
-        else if (event.button === 2) keys.set('MouseRight', true);
-    };
-
-    const handleMouseUp = (event: MouseEvent) => {
-        if (event.button === 0) keys.set('MouseLeft', false);
-        else if (event.button === 2) keys.set('MouseRight', false);
-    };
-
-    // Set up canvas
-    canvas.setAttribute('tabindex', '0');
-    canvas.style.outline = 'none';
-    canvas.focus();
-
-    // Add event listeners
-    document.addEventListener('keydown', handleKeyDown);
-    document.addEventListener('keyup', handleKeyUp);
-    document.addEventListener('mousemove', handleMouseMove);
-    canvas.addEventListener('focus', handleFocus);
-    canvas.addEventListener('blur', handleBlur);
-    canvas.addEventListener('click', handleClick);
-    canvas.addEventListener('mousedown', handleMouseDown);
-    canvas.addEventListener('mouseup', handleMouseUp);
-
-    // Set up pointer lock change handler
-    document.addEventListener('pointerlockchange', () => {
-        isPointerLocked = document.pointerLockElement === (canvas as unknown as Element);
+    const onFocus = () => { hasFocus = true; };
+    const onBlur  = () => { hasFocus = false; };
+    const onPLockChange = () => {
+        isPointerLocked = document.pointerLockElement === canvas;
         if (isPointerLocked) hasFocus = true;
-    });
-
+    };
+    
+    // hook up listeners
+    canvas.setAttribute("tabindex","0");
+    canvas.style.outline = "none";
+    canvas.focus();
+    
+    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("keyup", onKeyUp);
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("wheel", onWheel);
+    canvas.addEventListener("mousedown", onMouseDown);
+    canvas.addEventListener("mouseup", onMouseUp);
+    canvas.addEventListener("click", onClick);
+    canvas.addEventListener("focus", onFocus);
+    canvas.addEventListener("blur", onBlur);
+    document.addEventListener("pointerlockchange", onPLockChange);
+    
+    // -----------------------------------------------------------------
+    
     return {
-        getInput: (): InputComponent => {
-            // Create input state
-            const input: InputComponent = {
-                forward: keys.get(keyBindings.forward) || false,
-                backward: keys.get(keyBindings.backward) || false,
-                left: keys.get(keyBindings.left) || false,
-                right: keys.get(keyBindings.right) || false,
-                up: keys.get(keyBindings.up) || false,
-                down: keys.get(keyBindings.down) || false,
-                pitchUp: keys.get(keyBindings.pitchUp) || false,
-                pitchDown: keys.get(keyBindings.pitchDown) || false,
-                yawLeft: keys.get(keyBindings.yawLeft) || false,
-                yawRight: keys.get(keyBindings.yawRight) || false,
-                rollLeft: keys.get(keyBindings.rollLeft) || false,
-                rollRight: keys.get(keyBindings.rollRight) || false,
-                fire: keys.get(keyBindings.fire) || false,
-                zoom: keys.get(keyBindings.zoom) || false,
-                nextWeapon: keys.get(keyBindings.nextWeapon) || false,
-                previousWeapon: keys.get(keyBindings.previousWeapon) || false,
-                weapon1: keys.get(keyBindings.weapon1) || false,
-                weapon2: keys.get(keyBindings.weapon2) || false,
-                weapon3: keys.get(keyBindings.weapon3) || false,
-                mouseDelta: { x: mouseDelta.x, y: mouseDelta.y },
+        beginFrame,
+        getInput(): InputComponent {            
+            // now assemble your InputComponent
+            const I: any = {
+                forward: bindings.forward.isDown,
+                forwardPressed: bindings.forward.justDown,
+                forwardReleased: bindings.forward.justUp,
+                
+                backward: bindings.backward.isDown,
+                backwardPressed: bindings.backward.justDown,
+                backwardReleased: bindings.backward.justUp,
+                
+                left: bindings.left.isDown,
+                leftPressed: bindings.left.justDown,
+                leftReleased: bindings.left.justUp,
+                
+                right: bindings.right.isDown,
+                rightPressed: bindings.right.justDown,
+                rightReleased: bindings.right.justUp,
+                
+                up: bindings.up.isDown,
+                upPressed: bindings.up.justDown,
+                upReleased: bindings.up.justUp,
+                
+                down: bindings.down.isDown,
+                downPressed: bindings.down.justDown,
+                downReleased: bindings.down.justUp,
+                
+                pitchUp: bindings.pitchUp.isDown,
+                pitchUpPressed: bindings.pitchUp.justDown,
+                pitchUpReleased: bindings.pitchUp.justUp,
+                
+                pitchDown: bindings.pitchDown.isDown,
+                pitchDownPressed: bindings.pitchDown.justDown,
+                pitchDownReleased:bindings.pitchDown.justUp,
+                
+                yawLeft: bindings.yawLeft.isDown,
+                yawLeftPressed: bindings.yawLeft.justDown,
+                yawLeftReleased: bindings.yawLeft.justUp,
+                
+                yawRight: bindings.yawRight.isDown,
+                yawRightPressed: bindings.yawRight.justDown,
+                yawRightReleased: bindings.yawRight.justUp,
+                
+                rollLeft: bindings.rollLeft.isDown,
+                rollLeftPressed: bindings.rollLeft.justDown,
+                rollLeftReleased: bindings.rollLeft.justUp,
+                
+                rollRight: bindings.rollRight.isDown,
+                rollRightPressed:  bindings.rollRight.justDown,
+                rollRightReleased: bindings.rollRight.justUp,
+                
+                fire: bindings.fire.isDown,
+                firePressed: bindings.fire.justDown,
+                fireReleased: bindings.fire.justUp,
+                
+                zoom: bindings.zoom.isDown,
+                zoomPressed: bindings.zoom.justDown,
+                zoomReleased: bindings.zoom.justUp,
+                
+                nextWeapon: bindings.nextWeapon.justDown,
+                previousWeapon: bindings.previousWeapon.justDown,
+                weapon1: bindings.weapon1.justDown,
+                weapon2: bindings.weapon2.justDown,
+                weapon3: bindings.weapon3.justDown,
+                
+                mouseDelta: { x: frameMouseDelta.x, y: frameMouseDelta.y },
+                
+                // filled in downstream:
+                tick:      0,
                 timestamp: Date.now(),
-                tick: 0 // Will be set by physics system
-            };
-
-            // Reset mouse delta
-            mouseDelta.x = 0;
-            mouseDelta.y = 0;
-            return input;
-        },
-
-        isIdle: () => {
-            return !Array.from(keys.values()).some(v => v) && 
-                   mouseDelta.x === 0 && 
-                   mouseDelta.y === 0;
-        },
-
-        cleanup: () => {
-            document.removeEventListener('keydown', handleKeyDown);
-            document.removeEventListener('keyup', handleKeyUp);
-            document.removeEventListener('mousemove', handleMouseMove);
-            canvas.removeEventListener('focus', handleFocus);
-            canvas.removeEventListener('blur', handleBlur);
-            canvas.removeEventListener('click', handleClick);
-            canvas.removeEventListener('mousedown', handleMouseDown);
-            canvas.removeEventListener('mouseup', handleMouseUp);
+                projectileId: 0
+            } as InputComponent;
             
-            if (isPointerLocked) {
-                document.exitPointerLock();
-            }
+            return I;
+        },
+        
+        isIdle(): boolean {
+            return Object.values(bindings).every(b => !b.isDown && !b.justDown && !b.justUp) && 
+            frameMouseDelta.x === 0 && 
+            frameMouseDelta.y === 0;
+        },
+        
+        cleanup() {
+            document.removeEventListener("keydown",     onKeyDown);
+            document.removeEventListener("keyup",       onKeyUp);
+            document.removeEventListener("mousemove",   onMouseMove);
+            document.removeEventListener("wheel",       onWheel);
+            canvas.removeEventListener("mousedown",     onMouseDown);
+            canvas.removeEventListener("mouseup",       onMouseUp);
+            canvas.removeEventListener("click",         onClick);
+            canvas.removeEventListener("focus",         onFocus);
+            canvas.removeEventListener("blur",          onBlur);
+            document .removeEventListener("pointerlockchange", onPLockChange);
+            if (isPointerLocked) document.exitPointerLock();
         }
     };
-} 
+}

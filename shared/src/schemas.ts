@@ -12,28 +12,18 @@ export class WeaponSchema extends Schema {
     @type("string") projectileType = "";
     /** Damage dealt by the weapon */
     @type("number") damage = 0;
-    /** Fire rate in rounds per second */
-    @type("number") fireRate = 0;
     /** Minimum fire rate in rounds per second */
     @type("number") minFireRate = 0;
     /** Maximum fire rate in rounds per second */
     @type("number") maxFireRate = 0;
-    /** Heat accumulator for the weapon */
-    @type("number") heatAccumulator = 0;
     /** Heat per shot for the weapon */
     @type("number") heatPerShot = 0;
     /** Heat dissipation rate for the weapon */
     @type("number") heatDissipationRate = 0;
     /** Speed of the projectile in m/s */
     @type("number") projectileSpeed = 0;
-    /** Cooldown time between shots in seconds */
-    @type("number") cooldown = 0;
     /** Maximum range of the weapon in meters */
     @type("number") range = 0;
-    /** Whether the weapon is currently on cooldown */
-    @type("boolean") isOnCooldown = false;
-    /** Last time the weapon was fired */
-    @type("number") lastFireTick = 0;
 }
 
 /**

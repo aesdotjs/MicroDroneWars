@@ -47,15 +47,15 @@ export function createInputProcessorSystem(
                     physicsSystem.update(dt, entity, input);
                     // Always update weapon system if entity has weapons
                     if (entity.vehicle?.weapons) {
-                        weaponSystem.update(dt, entity, input, true);
+                        weaponSystem.update(dt, entity, input, input.tick);
                     }
                     // Set fire to true on the next processed input if the current input is a fire and the weapon is on cooldown
-                    if (input.fire && weaponSystem.isOnCooldown(entity)) {
-                        const nextInput = sortedInputs[processedCount];
-                        if (nextInput) {
-                            nextInput.fire = true;
-                        }
-                    }
+                    // if (input.fire && weaponSystem.isOnCooldown(entity)) {
+                    //     const nextInput = sortedInputs[processedCount];
+                    //     if (nextInput) {
+                    //         nextInput.fire = true;
+                    //     }
+                    // }
                     lastProcessedTick = input.tick;
                     processedCount++;
                 }

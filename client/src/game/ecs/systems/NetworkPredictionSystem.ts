@@ -212,7 +212,7 @@ export function createNetworkPredictionSystem(
         addEntityState: (id: string, state: TransformBuffer) => {
             const entity = ecsWorld.entities.find(e => e.id === id);
             if (!entity || !entity.transform) return;
-            physicsWorldSystem.setCurrentTick(state.tick.tick);
+            // physicsWorldSystem.setCurrentTick(state.tick.tick);
             const isLocalPlayer = entity.owner?.isLocal;
             if (isLocalPlayer) {
                 log('Server State Tick', state.tick.tick);
@@ -271,6 +271,7 @@ export function createNetworkPredictionSystem(
 
                 for (const input of unprocessedInputs) {
                     physicsSystem.update(1/60, entity, input);
+                    // weaponSystem.update(1/60, entity, input, input.tick);
                 }
                 pendingInputs = unprocessedInputs;
             } else {
@@ -286,8 +287,8 @@ export function createNetworkPredictionSystem(
         /**
          * Adds a new input to the pending inputs buffer
          */
-        addInput: (dt: number, input: InputComponent, isIdle: boolean) => {
-            const currentTick = physicsWorldSystem.getCurrentTick();
+        addInput: (dt: number, input: InputComponent, isIdle: boolean, currentTick: number) => {
+            // const currentTick = physicsWorldSystem.getCurrentTick();
 
             // Create final input with timestamp and tick
             const finalInput: InputComponent = {
@@ -304,19 +305,21 @@ export function createNetworkPredictionSystem(
 
             // Update local player immediately
             const entity = ecsWorld.with("physics", "vehicle", "transform", "owner").where(({owner}) => owner?.isLocal).entities[0];
+            let projectileId: number | undefined;
             let isOnCooldown = false;
             if (entity) {
                 physicsSystem.update(dt, entity, finalInput);
                 // Always update weapon system if entity has weapons
                 if (entity.vehicle?.weapons) {
                     isOnCooldown = weaponSystem.isOnCooldown(entity);
-                    weaponSystem.update(dt, entity, finalInput, false);
+                    projectileId = weaponSystem.update(dt, entity, finalInput, currentTick);
                 }
             }
-
             // Only send and store non-idle inputs
             if (!isIdle) {
-                // Prevent firing if weapons are on cooldown
+                if (projectileId) {
+                    finalInput.projectileId = projectileId;
+                }
                 if (isOnCooldown) {
                     finalInput.fire = false;
                 }

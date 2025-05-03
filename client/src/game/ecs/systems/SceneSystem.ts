@@ -78,6 +78,7 @@ export function createSceneSystem(engine: Engine) {
 
                 if (entity.type === EntityType.Projectile && !entity.render?.mesh) {
                     entity.render = { mesh: effectSystem.createProjectileMesh(entity) };
+                    effectSystem.createMuzzleFlash(entity);
                 }
 
                 // Update position and rotation for all entities with meshes

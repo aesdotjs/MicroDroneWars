@@ -437,7 +437,6 @@ export function createPhysicsWorldSystem() {
                 spawnPointPosition = shooter.transform!.position;
                 spawnPointRotation = shooter.transform!.rotation;
             }
-            console.log('spawnPointPosition', spawnPointPosition);
 
             const forward = new Vector3(0, 0, 1);
             forward.rotateByQuaternionAroundPointToRef(
@@ -445,6 +444,10 @@ export function createPhysicsWorldSystem() {
                 Vector3.Zero(),
                 forward
             );
+
+            // Calculate projectile velocity by combining shooter velocity and projectile speed
+            const projectileVelocity = forward.scale(weapon.projectileSpeed);
+            projectileVelocity.addInPlace(shooter.transform!.velocity);
 
             // Create projectile body
             const body = new CANNON.Body({
@@ -455,9 +458,9 @@ export function createPhysicsWorldSystem() {
                     spawnPointPosition.z
                 ),
                 velocity: new CANNON.Vec3(
-                    forward.x * weapon.projectileSpeed,
-                    forward.y * weapon.projectileSpeed,
-                    forward.z * weapon.projectileSpeed
+                    projectileVelocity.x,
+                    projectileVelocity.y,
+                    projectileVelocity.z
                 ),
                 collisionFilterGroup: CollisionGroups.Projectiles,
                 collisionFilterMask: collisionMasks.Projectile,
@@ -481,7 +484,7 @@ export function createPhysicsWorldSystem() {
                 transform: {
                     position: spawnPointPosition.clone(),
                     rotation: spawnPointRotation.clone(),
-                    velocity: forward.scale(weapon.projectileSpeed),
+                    velocity: projectileVelocity,
                     angularVelocity: Vector3.Zero()
                 },
                 physics: {
@@ -504,7 +507,7 @@ export function createPhysicsWorldSystem() {
                     range: weapon.range,
                     distanceTraveled: 0,
                     sourceId: shooter.id,
-                    speed: 0,
+                    speed: weapon.projectileSpeed,
                 },
                 gameState: {
                     health: 1,

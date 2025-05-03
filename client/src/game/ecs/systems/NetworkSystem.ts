@@ -134,17 +134,15 @@ export function createNetworkSystem(
                             name: w.name,
                             projectileType: w.projectileType as ProjectileType,
                             damage: w.damage,
-                            fireRate: w.fireRate,
                             minFireRate: w.minFireRate,
                             maxFireRate: w.maxFireRate,
-                            heatAccumulator: w.heatAccumulator,
                             heatPerShot: w.heatPerShot,
                             heatDissipationRate: w.heatDissipationRate,
                             projectileSpeed: w.projectileSpeed,
-                            cooldown: w.cooldown,
                             range: w.range,
-                            isOnCooldown: w.isOnCooldown,
-                            lastFireTick: w.lastFireTick
+                            isOnCooldown: false,
+                            lastFireTick: 0,
+                            heatAccumulator: 0
                         })),
                         activeWeaponIndex: entity.vehicle.activeWeaponIndex
                     };
@@ -314,17 +312,12 @@ export function createNetworkSystem(
                         name: weapon.name,
                         projectileType: weapon.projectileType as ProjectileType,
                         damage: weapon.damage,
-                        fireRate: weapon.fireRate,
                         minFireRate: weapon.minFireRate,
                         maxFireRate: weapon.maxFireRate,
-                        heatAccumulator: weapon.heatAccumulator,
                         heatPerShot: weapon.heatPerShot,
                         heatDissipationRate: weapon.heatDissipationRate,
                         projectileSpeed: weapon.projectileSpeed,
-                        cooldown: weapon.cooldown,
                         range: weapon.range,
-                        isOnCooldown: weapon.isOnCooldown,
-                        lastFireTick: weapon.lastFireTick
                     }
                     ecsWorld.reindex(gameEntity);
                 });
@@ -356,6 +349,10 @@ export function createNetworkSystem(
         }
     });
 
+    $(room.state).listen("serverTick", (serverTick: number) => {
+        physicsWorldSystem.setCurrentTick(serverTick);
+    });
+
     console.log('Network system created');
     
     return {
@@ -369,8 +366,10 @@ export function createNetworkSystem(
             room.send("ping", Date.now());
         },
         update: (dt: number) => {
+            inputSystem.beginFrame();
             const isIdle = inputSystem.isIdle();
-            networkPredictionSystem.addInput(dt, inputSystem.getInput(), isIdle);
+            const input = inputSystem.getInput();
+            networkPredictionSystem.addInput(dt, input, isIdle, room.state.serverTick);
         },
         cleanup: () => {
             networkPredictionSystem.cleanup();
