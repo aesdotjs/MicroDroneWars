@@ -306,12 +306,12 @@ export function createNetworkPredictionSystem(
             // Update local player immediately
             const entity = ecsWorld.with("physics", "vehicle", "transform", "owner").where(({owner}) => owner?.isLocal).entities[0];
             let projectileId: number | undefined;
-            let isOnCooldown = false;
+            // let isOnCooldown = false;
             if (entity) {
                 physicsSystem.update(dt, entity, finalInput);
                 // Always update weapon system if entity has weapons
                 if (entity.vehicle?.weapons) {
-                    isOnCooldown = weaponSystem.isOnCooldown(entity);
+                    // isOnCooldown = weaponSystem.isOnCooldown(entity);
                     projectileId = weaponSystem.update(dt, entity, finalInput, currentTick);
                 }
             }
@@ -320,9 +320,9 @@ export function createNetworkPredictionSystem(
                 if (projectileId) {
                     finalInput.projectileId = projectileId;
                 }
-                if (isOnCooldown) {
-                    finalInput.fire = false;
-                }
+                // if (isOnCooldown) {
+                //     finalInput.fire = false;
+                // }
                 room.send("command", finalInput);
                 pendingInputs.push(finalInput);
             } else if (currentTick - lastHeartbeatTick >= HEARTBEAT_INTERVAL) {

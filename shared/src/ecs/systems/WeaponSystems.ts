@@ -51,7 +51,7 @@ export function createWeaponSystem(
             if (input.weapon2) vehicle.activeWeaponIndex = 1;
             if (input.weapon3) vehicle.activeWeaponIndex = 2;
             // Handle firing
-            if (input.fire && activeWeapon && !activeWeapon.isOnCooldown) {
+            if (input.fire && (!isServer || input.projectileId) && activeWeapon && !activeWeapon.isOnCooldown) {
                 // Calculate current fire rate and cooldown
                 const heatAccumulator = activeWeapon!.heatAccumulator ?? 0;
                 const lastFireTick = activeWeapon!.lastFireTick ?? currentTick;
