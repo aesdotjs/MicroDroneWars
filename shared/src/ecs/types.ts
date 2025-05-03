@@ -69,6 +69,8 @@ export interface GameEntity {
 
     /** Transform component for position, rotation and velocity */
     transform?: TransformComponent;
+    /** Server-side transform for debug visualization */
+    serverTransform?: TransformComponent;
 
     /** Physics component for physical properties and behavior */
     physics?: PhysicsComponent;

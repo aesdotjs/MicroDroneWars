@@ -140,16 +140,16 @@ export class MicroDroneRoom extends Room<State> {
             lastTime = now;
 
             // Run ECS systems in the correct order
-            this.physicsWorldSystem.update(1 / this.TICK_RATE);
             this.assetSystem.update(1 / this.TICK_RATE);
             this.inputSystem.update(1 / this.TICK_RATE);
-            // Update server tick in state
-            this.state.serverTick = this.physicsWorldSystem.getCurrentTick();
             this.collisionSystem.update(1 / this.TICK_RATE);
             this.projectileSystem.update(1 / this.TICK_RATE);
             this.healthSystem.update(1 / this.TICK_RATE);
             this.flagSystem.update(1 / this.TICK_RATE);
             this.gameModeSystem.update(1 / this.TICK_RATE);
+            this.physicsWorldSystem.update(1 / this.TICK_RATE);
+            // Update server tick in state
+            this.state.serverTick = this.physicsWorldSystem.getCurrentTick();
                 
             // Sync ECS state to Colyseus state
             this.stateSyncSystem.update();

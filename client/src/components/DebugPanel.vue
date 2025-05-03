@@ -2,7 +2,7 @@
   <div class="debug-panel">
     <div class="debug-header">
       <span>Debug Values</span>
-      <button class="toggle-button" @click="isExpanded = !isExpanded">
+      <button class="toggle-button" @click="onToggleDebugPanel">
         {{ isExpanded ? '▼' : '▶' }}
       </button>
     </div>
@@ -34,9 +34,16 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { useGameDebug } from '@/composables/useGameDebug';
+// Define props and emit for the expanded
+const props = defineProps<{
+  expanded: boolean;
+}>();
+const emit = defineEmits<{
+  (e: 'update:expanded', value: boolean): void
+}>();
 
 const { debugValues } = useGameDebug();
-const isExpanded = ref(true);
+const isExpanded = ref(props.expanded);
 
 const formatTimestamp = (timestamp: number) => {
   return new Date(timestamp).toLocaleTimeString();
@@ -53,6 +60,11 @@ const formatValue = (value: any) => {
     return JSON.stringify(value, null, 2);
   }
   return value;
+};
+
+const onToggleDebugPanel = () => {
+  isExpanded.value = !isExpanded.value;
+  emit('update:expanded', isExpanded.value);
 };
 </script>
 

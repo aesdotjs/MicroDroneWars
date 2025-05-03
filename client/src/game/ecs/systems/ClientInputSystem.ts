@@ -1,5 +1,8 @@
 import { InputComponent } from '@shared/ecs/types';
 import { KeyBinding }  from "./KeyBinding";
+import { useGameDebug } from '@/composables/useGameDebug';
+
+const { log } = useGameDebug();
 
 export function createClientInputSystem(canvas: HTMLCanvasElement) {
     // track raw key states (so we can feed them into each KeyBinding.update)
@@ -103,6 +106,7 @@ export function createClientInputSystem(canvas: HTMLCanvasElement) {
     };
     const onMouseMove = (e: MouseEvent) => {
         if (!hasFocus || !isPointerLocked) return;
+        log('Mouse move', `${e.movementX} ${e.movementY}`);
         mouseDelta.x += e.movementX;
         mouseDelta.y += e.movementY;
     };
@@ -121,7 +125,7 @@ export function createClientInputSystem(canvas: HTMLCanvasElement) {
     };
     const onClick = () => {
         if (!isPointerLocked) {
-            (canvas as any).requestPointerLock()
+            (canvas as any).requestPointerLock({ unadjustedMovement: true })
             .then(() => { hasFocus = true; })
             .catch(console.warn);
         }

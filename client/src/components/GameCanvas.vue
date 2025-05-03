@@ -1,16 +1,22 @@
 <template>
   <div class="game-container">
     <canvas id="renderCanvas"></canvas>
-    <DebugPanel />
+    <DebugPanel :expanded="debugPanelExpanded" @update:expanded="onUpdateDebugPanel" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount } from 'vue';
+import { onMounted, onBeforeUnmount, ref } from 'vue';
 import { Game } from '@/game/Game';
 import DebugPanel from './DebugPanel.vue';
 
 let game: Game;
+let debugPanelExpanded = ref(false);
+
+const onUpdateDebugPanel = (value: boolean) => {
+  debugPanelExpanded.value = value;
+  game.setDebugMode(value);
+};
 
 onMounted(() => {
   if (game) {

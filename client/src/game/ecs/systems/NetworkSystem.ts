@@ -24,6 +24,9 @@ export function createNetworkSystem(
     console.log('Creating network system...');
     const $ = Colyseus.getStateCallbacks(room);
     
+    // Debug mode flag
+    let debugMode = false;
+    
     const networkPredictionSystem = createNetworkPredictionSystem(
         physicsSystem,
         physicsWorldSystem,
@@ -86,7 +89,6 @@ export function createNetworkSystem(
     
     // Handle entity updates
     $(room.state).entities.onAdd((entity: EntitySchema, id: string) => {
-        console.log('Entity added:', { id, type: entity.type, entity });
         
         // Create base entity with required components
         const newEntity: GameEntity = {
@@ -176,7 +178,6 @@ export function createNetworkSystem(
         if (!ecsWorld.entities.find(e => e.id === entity.id)) {
             // Add entity to ECS world
             ecsWorld.add(newEntity);
-            console.log('Entity added to ECS world:', { id, newEntity });
         } else { // Entity already exists in ECS world (most likely a projectile)
             const gameEntity = ecsWorld.entities.find(e => e.id === id);
             if (gameEntity) {
@@ -253,6 +254,17 @@ export function createNetworkSystem(
                     lastProcessedInputTick: entity.tick.lastProcessedInputTick
                 }
             };
+
+            // Store server transform for debug visualization
+            if (debugMode) {
+                gameEntity.serverTransform = {
+                    position: new Vector3(entity.transform.positionX, entity.transform.positionY, entity.transform.positionZ),
+                    rotation: new Quaternion(entity.transform.quaternionX, entity.transform.quaternionY, entity.transform.quaternionZ, entity.transform.quaternionW),
+                    velocity: new Vector3(entity.transform.linearVelocityX, entity.transform.linearVelocityY, entity.transform.linearVelocityZ),
+                    angularVelocity: new Vector3(entity.transform.angularVelocityX, entity.transform.angularVelocityY, entity.transform.angularVelocityZ)
+                };
+            }
+
             networkPredictionSystem.addEntityState(id, transformBuffer);    
             ecsWorld.reindex(gameEntity);
         });
@@ -341,11 +353,9 @@ export function createNetworkSystem(
     
     
     $(room.state).entities.onRemove((_entity: EntitySchema, id: string) => {
-        console.log('Entity removed:', id);
         const entity = ecsWorld.entities.find(e => e.id === id);
         if (entity) {
             ecsWorld.remove(entity);
-            console.log('Entity removed from ECS world:', id);
         }
     });
 
@@ -366,13 +376,23 @@ export function createNetworkSystem(
             room.send("ping", Date.now());
         },
         update: (dt: number) => {
-            inputSystem.beginFrame();
             const isIdle = inputSystem.isIdle();
             const input = inputSystem.getInput();
             networkPredictionSystem.addInput(dt, input, isIdle, room.state.serverTick);
         },
         cleanup: () => {
             networkPredictionSystem.cleanup();
-        }
+        },
+        // Add debug mode controls
+        setDebugMode: (enabled: boolean) => {
+            debugMode = enabled;
+            // Clear server transforms when disabling debug mode
+            if (!enabled) {
+                ecsWorld.entities.forEach(entity => {
+                    delete entity.serverTransform;
+                });
+            }
+        },
+        getDebugMode: () => debugMode
     };
 } 

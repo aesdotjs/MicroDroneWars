@@ -159,6 +159,14 @@ export class Game {
     }
 
     /**
+     * Sets the debug mode
+     */
+    public setDebugMode(value: boolean): void {
+        if (!this.gameSystems) return;
+        this.gameSystems.setDebugMode(value);
+    }
+
+    /**
      * Cleans up resources
      */
     public async cleanup(): Promise<void> {

@@ -8,6 +8,7 @@ import { Room } from 'colyseus.js';
 import { State } from '@shared/schemas';
 import { useGameDebug } from '@/composables/useGameDebug';
 import { createWeaponSystem } from '@shared/ecs/systems/WeaponSystems';
+import { cp } from 'fs';
 
 const { log } = useGameDebug();
 
@@ -226,8 +227,12 @@ export function createNetworkPredictionSystem(
             }
 
             const buffers = TransformBuffers.get(id)!;
+
+            // if (isLocalPlayer && entity.type === EntityType.Vehicle) {
+            //     return;
+            // }
             
-            if (isLocalPlayer && entity.type === EntityType.Vehicle) {
+            if (isLocalPlayer && (entity.type === EntityType.Vehicle)) {
                 // physicsWorldSystem.setCurrentTick(state.tick.tick);
                 entity.transform.position.copyFrom(state.transform.position);
                 entity.transform.rotation.copyFrom(state.transform.rotation);
@@ -268,7 +273,7 @@ export function createNetworkPredictionSystem(
                     from: lastProcessedInputTick,
                     to: unprocessedInputs.length > 0 ? Math.max(...unprocessedInputs.map(i => i.tick)) : lastProcessedInputTick
                 });
-
+                // const subDt = 1 / 60 / unprocessedInputs.length;
                 for (const input of unprocessedInputs) {
                     physicsSystem.update(1/60, entity, input);
                     // weaponSystem.update(1/60, entity, input, input.tick);
@@ -323,6 +328,7 @@ export function createNetworkPredictionSystem(
                 // if (isOnCooldown) {
                 //     finalInput.fire = false;
                 // }
+                log('Sending command', `${finalInput.mouseDelta.x} ${finalInput.mouseDelta.y} ${finalInput.fire} ${finalInput.projectileId}`);
                 room.send("command", finalInput);
                 pendingInputs.push(finalInput);
             } else if (currentTick - lastHeartbeatTick >= HEARTBEAT_INTERVAL) {

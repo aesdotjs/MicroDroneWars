@@ -32,8 +32,8 @@ export function createInputProcessorSystem(
                 return [];
             }
             
-            // Sort inputs by tick
-            const sortedInputs = inputBuffer.sort((a, b) => a.tick - b.tick);
+            // // Sort inputs by tick
+            // const sortedInputs = inputBuffer.sort((a, b) => a.tick - b.tick);
             
             // console.log(`[InputProcessor] Processing inputs for entity ${entity.id}:`, {
             //     bufferSize: inputBuffer.length,
@@ -44,36 +44,46 @@ export function createInputProcessorSystem(
             // });
             
             // Process each input in order
-            let processedCount = 0;
-            for (const input of sortedInputs) {
-                if (input.tick > lastProcessedTick) {
-                    physicsSystem.update(dt, entity, input);
-                    // Set fire to true on the next processed input if the current input is a fire and the weapon is on cooldown
-                    if (input.fire && input.projectileId && weaponSystem.isOnCooldown(entity)) {
-                        const nextInput = sortedInputs[processedCount];
-                        if (nextInput) {
-                            nextInput.fire = true;
-                            nextInput.projectileId = input.projectileId;
-                        }
-                    }
-                    // Always update weapon system if entity has weapons
-                    if (entity.vehicle?.weapons) {
-                        weaponSystem.update(dt, entity, input, input.tick);
-                    }
-                    lastProcessedTick = input.tick;
-                    processedCount++;
+            // let processedCount = 0;
+            // for (const input of sortedInputs) {
+            //     if (input.tick > lastProcessedTick) {
+            //         physicsSystem.update(dt, entity, input);
+            //         // Set fire to true on the next processed input if the current input is a fire and the weapon is on cooldown
+            //         if (input.fire && input.projectileId && weaponSystem.isOnCooldown(entity)) {
+            //             const nextInput = sortedInputs[processedCount];
+            //             if (nextInput) {
+            //                 nextInput.fire = true;
+            //                 nextInput.projectileId = input.projectileId;
+            //             }
+            //         }
+            //         // Always update weapon system if entity has weapons
+            //         if (entity.vehicle?.weapons) {
+            //             weaponSystem.update(dt, entity, input, input.tick);
+            //         }
+            //         lastProcessedTick = input.tick;
+            //         processedCount++;
+            //     }
+            // }
+
+            // // Update last processed tick and timestamp
+            // if (processedCount > 0) {
+            //     // console.log(`[InputProcessor] Processed ${processedCount} inputs for entity ${entity.id}. New lastProcessedTick: ${lastProcessedTick}`);
+            //     lastProcessedInputTicks.set(entity.id, lastProcessedTick);
+            //     lastProcessedInputTimestamps.set(entity.id, Date.now());
+            // } 
+            const nextInput = inputBuffer.shift();
+            if (nextInput) {
+                physicsSystem.update(dt, entity, nextInput);
+                if (entity.vehicle?.weapons) {
+                    weaponSystem.update(dt, entity, nextInput, nextInput.tick);
                 }
+                lastProcessedInputTicks.set(entity.id, nextInput.tick);
+                lastProcessedInputTimestamps.set(entity.id, Date.now());
             }
 
-            // Update last processed tick and timestamp
-            if (processedCount > 0) {
-                // console.log(`[InputProcessor] Processed ${processedCount} inputs for entity ${entity.id}. New lastProcessedTick: ${lastProcessedTick}`);
-                lastProcessedInputTicks.set(entity.id, lastProcessedTick);
-                lastProcessedInputTimestamps.set(entity.id, Date.now());
-            } 
-
+            return inputBuffer.filter(input => input.tick > lastProcessedTick);
             // Return only unprocessed inputs
-            return sortedInputs.filter(input => input.tick > lastProcessedTick);
+            // return sortedInputs.filter(input => input.tick > lastProcessedTick);
         },
 
         /**

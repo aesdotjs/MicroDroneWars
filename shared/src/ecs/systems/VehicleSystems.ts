@@ -13,8 +13,8 @@ export function createDroneSystem(
 ) {
     const drones = ecsWorld.with("vehicle", "physics", "transform").where(({vehicle}) => vehicle.vehicleType === VehicleType.Drone);
     const momentumDamping = 0.99;
-    const moveSpeed = 0.2;
-    const rotationSpeed = 0.02;
+    const moveSpeed = 10;
+    const rotationSpeed = 2;
     const mouseSensitivity = 0.002;
     const integralError = new Map<string, number>();
     const targetAltitude = new Map<string, number>();
@@ -83,34 +83,35 @@ export function createDroneSystem(
             // Get forward direction ignoring pitch and roll (only yaw)
             const forwardDirection = new Vector3(forward.x, 0, forward.z).normalize();
             const rightDirection = new Vector3(right.x, 0, right.z).normalize();
+            const upDirection = new Vector3(0, 1, 0);
             
             // Forward/backward movement
             if (input.forward) {
-                body.velocity.x += forwardDirection.x * moveSpeed;
-                body.velocity.z += forwardDirection.z * moveSpeed;
+                body.velocity.x += forwardDirection.x * moveSpeed * dt;
+                body.velocity.z += forwardDirection.z * moveSpeed * dt;
             }
             if (input.backward) {
-                body.velocity.x -= forwardDirection.x * moveSpeed;
-                body.velocity.z -= forwardDirection.z * moveSpeed;
+                body.velocity.x -= forwardDirection.x * moveSpeed * dt;
+                body.velocity.z -= forwardDirection.z * moveSpeed * dt;
             }
 
             // Left/right strafing
             if (input.left) {
-                body.velocity.x += rightDirection.x * moveSpeed;
-                body.velocity.z += rightDirection.z * moveSpeed;
+                body.velocity.x += rightDirection.x * moveSpeed * dt;
+                body.velocity.z += rightDirection.z * moveSpeed * dt;
             }
             if (input.right) {
-                body.velocity.x -= rightDirection.x * moveSpeed;
-                body.velocity.z -= rightDirection.z * moveSpeed;
+                body.velocity.x -= rightDirection.x * moveSpeed * dt;
+                body.velocity.z -= rightDirection.z * moveSpeed * dt;
             }
 
             // Vertical movement
             if (input.up) {
-                body.velocity.y += moveSpeed;
+                body.velocity.y += moveSpeed * dt;
                 targetAltitude.set(entity.id, body.position.y + body.velocity.y * dt);
             }
             if (input.down) {
-                body.velocity.y -= moveSpeed;
+                body.velocity.y -= moveSpeed * dt;
                 targetAltitude.set(entity.id, body.position.y - body.velocity.y * dt);
             }
 
@@ -121,7 +122,7 @@ export function createDroneSystem(
                     body.quaternion.y * body.quaternion.z
                 ));
                 
-                const pitchAmount = input.pitchUp ? rotationSpeed : -rotationSpeed;
+                const pitchAmount = input.pitchUp ? rotationSpeed * dt : -rotationSpeed * dt;
                 if (Math.abs(currentPitch + pitchAmount) < maxPitchAngle) {
                     const pitchQuat = new CANNON.Quaternion();
                     pitchQuat.setFromAxisAngle(new CANNON.Vec3(right.x, right.y, right.z), pitchAmount);
@@ -131,7 +132,7 @@ export function createDroneSystem(
 
             // Apply yaw control
             if (input.yawLeft || input.yawRight) {
-                const yawAmount = input.yawLeft ? rotationSpeed : -rotationSpeed;
+                const yawAmount = input.yawLeft ? rotationSpeed * dt : -rotationSpeed * dt;
                 const yawQuat = new CANNON.Quaternion();
                 yawQuat.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), yawAmount);
                 body.quaternion = yawQuat.mult(body.quaternion);
@@ -241,7 +242,7 @@ export function createPlaneSystem(
             body.mass = settings.mass * (1 - (lowerMassInfluence * 0.6));
 
             // Scale control inputs by deltaTime and 60fps for consistent behavior
-            const controlScale = dt * 60;
+            const controlScale = dt;
 
             // Rotation stabilization
             let lookVelocity = velocity.clone();
@@ -343,7 +344,7 @@ export function createPlaneSystem(
             }
 
             // Scale thrust by deltaTime
-            const thrustScale = dt * 60;
+            const thrustScale = dt;
             body.velocity.x += (velLength * lastDrag.get(entity.id)! + speedModifier) * forward.x * enginePower.get(entity.id)! * thrustScale;
             body.velocity.y += (velLength * lastDrag.get(entity.id)! + speedModifier) * forward.y * enginePower.get(entity.id)! * thrustScale;
             body.velocity.z += (velLength * lastDrag.get(entity.id)! + speedModifier) * forward.z * enginePower.get(entity.id)! * thrustScale;

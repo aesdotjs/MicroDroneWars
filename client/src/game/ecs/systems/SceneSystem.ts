@@ -1,4 +1,4 @@
-import { Scene, Engine, Vector3, HemisphericLight, ArcRotateCamera, Color4, Quaternion, MeshBuilder, StandardMaterial, Color3, DirectionalLight, ShadowGenerator, GlowLayer, Vector2 } from '@babylonjs/core';
+import { Scene, Engine, Vector3, HemisphericLight, ArcRotateCamera, Color4, Quaternion, MeshBuilder, StandardMaterial, Color3, DirectionalLight, ShadowGenerator, GlowLayer, Vector2, Mesh } from '@babylonjs/core';
 
 import { world as ecsWorld } from '@shared/ecs/world';
 import { EntityType } from '@shared/ecs/types';
@@ -20,6 +20,15 @@ export function createSceneSystem(engine: Engine) {
 
     const effectSystem = createEffectSystem(scene);
 
+    // Create debug material for server transforms
+    const debugMaterial = new StandardMaterial("debugMaterial", scene);
+    debugMaterial.diffuseColor = new Color3(0, 1, 0);
+    debugMaterial.alpha = 1;
+    debugMaterial.wireframe = true;
+
+    // Map to store debug meshes
+    const debugMeshes = new Map<string, Mesh>();
+
     // Initialize scene components
     console.log('Setting up lights...');
     const shadowGenerator = setupLights(scene);
@@ -30,7 +39,8 @@ export function createSceneSystem(engine: Engine) {
     console.log('Camera setup complete');
 
     console.log('Setting up glow layer...');
-    const glowLayer = setupGlowLayer(scene);
+    // const glowLayer = setupGlowLayer(scene);
+    const glowLayer = null;
     console.log('Glow layer setup complete');
 
     console.log('Setting up environment...');
@@ -87,17 +97,48 @@ export function createSceneSystem(engine: Engine) {
                     if (entity.transform.rotation) {
                         entity.render.mesh.rotationQuaternion = entity.transform.rotation;
                     }
+
+                    // Handle server transform visualization
+                    if (entity.serverTransform) {
+                        let debugMesh = debugMeshes.get(entity.id);
+                        if (!debugMesh && entity.render.mesh) {
+                            // Create debug mesh as a clone of the original mesh
+                            debugMesh = entity.render.mesh.clone(`${entity.id}_debug`);
+                            debugMesh.material = debugMaterial;
+                            debugMeshes.set(entity.id, debugMesh);
+                        }
+                        if (debugMesh) {
+                            debugMesh.position.copyFrom(entity.serverTransform.position);
+                            debugMesh.rotationQuaternion = entity.serverTransform.rotation;
+                        }
+                    } else {
+                        // Remove debug mesh if server transform is not available
+                        const debugMesh = debugMeshes.get(entity.id);
+                        if (debugMesh) {
+                            debugMesh.dispose();
+                            debugMeshes.delete(entity.id);
+                        }
+                    }
                 }
             }
         },
         removeProjectileMesh: (projectileId: string) => {
             effectSystem.removeProjectileMesh(projectileId);
+            // Also remove debug mesh if it exists
+            const debugMesh = debugMeshes.get(projectileId);
+            if (debugMesh) {
+                debugMesh.dispose();
+                debugMeshes.delete(projectileId);
+            }
         },
         render: () => {
             scene.render();
         },
         dispose: () => {
             console.log('Disposing scene...');
+            // Clean up debug meshes
+            debugMeshes.forEach(mesh => mesh.dispose());
+            debugMeshes.clear();
             scene.dispose();
             console.log('Scene disposed');
         }

@@ -121,7 +121,6 @@ export function createEffectSystem(scene: Scene) {
         projectileMesh.rotationQuaternion = projectile.transform!.rotation;
 
         activeProjectiles.set(projectile.id, projectileMesh);
-        console.log('created projectile mesh', projectile.id);
         createTrailEffect(projectile, projectileMesh);
         return projectileMesh;
     }

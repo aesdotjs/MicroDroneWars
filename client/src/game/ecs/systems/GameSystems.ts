@@ -37,6 +37,7 @@ export function createGameSystems(
 
     // Initialize cannon-es-debugger-babylonjs
     const cannonDebugger = new (CannonDebugger as any)(scene, physicsWorldSystem.getWorld());
+    let isDebugMode = false;
     console.log('Cannon-es-debugger-babylonjs initialized');
 
     // Initialize weapon system
@@ -68,7 +69,6 @@ export function createGameSystems(
 
     // handle entity removal
     ecsWorld.onEntityRemoved.subscribe((entity) => {
-        console.log('Entity removed sub', entity.id);
         if (entity.physics?.body) {
             physicsWorldSystem.removeBody(entity.id);
         }
@@ -78,54 +78,96 @@ export function createGameSystems(
     });
 
     // Physics loop settings
-    const TICK_RATE = 60;
-    const MS_PER_TICK = 1000 / TICK_RATE;
-    let nextTick = performance.now();
-    let isPhysicsRunning = true;
+    // const TICK_RATE = 60;
+    // const MS_PER_TICK = 1000 / TICK_RATE;
+    // let nextTick = performance.now();
+    // let isPhysicsRunning = true;
 
-    function physicsStep() {
-        if (!isPhysicsRunning) return;
+    // function physicsStep() {
+    //     if (!isPhysicsRunning) return;
 
-        try {
-            // Run exactly one tick
-            physicsWorldSystem.update(1 / TICK_RATE);
-            assetSystem.update(1 / TICK_RATE);
-            networkSystem.update(1 / TICK_RATE);
-            // cannonDebugger.update();
-            projectileSystem.update(1 / TICK_RATE);
-            sceneSystem.update(1 / TICK_RATE);
-            collisionSystem.update(1 / TICK_RATE);
-            flagSystem.update(1 / TICK_RATE);
-            cameraSystem.update(1 / TICK_RATE);
+    //     try {
+    //         inputSystem.beginFrame();
+    //         assetSystem.update(1 / TICK_RATE);
+    //         networkSystem.update(1 / TICK_RATE);
+    //         // cannonDebugger.update();
+    //         projectileSystem.update(1 / TICK_RATE);
+    //         sceneSystem.update(1 / TICK_RATE);
+    //         collisionSystem.update(1 / TICK_RATE);
+    //         flagSystem.update(1 / TICK_RATE);
+    //         cameraSystem.update(1 / TICK_RATE);
+    //         // Run exactly one tick
+    //         physicsWorldSystem.update(1 / TICK_RATE);
 
-            // Schedule next tick
-            nextTick += MS_PER_TICK;
-            const now = performance.now();
-            const drift = nextTick - now;
+    //         // Schedule next tick
+    //         nextTick += MS_PER_TICK;
+    //         const now = performance.now();
+    //         const drift = nextTick - now;
             
-            // If we've fallen behind, schedule next tick ASAP
-            setTimeout(physicsStep, Math.max(0, drift));
-        } catch (error) {
-            console.error('Error in physics step:', error);
-            // Even if there's an error, try to keep the physics loop running
-            setTimeout(physicsStep, MS_PER_TICK);
-        }
-    }
+    //         // If we've fallen behind, schedule next tick ASAP
+    //         setTimeout(physicsStep, Math.max(0, drift));
+    //     } catch (error) {
+    //         console.error('Error in physics step:', error);
+    //         // Even if there's an error, try to keep the physics loop running
+    //         setTimeout(physicsStep, MS_PER_TICK);
+    //     }
+    // }
 
-    // Start the physics loop
-    console.log('Starting physics loop...');
-    physicsStep();
+    // // Start the physics loop
+    // console.log('Starting physics loop...');
+    // physicsStep();
 
-    // Render loop - runs as fast as possible
-    console.log('Setting up render loop...');
-    engine.runRenderLoop(() => {
-        try {
-            networkSystem.networkPredictionSystem.update();
-            sceneSystem.render();
-        } catch (error) {
-            console.error('Error in render loop:', error);
-        }
-    });
+    // // Render loop - runs as fast as possible
+    // console.log('Setting up render loop...');
+    // engine.runRenderLoop(() => {
+    //     try {
+    //         networkSystem.networkPredictionSystem.update();
+    //         sceneSystem.render();
+    //     } catch (error) {
+    //         console.error('Error in render loop:', error);
+    //     }
+    // });
+
+     // Fixed time step settings
+     const FIXED_TIME_STEP = 1/60; // 60fps
+     let accumulator = 0;
+     const update = (deltaTime: number) => {
+         try {
+             // Accumulate time
+             accumulator += deltaTime;
+ 
+             // Update systems in the correct order with fixed time step
+             while (accumulator >= FIXED_TIME_STEP) {
+                inputSystem.beginFrame();
+                assetSystem.update(FIXED_TIME_STEP);
+                networkSystem.update(FIXED_TIME_STEP);
+                if (isDebugMode) {
+                    cannonDebugger.update();
+                }
+                projectileSystem.update(FIXED_TIME_STEP);
+                sceneSystem.update(FIXED_TIME_STEP);
+                collisionSystem.update(FIXED_TIME_STEP);
+                flagSystem.update(FIXED_TIME_STEP);
+                cameraSystem.update(FIXED_TIME_STEP);
+                // Run exactly one tick
+                physicsWorldSystem.update(FIXED_TIME_STEP);
+                 
+                 accumulator -= FIXED_TIME_STEP;
+             }
+         } catch (error) {
+             console.error('Error in game systems update:', error);
+         }
+     }
+     console.log('Setting up render loop...');
+     engine.runRenderLoop(() => {
+         sceneSystem.render();
+     });
+     // Start the physics loop
+     console.log('Starting physics loop...');
+     scene.registerBeforeRender(() => {
+         networkSystem.networkPredictionSystem.update();
+         update(engine.getDeltaTime() / 1000);
+     });
 
     return {
         sceneSystem,
@@ -138,10 +180,18 @@ export function createGameSystems(
         flagSystem,
         assetSystem,
 
+        // Add debug mode controls
+        setDebugMode: (enabled: boolean) => {
+            isDebugMode = enabled;
+            // Enable/disable network system debug mode
+            networkSystem.setDebugMode(enabled);
+            // Cannon debugger is automatically updated in the physics loop when isDebugMode is true
+        },
+        getDebugMode: () => isDebugMode,
+
         cleanup: () => {
             console.log('Cleaning up game systems...');
             try {
-                isPhysicsRunning = false; // Stop the physics loop
                 sceneSystem.dispose();
                 physicsWorldSystem.dispose();
                 physicsSystem.cleanup();
