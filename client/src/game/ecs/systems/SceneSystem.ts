@@ -4,6 +4,7 @@ import { world as ecsWorld } from '@shared/ecs/world';
 import { EntityType } from '@shared/ecs/types';
 import { createEffectSystem } from './EffectSystem';
 import { useGameDebug } from '@/composables/useGameDebug';
+import { Inspector } from '@babylonjs/inspector';
 
 const { log } = useGameDebug();
 
@@ -39,9 +40,13 @@ export function createSceneSystem(engine: Engine) {
     console.log('Camera setup complete');
 
     console.log('Setting up glow layer...');
-    // const glowLayer = setupGlowLayer(scene);
+    // const glowLayer = setupGlowLayer(scene); Glow layer is hungry on the GPU
     const glowLayer = null;
     console.log('Glow layer setup complete');
+
+    // Inspector.Show(scene, {
+    //     embedMode: true
+    // });
 
     console.log('Setting up environment...');
     console.log('Environment setup complete');
@@ -71,12 +76,7 @@ export function createSceneSystem(engine: Engine) {
                     console.log('Entity asset:', entity.asset.meshes);
                     const mainMesh = entity.asset.meshes[0].clone(`${entity.id}_mesh`, null);
                     entity.asset.meshes.forEach((mesh) => {
-                        mesh.setParent(mainMesh);
-                        // Add to shadow generator
                         shadowGenerator.addShadowCaster(mesh);
-                    });
-                    entity.asset.triggerMeshes?.forEach((mesh) => {
-                        mesh.setParent(mainMesh);
                     });
                     // Apply transformations
                     mainMesh.scaling = new Vector3(entity.asset.scale, entity.asset.scale, entity.asset.scale);
@@ -97,7 +97,6 @@ export function createSceneSystem(engine: Engine) {
                     if (entity.transform.rotation) {
                         entity.render.mesh.rotationQuaternion = entity.transform.rotation;
                     }
-
                     // Handle server transform visualization
                     if (entity.serverTransform) {
                         let debugMesh = debugMeshes.get(entity.id);
