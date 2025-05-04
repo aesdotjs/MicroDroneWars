@@ -36,9 +36,9 @@ export function createPhysicsWorldSystem() {
         projectileMaterial,
         vehicleMaterial,
         {
-            friction: 0.0,
-            restitution: 0.0,
-            contactEquationStiffness: 1e9,
+            friction: 0.5,
+            restitution: 0.3,
+            contactEquationStiffness: 1e6,
             contactEquationRelaxation: 4
         }
     );
@@ -349,21 +349,6 @@ export function createPhysicsWorldSystem() {
             body.addShape(shape);
             return body;
         },
-        createProjectileBody(
-            position: Vector3,
-            direction: Vector3,
-            speed: number
-        ): CANNON.Body {
-            const body = new CANNON.Body({
-                mass: 0,
-                material: projectileMaterial,
-                position: new CANNON.Vec3(position.x, position.y, position.z),
-                quaternion: new CANNON.Quaternion(0, 0, 0, 1)
-            });
-            const shape = new CANNON.Sphere(0.1);
-            body.addShape(shape);
-            return body;
-        },
         // Create collider bodies from a collection of meshes
         createColliderBodies(meshes: Mesh[]): CANNON.Body[] {
             const bodies: CANNON.Body[] = [];
@@ -462,6 +447,8 @@ export function createPhysicsWorldSystem() {
                     projectileVelocity.y,
                     projectileVelocity.z
                 ),
+                fixedRotation: true,
+                collisionResponse: weapon.projectileType === ProjectileType.Missile,
                 collisionFilterGroup: CollisionGroups.Projectiles,
                 collisionFilterMask: collisionMasks.Projectile,
                 type: CANNON.Body.DYNAMIC
@@ -469,9 +456,9 @@ export function createPhysicsWorldSystem() {
 
             // Add collision shape based on projectile type
             if (weapon.projectileType === ProjectileType.Bullet) {
-                body.addShape(new CANNON.Sphere(0.05));
+                body.addShape(new CANNON.Box(new CANNON.Vec3(0.05, 0.05, 0.1)));
             } else if (weapon.projectileType === ProjectileType.Missile) {
-                body.addShape(new CANNON.Box(new CANNON.Vec3(0.2, 0.2, 0.5)));
+                body.addShape(new CANNON.Box(new CANNON.Vec3(0.1, 0.05, 0.1)));
             }
 
             // Add body to CANNON world

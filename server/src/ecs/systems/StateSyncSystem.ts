@@ -126,7 +126,9 @@ export function createStateSyncSystem(
         },
 
         removeEntity: (entity: GameEntity) => {
-            state.entities.delete(entity.id);
+            if (state.entities.has(entity.id)) {
+                state.entities.delete(entity.id);
+            }
         },
         
         update: () => {

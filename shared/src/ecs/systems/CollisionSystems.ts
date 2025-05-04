@@ -170,8 +170,9 @@ export function handleProjectileCollision(projectile: GameEntity, other: GameEnt
 
     // Check if other entity has gameState and health
     if (other.gameState && other.gameState.health !== undefined) {
-        const damage = projectile.projectile.damage || 20; // Use projectile damage or default
-        other.gameState.health = Math.max(0, other.gameState.health - damage);
+        // const damage = projectile.projectile.damage || 20; // Use projectile damage or default
+        // other.gameState.health = Math.max(0, other.gameState.health - damage);
+        // console.log('other is dead');
     }
     ecsWorld.remove(projectile);
 }

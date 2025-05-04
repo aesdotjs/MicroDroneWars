@@ -44,9 +44,9 @@ export function createSceneSystem(engine: Engine) {
     const glowLayer = null;
     console.log('Glow layer setup complete');
 
-    // Inspector.Show(scene, {
-    //     embedMode: true
-    // });
+    Inspector.Show(scene, {
+        embedMode: true
+    });
 
     console.log('Setting up environment...');
     console.log('Environment setup complete');

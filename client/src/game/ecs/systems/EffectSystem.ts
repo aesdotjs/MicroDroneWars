@@ -20,10 +20,26 @@ export function createEffectSystem(scene: Scene) {
     bulletMaterial.alpha = 0.8;
 
     const missileMaterial = new StandardMaterial('missileMaterial', scene);
-    missileMaterial.emissiveColor = new Color3(1, 0.3, 0.3);
-    missileMaterial.diffuseColor = new Color3(1, 0.3, 0.3);
+    missileMaterial.emissiveColor = new Color3(0.3, 0.5, 1);
+    missileMaterial.diffuseColor = new Color3(0.3, 0.5, 1);
     missileMaterial.specularColor = new Color3(0, 0, 0);
     missileMaterial.alpha = 0.8;
+
+    const bulletTrailMaterial = new StandardMaterial('bulletTrailMaterial', scene);
+    bulletTrailMaterial.disableLighting = true;
+    bulletTrailMaterial.emissiveColor = new Color3(1, 0.5, 0.2);
+    bulletTrailMaterial.diffuseColor = new Color3(1, 0.5, 0.2);
+    bulletTrailMaterial.specularColor = new Color3(0, 0, 0);
+    bulletTrailMaterial.alpha = 0.8;
+    bulletTrailMaterial.backFaceCulling = false;
+
+    const missileTrailMaterial = new StandardMaterial('missileTrailMaterial', scene);
+    missileTrailMaterial.disableLighting = true;
+    missileTrailMaterial.emissiveColor = new Color3(0.3, 0.5, 1);
+    missileTrailMaterial.diffuseColor = new Color3(0.3, 0.5, 1);
+    missileTrailMaterial.specularColor = new Color3(0, 0, 0);
+    missileTrailMaterial.alpha = 0.8;
+    missileTrailMaterial.backFaceCulling = false;
 
     const trailMaterial = new StandardMaterial('trailMaterial', scene);
     trailMaterial.disableLighting = true;
@@ -139,7 +155,11 @@ export function createEffectSystem(scene: Scene) {
             true
         );
 
-        trail.material = trailMaterial;
+        // Use different trail materials based on projectile type
+        trail.material = projectile.projectile?.projectileType === ProjectileType.Missile 
+            ? missileTrailMaterial 
+            : bulletTrailMaterial;
+            
         activeTrails.set(projectile.id, trail);
     }
 
@@ -229,6 +249,8 @@ export function createEffectSystem(scene: Scene) {
         muzzleFlashMaterial.dispose();
         bulletMaterial.dispose();
         missileMaterial.dispose();
+        bulletTrailMaterial.dispose();
+        missileTrailMaterial.dispose();
         trailMaterial.dispose();
         impactMaterial.dispose();
     }
