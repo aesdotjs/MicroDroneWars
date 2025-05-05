@@ -154,8 +154,11 @@ export function createPhysicsWorldSystem() {
         removeBody: (entityId: string) => {
             const body = entityBodies.get(entityId);
             if (body) {
-                world.removeBody(body);
-                entityBodies.delete(entityId);
+                // wait for the next frame to remove the body
+                setTimeout(() => {
+                    world.removeBody(body);
+                    entityBodies.delete(entityId);
+                }, 0);
             }
         },
         
@@ -366,7 +369,6 @@ export function createPhysicsWorldSystem() {
                         mesh.rotationQuaternion?.w || 1
                     )
                 });
-                console.log(mesh);
                 // Add collision shape based on mesh type
                 if (mesh.getClassName() === "BoxMesh") {
                     const size = mesh.getBoundingInfo().boundingBox.extendSize;
@@ -463,6 +465,7 @@ export function createPhysicsWorldSystem() {
 
             // Add body to CANNON world
             world.addBody(body);
+            entityBodies.set(projectileId, body);
 
             // Create and return projectile entity
             return {

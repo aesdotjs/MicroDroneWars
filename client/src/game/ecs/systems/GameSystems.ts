@@ -145,7 +145,6 @@ export function createGameSystems(
                     cannonDebugger.update();
                 }
                 projectileSystem.update(FIXED_TIME_STEP);
-                sceneSystem.update(FIXED_TIME_STEP);
                 collisionSystem.update(FIXED_TIME_STEP);
                 flagSystem.update(FIXED_TIME_STEP);
                 cameraSystem.update(FIXED_TIME_STEP);
@@ -165,8 +164,10 @@ export function createGameSystems(
      // Start the physics loop
      console.log('Starting physics loop...');
      scene.registerBeforeRender(() => {
-         networkSystem.networkPredictionSystem.update();
-         update(engine.getDeltaTime() / 1000);
+        const dt = engine.getDeltaTime() / 1000;
+        networkSystem.networkPredictionSystem.update(dt);
+        sceneSystem.update(dt);
+        update(dt);
      });
 
     return {

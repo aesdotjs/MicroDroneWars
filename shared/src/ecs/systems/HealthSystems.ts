@@ -18,10 +18,6 @@ export function createHealthSystem() {
                         // For now, just remove the entity
                         ecsWorld.remove(entity);
                     }
-                    // Handle projectile destruction
-                    else if (entity.projectile) {
-                        ecsWorld.remove(entity);
-                    }
                 }
             }
         }

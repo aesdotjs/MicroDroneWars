@@ -164,7 +164,7 @@ export function createEffectSystem(scene: Scene) {
     }
 
     // Create impact effect
-    function createImpactEffect(position: Vector3, type: 'bullet' | 'missile'): void {
+    function createImpactEffect(position: Vector3, type: ProjectileType): void {
         const impactId = `impact_${Date.now()}`;
         const impact = new ParticleSystem('impact', 100, scene);
         impact.emitter = position;
@@ -261,7 +261,7 @@ export function createEffectSystem(scene: Scene) {
         createImpactEffect,
         removeProjectileMesh,
         cleanup,
-        update: (dt: number) => {
+        update: () => {
             // // Update projectile positions
             // const projectiles = ecsWorld.with("projectile", "transform");
             // for (const projectile of projectiles) {

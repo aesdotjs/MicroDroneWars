@@ -66,7 +66,7 @@ export function createSceneSystem(engine: Engine) {
         getShadowGenerator: () => shadowGenerator,
         getGlowLayer: () => glowLayer,
         update: (dt: number) => {
-            effectSystem.update(dt);
+            effectSystem.update();
             // Update entity positions and rotations
             for (const entity of renderables) {
                 if (!entity.transform) continue;
@@ -89,10 +89,14 @@ export function createSceneSystem(engine: Engine) {
                 if (entity.type === EntityType.Projectile && !entity.render?.mesh) {
                     entity.render = { mesh: effectSystem.createProjectileMesh(entity) };
                     effectSystem.createMuzzleFlash(entity);
+                    console.log('created projectile mesh', entity.render.mesh.name);
                 }
 
                 // Update position and rotation for all entities with meshes
                 if (entity.render?.mesh) {
+                    if (entity.type === EntityType.Projectile) {
+                        console.log('mesh position z', entity.render.mesh.position.z, entity.transform.position.z, entity.render.mesh.name);
+                    }
                     entity.render.mesh.position.copyFrom(entity.transform.position);
                     if (entity.transform.rotation) {
                         entity.render.mesh.rotationQuaternion = entity.transform.rotation;
