@@ -189,7 +189,6 @@ export function createAssetSystem(
      */
     const loadAsset = async (entity: GameEntity) => {
         if (!entity.asset || entity.asset.isLoaded) return;
-    
         const { assetPath, assetType, scale } = entity.asset;
         if (!assetPath) return;
         try {

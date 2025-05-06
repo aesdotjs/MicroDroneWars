@@ -8,8 +8,8 @@ import { createPhysicsWorldSystem } from '@shared/ecs/systems';
 import { createNetworkPredictionSystem } from './NetworkPredictionSystem';
 import { createClientInputSystem } from './ClientInputSystem';
 import { createPhysicsSystem } from '@shared/ecs/systems/PhysicsSystem';
-import { useGameDebug } from '../../../composables/useGameDebug';
-import { createWeaponSystem } from '@shared/ecs/systems/WeaponSystems';
+import { useGameDebug } from '@/composables/useGameDebug';
+import { createWeaponSystem } from '@shared/ecs/systems/WeaponSystem';
 
 /**
 * Creates a system that handles network state updates and converts them to ECS entities
@@ -181,23 +181,23 @@ export function createNetworkSystem(
         } else { // Entity already exists in ECS world (most likely a projectile)
             const gameEntity = ecsWorld.entities.find(e => e.id === id);
             if (gameEntity) {
-                if (newEntity.transform) {
-                    const transformBuffer: TransformBuffer = {
-                        transform: {
-                            position: newEntity.transform!.position,
-                            rotation: newEntity.transform!.rotation,
-                            velocity: newEntity.transform!.velocity,
-                            angularVelocity: newEntity.transform!.angularVelocity
-                        },
-                        tick: {
-                            tick: newEntity.tick!.tick,
-                            timestamp: newEntity.tick!.timestamp,
-                            lastProcessedInputTimestamp: newEntity.tick!.lastProcessedInputTimestamp,
-                            lastProcessedInputTick: newEntity.tick!.lastProcessedInputTick
-                        }
-                    };
-                    networkPredictionSystem.addEntityState(id, transformBuffer);  
-                }
+                // if (gameEntity.transform) {
+                //     const transformBuffer: TransformBuffer = {
+                //         transform: {
+                //             position: gameEntity.transform!.position,
+                //             rotation: gameEntity.transform!.rotation,
+                //             velocity: gameEntity.transform!.velocity,
+                //             angularVelocity: gameEntity.transform!.angularVelocity
+                //         },
+                //         tick: {
+                //             tick: gameEntity.tick!.tick,
+                //             timestamp: gameEntity.tick!.timestamp,
+                //             lastProcessedInputTimestamp: gameEntity.tick!.lastProcessedInputTimestamp,
+                //             lastProcessedInputTick: gameEntity.tick!.lastProcessedInputTick
+                //         }
+                //     };
+                //     networkPredictionSystem.addEntityState(id, transformBuffer);
+                // }
                 if (newEntity.vehicle) {
                     gameEntity.vehicle!.weapons = newEntity.vehicle!.weapons;
                     gameEntity.vehicle!.activeWeaponIndex = newEntity.vehicle!.activeWeaponIndex;
@@ -230,6 +230,10 @@ export function createNetworkSystem(
                     gameEntity.projectile!.distanceTraveled = newEntity.projectile!.distanceTraveled;
                     gameEntity.projectile!.sourceId = newEntity.projectile!.sourceId;
                     gameEntity.projectile!.speed = newEntity.projectile!.speed;
+                }
+                if (gameEntity.physics?.body) {
+                    physicsWorldSystem.removeBody(gameEntity.id);
+                    delete gameEntity.physics;
                 }
                 ecsWorld.reindex(gameEntity);
             }

@@ -157,7 +157,7 @@ export function createPhysicsWorldSystem() {
                 // wait for the next frame to remove the body
                 setTimeout(() => {
                     world.removeBody(body);
-                    entityBodies.delete(entityId);
+                    console.log('removing body for', entityId, world.bodies.length);
                 }, 0);
             }
         },
@@ -313,31 +313,6 @@ export function createPhysicsWorldSystem() {
                 ...physicsComponent
             };
             this.addBody(entity);
-        },        
-        createVehicleBody(
-            vehicleType: VehicleType,
-            position: Vector3,
-            rotation: Quaternion,
-        ): CANNON.Body {
-            const body = new CANNON.Body({
-                mass: vehicleType === VehicleType.Drone ? DroneSettings.mass : PlaneSettings.mass,
-                material: vehicleMaterial,
-                collisionFilterGroup: vehicleType === VehicleType.Drone ? CollisionGroups.Drones : CollisionGroups.Planes,
-                collisionFilterMask: CollisionGroups.Environment | CollisionGroups.Drones | CollisionGroups.Planes,
-                position: new CANNON.Vec3(position.x, position.y, position.z),
-                quaternion: new CANNON.Quaternion(rotation.x, rotation.y, rotation.z, rotation.w)
-            });
-        
-            // Add collision shape based on vehicle type
-            if (vehicleType === VehicleType.Drone) {
-                const shape = new CANNON.Box(new CANNON.Vec3(0.5, 0.25, 0.5));
-                body.addShape(shape);
-            } else {
-                const shape = new CANNON.Box(new CANNON.Vec3(1.5, 0.3, 0.5));
-                body.addShape(shape);
-            }
-        
-            return body;
         },
         createFlagBody(position: Vector3): CANNON.Body {
             const body = new CANNON.Body({
@@ -462,7 +437,7 @@ export function createPhysicsWorldSystem() {
             } else if (weapon.projectileType === ProjectileType.Missile) {
                 body.addShape(new CANNON.Box(new CANNON.Vec3(0.1, 0.05, 0.1)));
             }
-
+            
             // Add body to CANNON world
             world.addBody(body);
             entityBodies.set(projectileId, body);

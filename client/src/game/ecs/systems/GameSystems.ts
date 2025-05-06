@@ -10,9 +10,9 @@ import { createFlagSystem } from '@shared/ecs/systems/FlagSystems';
 import { createSceneSystem } from './SceneSystem';
 import { createPhysicsSystem } from '@shared/ecs/systems/PhysicsSystem';
 import { createAssetSystem } from '@shared/ecs/systems/AssetSystem';
-import { createWeaponSystem } from '@shared/ecs/systems/WeaponSystems';
+import { createWeaponSystem } from '@shared/ecs/systems/WeaponSystem';
 import { world as ecsWorld } from '@shared/ecs/world';
-import { createProjectileSystem } from '@shared/ecs/systems/WeaponSystems';
+import { createProjectileSystem } from './ProjectileSystem';
 import CannonDebugger from "cannon-es-debugger-babylonjs";
 
 export function createGameSystems(
@@ -45,11 +45,6 @@ export function createGameSystems(
     const weaponSystem = createWeaponSystem(physicsWorldSystem, false);
     console.log('Weapon system initialized');
 
-    // Initialize projectile system
-    console.log('Initializing projectile system...');
-    const projectileSystem = createProjectileSystem(physicsWorldSystem);
-    console.log('Projectile system initialized');
-
     // Initialize physics system
     console.log('Initializing physics system...');
     const physicsSystem = createPhysicsSystem(physicsWorldSystem);
@@ -60,6 +55,10 @@ export function createGameSystems(
     const cameraSystem = createCameraSystem(scene, camera);
     const inputSystem = createClientInputSystem(canvas);
     const networkSystem = createNetworkSystem(room, physicsWorldSystem, physicsSystem, inputSystem, weaponSystem);
+    // Initialize projectile system
+    console.log('Initializing projectile system...');
+    const projectileSystem = createProjectileSystem(physicsWorldSystem, networkSystem.networkPredictionSystem);
+    console.log('Projectile system initialized');
     const collisionSystem = createCollisionSystem(physicsWorldSystem.getWorld());
     const flagSystem = createFlagSystem();
     const assetSystem = createAssetSystem(engine, scene, physicsWorldSystem, false);

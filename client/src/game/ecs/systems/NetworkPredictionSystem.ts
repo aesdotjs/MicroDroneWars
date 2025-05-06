@@ -7,8 +7,7 @@ import { createPhysicsWorldSystem } from '@shared/ecs/systems/PhysicsWorldSystem
 import { Room } from 'colyseus.js';
 import { State } from '@shared/schemas';
 import { useGameDebug } from '@/composables/useGameDebug';
-import { createWeaponSystem } from '@shared/ecs/systems/WeaponSystems';
-import { cp } from 'fs';
+import { createWeaponSystem } from '@shared/ecs/systems/WeaponSystem';
 
 const { log } = useGameDebug();
 
@@ -311,12 +310,10 @@ export function createNetworkPredictionSystem(
             // Update local player immediately
             const entity = ecsWorld.with("physics", "vehicle", "transform", "owner").where(({owner}) => owner?.isLocal).entities[0];
             let projectileId: number | undefined;
-            // let isOnCooldown = false;
             if (entity) {
                 physicsSystem.update(dt, entity, finalInput);
                 // Always update weapon system if entity has weapons
                 if (entity.vehicle?.weapons) {
-                    // isOnCooldown = weaponSystem.isOnCooldown(entity);
                     projectileId = weaponSystem.update(dt, entity, finalInput, currentTick);
                 }
             }
@@ -325,9 +322,6 @@ export function createNetworkPredictionSystem(
                 if (projectileId) {
                     finalInput.projectileId = projectileId;
                 }
-                // if (isOnCooldown) {
-                //     finalInput.fire = false;
-                // }
                 log('Sending command', `${finalInput.mouseDelta.x} ${finalInput.mouseDelta.y} ${finalInput.fire} ${finalInput.projectileId}`);
                 room.send("command", finalInput);
                 pendingInputs.push(finalInput);
@@ -350,7 +344,7 @@ export function createNetworkPredictionSystem(
         /**
          * Updates the system
          */
-        update: () => {
+        update: (dt: number) => {
             // Update interpolation delay based on network quality
             updateInterpolationDelay();
 

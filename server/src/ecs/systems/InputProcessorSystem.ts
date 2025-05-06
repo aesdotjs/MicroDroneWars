@@ -3,7 +3,7 @@ import { GameEntity, InputComponent } from '@shared/ecs/types';
 import { createIdleInput } from '@shared/ecs/utils/InputHelpers';
 import { createPhysicsSystem } from '@shared/ecs/systems/PhysicsSystem';
 // import { createPhysicsWorldSystem } from '@shared/ecs/systems/PhysicsWorldSystem';
-import { createWeaponSystem } from '@shared/ecs/systems/WeaponSystems';
+import { createWeaponSystem } from '@shared/ecs/systems/WeaponSystem';
 /**
  * Creates a system that processes inputs and applies them to vehicle and weapon systems
  */

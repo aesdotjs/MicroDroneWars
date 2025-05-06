@@ -1,4 +1,4 @@
-export * from './WeaponSystems';
+export * from './WeaponSystem';
 export * from './VehicleSystems'; 
 export * from './EntitySystem';
 export * from './PhysicsWorldSystem';

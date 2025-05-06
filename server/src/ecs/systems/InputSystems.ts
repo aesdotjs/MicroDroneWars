@@ -4,7 +4,7 @@ import { createInputProcessorSystem } from './InputProcessorSystem';
 import { createPhysicsSystem } from '@shared/ecs/systems/PhysicsSystem';
 import { createPhysicsWorldSystem } from '@shared/ecs/systems/PhysicsWorldSystem';
 const MAX_INPUT_BUFFER_SIZE = 60; // 1 second worth of inputs at 60fps
-import { createWeaponSystem } from '@shared/ecs/systems/WeaponSystems';
+import { createWeaponSystem } from '@shared/ecs/systems/WeaponSystem';
 
 export function createInputSystem(
     physicsSystem: ReturnType<typeof createPhysicsSystem>,
