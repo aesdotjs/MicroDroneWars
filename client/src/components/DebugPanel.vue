@@ -32,7 +32,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onUnmounted } from 'vue';
 import { useGameDebug } from '@/composables/useGameDebug';
 // Define props and emit for the expanded
 const props = defineProps<{
@@ -42,7 +42,7 @@ const emit = defineEmits<{
   (e: 'update:expanded', value: boolean): void
 }>();
 
-const { debugValues } = useGameDebug();
+const { debugValues, unsubscribe, clearAll } = useGameDebug();
 const isExpanded = ref(props.expanded);
 
 const formatTimestamp = (timestamp: number) => {
@@ -66,6 +66,11 @@ const onToggleDebugPanel = () => {
   isExpanded.value = !isExpanded.value;
   emit('update:expanded', isExpanded.value);
 };
+
+onUnmounted(() => {
+  unsubscribe();
+  clearAll();
+});
 </script>
 
 <style scoped>

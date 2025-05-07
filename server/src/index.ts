@@ -109,7 +109,7 @@ gameServer.define('microdrone_room', MicroDroneRoom, {
 // Make sure to never call the `simulateLatency()` method in production.
 if (process.env.NODE_ENV !== "production") {
   // simulate 200ms latency between server and client.
-  gameServer.simulateLatency(200);
+  // gameServer.simulateLatency(200);
 }
 
 /**

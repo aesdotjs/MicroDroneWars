@@ -1,4 +1,4 @@
-import { ref, onUnmounted } from 'vue';
+import { ref } from 'vue';
 
 interface DebugValue {
   value: any;
@@ -113,12 +113,6 @@ export function useGameDebug() {
     debugValues.value = new Map(values);
   });
 
-  // Cleanup subscription on unmount
-  onUnmounted(() => {
-    unsubscribe();
-    debugInstance.clearAll();
-  });
-
   return {
     debugValues,
     log: (label: string, value: any, type?: DebugValue['type']) => 
@@ -127,6 +121,7 @@ export function useGameDebug() {
       debugInstance.logPerformance(metric, value),
     clearVehicleLogs: (vehicleId: string) =>
       debugInstance.clearVehicleLogs(vehicleId),
-    clearAll: () => debugInstance.clearAll()
+    clearAll: () => debugInstance.clearAll(),
+    unsubscribe: () => unsubscribe()
   };
 } 
