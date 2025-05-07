@@ -16,7 +16,7 @@ import { createGameModeSystem, GameMode, GameModeConfig } from "../ecs/systems/G
 import { createAssetSystem } from "@shared/ecs/systems/AssetSystem";
 import { createEntitySystem } from "@shared/ecs/systems/EntitySystem";
 import { createWeaponSystem } from "@shared/ecs/systems/WeaponSystem";
-import { createProjectileSystem } from "../ecs/systems/ProjectileSystem";
+import { createProjectileSystem } from "@shared/ecs/systems/ProjectileSystem";
 // import * as xhr2 from "xhr2";
 import '@babylonjs/loaders/glTF/2.0/Extensions/ExtrasAsMetadata';
 import '@babylonjs/loaders/glTF/2.0/Extensions/KHR_lights_punctual';
@@ -143,7 +143,7 @@ export class MicroDroneRoom extends Room<State> {
             // Run ECS systems in the correct order
             this.assetSystem.update(1 / this.TICK_RATE);
             this.physicsSystem.update(1 / this.TICK_RATE);
-            this.weaponSystem.update(1 / this.TICK_RATE, this.physicsWorldSystem.getCurrentTick());
+            this.weaponSystem.update(1 / this.TICK_RATE);
             this.inputSystem.update(1 / this.TICK_RATE);
             this.collisionSystem.update(1 / this.TICK_RATE);
             this.projectileSystem.update(1 / this.TICK_RATE);

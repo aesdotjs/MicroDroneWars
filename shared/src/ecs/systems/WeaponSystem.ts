@@ -16,7 +16,8 @@ export function createWeaponSystem(
     const armedEntities = ecsWorld.with("vehicle", "transform");
     const bulletCounters = new Map<string, number>();
     return {
-        update: (dt: number, currentTick: number) => {
+        update: (dt: number) => {
+            const currentTick = physicsWorldSystem.getCurrentTick();
             for (const entity of armedEntities) {
                 const vehicle = entity.vehicle!;
                 if (!vehicle.weapons) continue;
@@ -42,9 +43,10 @@ export function createWeaponSystem(
                 });
             }
         },
-        applyInput: (dt: number, entity: GameEntity, input: InputComponent, currentTick: number) => {
+        applyInput: (dt: number, entity: GameEntity, input: InputComponent) => {
             const vehicle = entity.vehicle!;
             const activeWeapon = vehicle.weapons[vehicle.activeWeaponIndex];
+            const currentTick = physicsWorldSystem.getCurrentTick();
 
             // Handle weapon switching
             if (input.nextWeapon) {
@@ -56,7 +58,6 @@ export function createWeaponSystem(
             if (input.weapon1) vehicle.activeWeaponIndex = 0;
             if (input.weapon2) vehicle.activeWeaponIndex = 1;
             if (input.weapon3) vehicle.activeWeaponIndex = 2;
-
             // Handle firing
             if (input.fire && (!isServer || input.projectileId) && activeWeapon && !activeWeapon.isOnCooldown) {
                 // Calculate current fire rate and cooldown
@@ -64,7 +65,6 @@ export function createWeaponSystem(
                 const lastFireTick = activeWeapon!.lastFireTick ?? currentTick;
                 const currentFireRate = activeWeapon.maxFireRate - (activeWeapon.maxFireRate - activeWeapon.minFireRate) * heatAccumulator;
                 const currentCooldownTicks = Math.ceil(TICKS_PER_SECOND / currentFireRate);
-
                 if (currentTick - lastFireTick >= currentCooldownTicks) {
                     let projectileId: number;
                     if (isServer && input.projectileId) {

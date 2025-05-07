@@ -12,7 +12,7 @@ import { createPhysicsSystem } from '@shared/ecs/systems/PhysicsSystem';
 import { createAssetSystem } from '@shared/ecs/systems/AssetSystem';
 import { createWeaponSystem } from '@shared/ecs/systems/WeaponSystem';
 import { world as ecsWorld } from '@shared/ecs/world';
-import { createProjectileSystem } from './ProjectileSystem';
+import { createProjectileSystem } from "@shared/ecs/systems/ProjectileSystem";
 import CannonDebugger from "cannon-es-debugger-babylonjs";
 
 export function createGameSystems(
@@ -57,7 +57,7 @@ export function createGameSystems(
     const networkSystem = createNetworkSystem(room, physicsWorldSystem, physicsSystem, inputSystem, weaponSystem);
     // Initialize projectile system
     console.log('Initializing projectile system...');
-    const projectileSystem = createProjectileSystem(physicsWorldSystem, networkSystem.networkPredictionSystem);
+    const projectileSystem = createProjectileSystem(physicsWorldSystem);
     console.log('Projectile system initialized');
     const collisionSystem = createCollisionSystem(physicsWorldSystem.getWorld());
     const flagSystem = createFlagSystem();
@@ -140,7 +140,7 @@ export function createGameSystems(
                 inputSystem.beginFrame();
                 assetSystem.update(FIXED_TIME_STEP);
                 physicsSystem.update(FIXED_TIME_STEP);
-                weaponSystem.update(FIXED_TIME_STEP, physicsWorldSystem.getCurrentTick());
+                weaponSystem.update(FIXED_TIME_STEP);
                 networkSystem.update(FIXED_TIME_STEP);
                 if (isDebugMode) {
                     cannonDebugger.update();

@@ -295,7 +295,7 @@ export function createNetworkSystem(
             gameEntity.tick!.timestamp = entity.tick.timestamp;
             gameEntity.tick!.lastProcessedInputTimestamp = entity.tick.lastProcessedInputTimestamp;
             gameEntity.tick!.lastProcessedInputTick = entity.tick.lastProcessedInputTick;
-            ecsWorld.reindex(gameEntity);
+            // ecsWorld.reindex(gameEntity);
         });
 
         // Owner changes
@@ -365,9 +365,9 @@ export function createNetworkSystem(
         }
     });
 
-    // $(room.state).listen("serverTick", (serverTick: number) => {
-    //     physicsWorldSystem.setCurrentTick(serverTick);
-    // });
+    $(room.state).listen("serverTick", (serverTick: number) => {
+        physicsWorldSystem.setCurrentTick(serverTick);
+    });
 
     console.log('Network system created');
     

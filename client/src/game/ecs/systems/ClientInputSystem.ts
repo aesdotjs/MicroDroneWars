@@ -10,6 +10,7 @@ export function createClientInputSystem(canvas: HTMLCanvasElement) {
     const mouseDelta = { x: 0, y: 0 };
     const frameMouseDelta = { x: 0, y: 0 };
     let hasFocus = false, isPointerLocked = false;
+    let lastInputTick = 0;
     
     // 1) build a KeyBinding for every action
     const bindings: Record<keyof InputComponent, KeyBinding> = {
@@ -87,6 +88,7 @@ export function createClientInputSystem(canvas: HTMLCanvasElement) {
       // frame‐start: snapshot everything once
     function beginFrame() {
         sampleBindings();
+        lastInputTick++;
         // grab & zero out the raw mouseDelta
         frameMouseDelta.x = mouseDelta.x;
         frameMouseDelta.y = mouseDelta.y;
@@ -225,7 +227,7 @@ export function createClientInputSystem(canvas: HTMLCanvasElement) {
                 mouseDelta: { x: frameMouseDelta.x, y: frameMouseDelta.y },
                 
                 // filled in downstream:
-                tick:      0,
+                tick:      lastInputTick,
                 timestamp: Date.now(),
                 projectileId: 0
             } as InputComponent;

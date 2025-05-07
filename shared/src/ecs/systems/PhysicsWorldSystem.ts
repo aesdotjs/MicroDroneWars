@@ -157,7 +157,7 @@ export function createPhysicsWorldSystem() {
                 // wait for the next frame to remove the body
                 setTimeout(() => {
                     world.removeBody(body);
-                    console.log('removing body for', entityId, world.bodies.length);
+                    // console.log('removing body for', entityId, world.bodies.length);
                 }, 0);
             }
         },

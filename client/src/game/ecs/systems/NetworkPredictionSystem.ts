@@ -26,8 +26,6 @@ export function createNetworkPredictionSystem(
         interpolationFactor: 0.2
     };
 
-    const localPlayerEntityId = ecsWorld.with("owner").where(({owner}) => owner?.isLocal).entities[0]?.id;
-
     // State buffers for each entity
     const TransformBuffers = new Map<string, TransformBuffer[]>();
     let pendingInputs: InputComponent[] = [];
@@ -79,9 +77,9 @@ export function createNetworkPredictionSystem(
     function interpolateRemotes() {
         const now = Date.now();
         const targetTime = now - currentInterpolationDelay;
-        
+        const playerEntity = ecsWorld.with("physics", "vehicle", "transform", "owner").where(({owner}) => owner?.isLocal).entities[0];
         TransformBuffers.forEach((buffer, id) => {
-            if (buffer.length < 2 || id === localPlayerEntityId) return;
+            if (buffer.length < 2 || id === playerEntity?.id) return;
             const entity = ecsWorld.entities.find(e => e.id === id);
             if (!entity || !entity.transform) return;
 
@@ -260,29 +258,17 @@ export function createNetworkPredictionSystem(
                         state.transform.angularVelocity.z
                     );
                 }
-
                 // Replay unprocessed inputs
                 const lastProcessedInputTick = state.tick.lastProcessedInputTick ?? state.tick.tick;
                 const unprocessedInputs = pendingInputs.filter((input: InputComponent) => input.tick > lastProcessedInputTick);
-                
+
                 log('Replaying Inputs', {
                     count: unprocessedInputs.length,
                     from: lastProcessedInputTick,
                     to: unprocessedInputs.length > 0 ? Math.max(...unprocessedInputs.map(i => i.tick)) : lastProcessedInputTick
                 });
-                // const subDt = 1 / 60 / unprocessedInputs.length;
                 for (const input of unprocessedInputs) {
-                    if (input.yawLeft) {
-                        console.log({
-                            input,
-                            unprocessedInputs: unprocessedInputs.map(i => i.tick),
-                            pendingInputs: pendingInputs.map(i => i.tick),
-                            lastProcessedInputTick,
-                            currentTick: state.tick.tick
-                        })
-                    }
                     physicsSystem.applyInput(1/60, entity, input);
-                    // weaponSystem.update(1/60, entity, input, input.tick);
                 }
                 pendingInputs = unprocessedInputs;
             } else {
@@ -300,28 +286,28 @@ export function createNetworkPredictionSystem(
          */
         addInput: (dt: number, input: InputComponent, isIdle: boolean, currentTick: number) => {
             // const currentTick = physicsWorldSystem.getCurrentTick();
-
+            const playerEntity = ecsWorld.with("physics", "vehicle", "transform", "owner").where(({owner}) => owner?.isLocal).entities[0];
             // Create final input with timestamp and tick
             const finalInput: InputComponent = {
                 ...input,
-                timestamp: Date.now(),
-                tick: currentTick
+                // timestamp: Date.now(),
+                // tick: currentTick
             };
 
             log('Input Added', {
                 tick: currentTick,
+                inputTick: input.tick,
                 isIdle,
                 pendingCount: pendingInputs.length
             });
 
             // Update local player immediately
-            const entity = ecsWorld.with("physics", "vehicle", "transform", "owner").where(({owner}) => owner?.isLocal).entities[0];
             let projectileId: number | undefined;
-            if (entity) {
-                physicsSystem.applyInput(dt, entity, finalInput);
+            if (playerEntity) {
+                physicsSystem.applyInput(dt, playerEntity, finalInput);
                 // Always update weapon system if entity has weapons
-                if (entity.vehicle?.weapons) {
-                    projectileId = weaponSystem.applyInput(dt, entity, finalInput, currentTick);
+                if (playerEntity.vehicle?.weapons) {
+                    projectileId = weaponSystem.applyInput(dt, playerEntity, finalInput);
                 }
             }
             // Only send and store non-idle inputs
@@ -331,9 +317,6 @@ export function createNetworkPredictionSystem(
                 }
                 room.send("command", finalInput);
                 pendingInputs.push(finalInput);
-            } else if (currentTick - lastHeartbeatTick >= HEARTBEAT_INTERVAL) {
-                room.send("command", finalInput);
-                lastHeartbeatTick = currentTick;
             }
 
             // Keep buffer size reasonable
