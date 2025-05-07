@@ -139,6 +139,8 @@ export function createGameSystems(
              while (accumulator >= FIXED_TIME_STEP) {
                 inputSystem.beginFrame();
                 assetSystem.update(FIXED_TIME_STEP);
+                physicsSystem.update(FIXED_TIME_STEP);
+                weaponSystem.update(FIXED_TIME_STEP, physicsWorldSystem.getCurrentTick());
                 networkSystem.update(FIXED_TIME_STEP);
                 if (isDebugMode) {
                     cannonDebugger.update();

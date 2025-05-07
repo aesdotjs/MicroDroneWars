@@ -142,6 +142,8 @@ export class MicroDroneRoom extends Room<State> {
 
             // Run ECS systems in the correct order
             this.assetSystem.update(1 / this.TICK_RATE);
+            this.physicsSystem.update(1 / this.TICK_RATE);
+            this.weaponSystem.update(1 / this.TICK_RATE, this.physicsWorldSystem.getCurrentTick());
             this.inputSystem.update(1 / this.TICK_RATE);
             this.collisionSystem.update(1 / this.TICK_RATE);
             this.projectileSystem.update(1 / this.TICK_RATE);

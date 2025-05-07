@@ -268,7 +268,9 @@ export function createNetworkSystem(
                     angularVelocity: new Vector3(entity.transform.angularVelocityX, entity.transform.angularVelocityY, entity.transform.angularVelocityZ)
                 };
             }
-
+            if (entity?.tick?.tick !== physicsWorldSystem.getCurrentTick()) {
+                physicsWorldSystem.setCurrentTick(entity.tick.tick);
+            }
             networkPredictionSystem.addEntityState(id, transformBuffer);    
             ecsWorld.reindex(gameEntity);
         });
@@ -363,9 +365,9 @@ export function createNetworkSystem(
         }
     });
 
-    $(room.state).listen("serverTick", (serverTick: number) => {
-        physicsWorldSystem.setCurrentTick(serverTick);
-    });
+    // $(room.state).listen("serverTick", (serverTick: number) => {
+    //     physicsWorldSystem.setCurrentTick(serverTick);
+    // });
 
     console.log('Network system created');
     
@@ -382,7 +384,7 @@ export function createNetworkSystem(
         update: (dt: number) => {
             const isIdle = inputSystem.isIdle();
             const input = inputSystem.getInput();
-            networkPredictionSystem.addInput(dt, input, isIdle, room.state.serverTick);
+            networkPredictionSystem.addInput(dt, input, isIdle, physicsWorldSystem.getCurrentTick());
         },
         cleanup: () => {
             networkPredictionSystem.cleanup();

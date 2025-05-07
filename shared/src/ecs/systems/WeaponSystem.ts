@@ -16,29 +16,35 @@ export function createWeaponSystem(
     const armedEntities = ecsWorld.with("vehicle", "transform");
     const bulletCounters = new Map<string, number>();
     return {
-        update: (dt: number, entity: GameEntity, input: InputComponent, currentTick: number) => {
+        update: (dt: number, currentTick: number) => {
+            for (const entity of armedEntities) {
+                const vehicle = entity.vehicle!;
+                if (!vehicle.weapons) continue;
+
+                // Update weapon cooldowns and heat
+                vehicle.weapons.forEach(weapon => {
+                    // Calculate current fire rate based on heat
+                    const heatAccumulator = weapon.heatAccumulator ?? 0;
+                    const lastFireTick = weapon.lastFireTick ?? currentTick;
+                    const heatFactor = 1 - heatAccumulator;
+                    const currentFireRate = weapon.maxFireRate - (weapon.maxFireRate - weapon.minFireRate) * heatAccumulator;
+                    const currentCooldownTicks = Math.ceil(TICKS_PER_SECOND / currentFireRate);
+
+                    // Update cooldown state
+                    if (weapon.isOnCooldown && currentTick - lastFireTick >= currentCooldownTicks) {
+                        weapon.isOnCooldown = false;
+                    }
+
+                    // Update heat accumulator
+                    if (heatAccumulator > 0) {
+                        weapon.heatAccumulator = Math.max(0, heatAccumulator - weapon.heatDissipationRate * dt);
+                    }
+                });
+            }
+        },
+        applyInput: (dt: number, entity: GameEntity, input: InputComponent, currentTick: number) => {
             const vehicle = entity.vehicle!;
             const activeWeapon = vehicle.weapons[vehicle.activeWeaponIndex];
-
-            // Update weapon cooldowns and heat
-            vehicle.weapons.forEach(weapon => {
-                // Calculate current fire rate based on heat
-                const heatAccumulator = weapon.heatAccumulator ?? 0;
-                const lastFireTick = weapon.lastFireTick ?? currentTick;
-                const heatFactor = 1 - heatAccumulator;
-                const currentFireRate = weapon.maxFireRate - (weapon.maxFireRate - weapon.minFireRate) * heatAccumulator;
-                const currentCooldownTicks = Math.ceil(TICKS_PER_SECOND / currentFireRate);
-
-                // Update cooldown state
-                if (weapon.isOnCooldown && currentTick - lastFireTick >= currentCooldownTicks) {
-                    weapon.isOnCooldown = false;
-                }
-
-                // Update heat accumulator
-                if (heatAccumulator > 0) {
-                    weapon.heatAccumulator = Math.max(0, heatAccumulator - weapon.heatDissipationRate * dt);
-                }
-            });
 
             // Handle weapon switching
             if (input.nextWeapon) {
@@ -50,6 +56,7 @@ export function createWeaponSystem(
             if (input.weapon1) vehicle.activeWeaponIndex = 0;
             if (input.weapon2) vehicle.activeWeaponIndex = 1;
             if (input.weapon3) vehicle.activeWeaponIndex = 2;
+
             // Handle firing
             if (input.fire && (!isServer || input.projectileId) && activeWeapon && !activeWeapon.isOnCooldown) {
                 // Calculate current fire rate and cooldown

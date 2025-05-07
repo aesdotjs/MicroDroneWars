@@ -1,6 +1,5 @@
 import { world as ecsWorld } from '@shared/ecs/world';
 import { GameEntity, InputComponent } from '@shared/ecs/types';
-import { createIdleInput } from '@shared/ecs/utils/InputHelpers';
 import { createPhysicsSystem } from '@shared/ecs/systems/PhysicsSystem';
 // import { createPhysicsWorldSystem } from '@shared/ecs/systems/PhysicsWorldSystem';
 import { createWeaponSystem } from '@shared/ecs/systems/WeaponSystem';
@@ -21,16 +20,16 @@ export function createInputProcessorSystem(
         processInputs: (entity: GameEntity, inputBuffer: InputComponent[], dt: number) => {
             // Get last processed tick
             let lastProcessedTick = lastProcessedInputTicks.get(entity.id) ?? 0;
-            if (!inputBuffer || inputBuffer.length === 0) {
-                // Apply idle input if no inputs available
-                // lastProcessedInputTicks.set(entity.id, lastProcessedTick + 1);
-                const idleInput = createIdleInput(lastProcessedTick + 1);
-                physicsSystem.update(dt, entity, idleInput);
-                if (entity.vehicle?.weapons) {
-                    weaponSystem.update(dt, entity, idleInput, lastProcessedTick + 1);
-                }
-                return [];
-            }
+            // if (!inputBuffer || inputBuffer.length === 0) {
+            //     // Apply idle input if no inputs available
+            //     const idleInput = createIdleInput(lastProcessedTick + 1);
+            //     physicsSystem.applyInput(dt, entity, idleInput);
+            //     if (entity.vehicle?.weapons) {
+            //         weaponSystem.applyInput(dt, entity, idleInput, lastProcessedTick + 1);
+            //     }
+            //     lastProcessedInputTicks.set(entity.id, lastProcessedTick + 1);
+            //     return [];
+            // }
             
             // // Sort inputs by tick
             // const sortedInputs = inputBuffer.sort((a, b) => a.tick - b.tick);
@@ -73,12 +72,13 @@ export function createInputProcessorSystem(
             // } 
             const nextInput = inputBuffer.shift();
             if (nextInput) {
-                physicsSystem.update(dt, entity, nextInput);
+                physicsSystem.applyInput(dt, entity, nextInput);
                 if (entity.vehicle?.weapons) {
-                    weaponSystem.update(dt, entity, nextInput, nextInput.tick);
+                    weaponSystem.applyInput(dt, entity, nextInput, nextInput.tick);
                 }
                 lastProcessedInputTicks.set(entity.id, nextInput.tick);
-                lastProcessedInputTimestamps.set(entity.id, Date.now());
+                lastProcessedInputTimestamps.set(entity.id, nextInput.timestamp);
+                lastProcessedTick = nextInput.tick;
             }
 
             return inputBuffer.filter(input => input.tick > lastProcessedTick);

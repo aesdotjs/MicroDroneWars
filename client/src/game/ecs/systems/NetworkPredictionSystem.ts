@@ -1,7 +1,6 @@
 import { world as ecsWorld } from '@shared/ecs/world';
 import { InputComponent, TransformBuffer, InterpolationConfig, EntityType } from '@shared/ecs/types';
 import { Vector3, Quaternion } from '@babylonjs/core';
-import { createIdleInput } from '@shared/ecs/utils/InputHelpers';
 import { createPhysicsSystem } from '@shared/ecs/systems/PhysicsSystem';
 import { createPhysicsWorldSystem } from '@shared/ecs/systems/PhysicsWorldSystem';
 import { Room } from 'colyseus.js';
@@ -212,7 +211,6 @@ export function createNetworkPredictionSystem(
         addEntityState: (id: string, state: TransformBuffer) => {
             const entity = ecsWorld.entities.find(e => e.id === id);
             if (!entity || !entity.transform) return;
-            // physicsWorldSystem.setCurrentTick(state.tick.tick);
             const isLocalPlayer = entity.owner?.isLocal;
             if (isLocalPlayer) {
                 log('Server State Tick', state.tick.tick);
@@ -274,7 +272,16 @@ export function createNetworkPredictionSystem(
                 });
                 // const subDt = 1 / 60 / unprocessedInputs.length;
                 for (const input of unprocessedInputs) {
-                    physicsSystem.update(1/60, entity, input);
+                    if (input.yawLeft) {
+                        console.log({
+                            input,
+                            unprocessedInputs: unprocessedInputs.map(i => i.tick),
+                            pendingInputs: pendingInputs.map(i => i.tick),
+                            lastProcessedInputTick,
+                            currentTick: state.tick.tick
+                        })
+                    }
+                    physicsSystem.applyInput(1/60, entity, input);
                     // weaponSystem.update(1/60, entity, input, input.tick);
                 }
                 pendingInputs = unprocessedInputs;
@@ -311,10 +318,10 @@ export function createNetworkPredictionSystem(
             const entity = ecsWorld.with("physics", "vehicle", "transform", "owner").where(({owner}) => owner?.isLocal).entities[0];
             let projectileId: number | undefined;
             if (entity) {
-                physicsSystem.update(dt, entity, finalInput);
+                physicsSystem.applyInput(dt, entity, finalInput);
                 // Always update weapon system if entity has weapons
                 if (entity.vehicle?.weapons) {
-                    projectileId = weaponSystem.update(dt, entity, finalInput, currentTick);
+                    projectileId = weaponSystem.applyInput(dt, entity, finalInput, currentTick);
                 }
             }
             // Only send and store non-idle inputs
@@ -322,12 +329,10 @@ export function createNetworkPredictionSystem(
                 if (projectileId) {
                     finalInput.projectileId = projectileId;
                 }
-                log('Sending command', `${finalInput.mouseDelta.x} ${finalInput.mouseDelta.y} ${finalInput.fire} ${finalInput.projectileId}`);
                 room.send("command", finalInput);
                 pendingInputs.push(finalInput);
             } else if (currentTick - lastHeartbeatTick >= HEARTBEAT_INTERVAL) {
-                const heartbeatInput = createIdleInput(currentTick);
-                room.send("command", heartbeatInput);
+                room.send("command", finalInput);
                 lastHeartbeatTick = currentTick;
             }
 
