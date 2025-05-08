@@ -16,7 +16,7 @@ import { createGameModeSystem, GameMode, GameModeConfig } from "../ecs/systems/G
 import { createAssetSystem } from "@shared/ecs/systems/AssetSystem";
 import { createEntitySystem } from "@shared/ecs/systems/EntitySystem";
 import { createWeaponSystem } from "@shared/ecs/systems/WeaponSystem";
-import { createProjectileSystem } from "@shared/ecs/systems/ProjectileSystem";
+import { createProjectileSystem } from "src/ecs/systems/ProjectileSystem";
 // import * as xhr2 from "xhr2";
 import '@babylonjs/loaders/glTF/2.0/Extensions/ExtrasAsMetadata';
 import '@babylonjs/loaders/glTF/2.0/Extensions/KHR_lights_punctual';
@@ -146,10 +146,11 @@ export class MicroDroneRoom extends Room<State> {
             this.weaponSystem.update(1 / this.TICK_RATE);
             this.inputSystem.update(1 / this.TICK_RATE);
             this.collisionSystem.update(1 / this.TICK_RATE);
-            this.projectileSystem.update(1 / this.TICK_RATE);
             this.healthSystem.update(1 / this.TICK_RATE);
             this.flagSystem.update(1 / this.TICK_RATE);
+            this.projectileSystem.update(1 / this.TICK_RATE);
             this.gameModeSystem.update(1 / this.TICK_RATE);
+            // Step physics world system
             this.physicsWorldSystem.update(1 / this.TICK_RATE);
             // Update server tick in state
             this.state.serverTick = this.physicsWorldSystem.getCurrentTick();

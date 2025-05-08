@@ -1,7 +1,7 @@
 import { GameEntity, CollisionType, CollisionSeverity, CollisionGroups, EntityType } from '../types';
 import { Body, ContactEquation, World, Vec3, Quaternion } from 'cannon-es';
 import { world as ecsWorld } from '../world';
-
+import { Vector3 } from '@babylonjs/core';
 /**
  * Creates a collision system that handles all collision events in the game
  */
@@ -174,7 +174,15 @@ export function handleProjectileCollision(projectile: GameEntity, other: GameEnt
         // other.gameState.health = Math.max(0, other.gameState.health - damage);
         // console.log('other is dead');
     }
-    ecsWorld.remove(projectile);
+    const contactEq = event?.bodyB?.world.contacts[0];
+    const position = new Vector3(contactEq.bi.position.x + contactEq.ri.x, contactEq.bi.position.y + contactEq.ri.y, contactEq.bi.position.z + contactEq.ri.z);
+    projectile.projectile.impact = {
+        position,
+        normal: new Vector3(event.normal.x, event.normal.y, event.normal.z),
+        impactVelocity: event.impactVelocity,
+        targetId: other.id,
+        targetType: other.type || ""
+    }
 }
 
 /**

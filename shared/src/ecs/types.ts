@@ -1,5 +1,5 @@
 import { Vector3, Quaternion, Mesh, TransformNode } from '@babylonjs/core';
-import type { Body as CannonBody } from 'cannon-es';
+import type { Body as CannonBody, Vec3 } from 'cannon-es';
 
 export enum VehicleType {
     Drone = 'drone',
@@ -137,6 +137,14 @@ export interface VehicleComponent {
     activeWeaponIndex: number;
 }
 
+export type ImpactComponent = {
+    position: Vector3;
+    normal: Vector3;
+    impactVelocity: number;
+    targetId: string;
+    targetType: string;
+}
+
 export type ProjectileComponent = {
     projectileType: ProjectileType;
     damage: number;
@@ -144,6 +152,7 @@ export type ProjectileComponent = {
     distanceTraveled: number;
     sourceId: string;
     speed: number;
+    impact?: ImpactComponent;
 };
 
 

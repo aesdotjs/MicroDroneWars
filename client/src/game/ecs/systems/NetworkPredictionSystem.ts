@@ -7,7 +7,7 @@ import { Room } from 'colyseus.js';
 import { State } from '@shared/schemas';
 import { useGameDebug } from '@/composables/useGameDebug';
 import { createWeaponSystem } from '@shared/ecs/systems/WeaponSystem';
-
+import { createSceneSystem } from './SceneSystem';
 const { log } = useGameDebug();
 
 /**
@@ -17,6 +17,7 @@ export function createNetworkPredictionSystem(
     physicsSystem:  ReturnType<typeof createPhysicsSystem>,
     physicsWorldSystem: ReturnType<typeof createPhysicsWorldSystem>,
     weaponSystem: ReturnType<typeof createWeaponSystem>,
+    sceneSystem: ReturnType<typeof createSceneSystem>,
     room: Room<State>
 ) {
     // Configuration
@@ -25,6 +26,8 @@ export function createNetworkPredictionSystem(
         maxBufferSize: 20,
         interpolationFactor: 0.2
     };
+
+    const effectSystem = sceneSystem.getEffectSystem();
 
     // State buffers for each entity
     const TransformBuffers = new Map<string, TransformBuffer[]>();
@@ -308,6 +311,9 @@ export function createNetworkPredictionSystem(
                 // Always update weapon system if entity has weapons
                 if (playerEntity.vehicle?.weapons) {
                     projectileId = weaponSystem.applyInput(dt, playerEntity, finalInput);
+                    if (projectileId) {
+                        effectSystem.createMuzzleFlash(playerEntity);
+                    }
                 }
             }
             // Only send and store non-idle inputs

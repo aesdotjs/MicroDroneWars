@@ -10,7 +10,7 @@ import { createClientInputSystem } from './ClientInputSystem';
 import { createPhysicsSystem } from '@shared/ecs/systems/PhysicsSystem';
 import { useGameDebug } from '@/composables/useGameDebug';
 import { createWeaponSystem } from '@shared/ecs/systems/WeaponSystem';
-
+import { createSceneSystem } from './SceneSystem';
 /**
 * Creates a system that handles network state updates and converts them to ECS entities
 */
@@ -19,7 +19,8 @@ export function createNetworkSystem(
     physicsWorldSystem: ReturnType<typeof createPhysicsWorldSystem>,
     physicsSystem: ReturnType<typeof createPhysicsSystem>,
     inputSystem: ReturnType<typeof createClientInputSystem>,
-    weaponSystem: ReturnType<typeof createWeaponSystem>
+    weaponSystem: ReturnType<typeof createWeaponSystem>,
+    sceneSystem: ReturnType<typeof createSceneSystem>
 ) {
     console.log('Creating network system...');
     const $ = Colyseus.getStateCallbacks(room);
@@ -31,6 +32,7 @@ export function createNetworkSystem(
         physicsSystem,
         physicsWorldSystem,
         weaponSystem,
+        sceneSystem,
         room
     );
     
@@ -94,23 +96,32 @@ export function createNetworkSystem(
         const newEntity: GameEntity = {
             id,
             type: entity.type as EntityType,
-            transform: {
+        };
+
+        if (entity.transform) {
+            newEntity.transform = {
                 position: new Vector3(entity.transform.positionX, entity.transform.positionY, entity.transform.positionZ),
                 rotation: new Quaternion(entity.transform.quaternionX, entity.transform.quaternionY, entity.transform.quaternionZ, entity.transform.quaternionW),
                 velocity: new Vector3(entity.transform.linearVelocityX, entity.transform.linearVelocityY, entity.transform.linearVelocityZ),
                 angularVelocity: new Vector3(entity.transform.angularVelocityX, entity.transform.angularVelocityY, entity.transform.angularVelocityZ)
-            },
-            tick: {
+            }
+        }
+
+        if (entity.tick) {
+            newEntity.tick = {
                 tick: entity.tick.tick,
                 timestamp: entity.tick.timestamp,
                 lastProcessedInputTimestamp: entity.tick.lastProcessedInputTimestamp,
                 lastProcessedInputTick: entity.tick.lastProcessedInputTick
-            },
-            owner: {
+            }
+        }
+
+        if (entity.owner) {
+            newEntity.owner = {
                 id: entity.owner.id,
                 isLocal: room.sessionId === entity.owner.id
             }
-        };
+        }
 
         // Add game state component if present
         if (entity.gameState) {
@@ -161,6 +172,13 @@ export function createNetworkSystem(
                         sourceId: entity.projectile.sourceId,
                         speed: entity.projectile.speed
                     };
+                    // muzzle flash is spawned in applyInput for client prediction and here for network
+                    if (entity.projectile?.sourceId !== room.sessionId) {
+                        const vehicle = ecsWorld.entities.find(e => e.id === entity.projectile?.sourceId);
+                        if (vehicle) {
+                            sceneSystem.getEffectSystem().createMuzzleFlash(vehicle);
+                        }
+                    }
                 }
                 break;
         }
@@ -230,6 +248,15 @@ export function createNetworkSystem(
                     gameEntity.projectile!.distanceTraveled = newEntity.projectile!.distanceTraveled;
                     gameEntity.projectile!.sourceId = newEntity.projectile!.sourceId;
                     gameEntity.projectile!.speed = newEntity.projectile!.speed;
+                    if (newEntity.projectile.impact) {
+                        gameEntity.projectile!.impact = {
+                            position: newEntity.projectile.impact.position,
+                            normal: newEntity.projectile.impact.normal,
+                            impactVelocity: newEntity.projectile.impact.impactVelocity,
+                            targetId: newEntity.projectile.impact.targetId,
+                            targetType: newEntity.projectile.impact.targetType
+                        }
+                    }
                 }
                 if (gameEntity.physics?.body) {
                     physicsWorldSystem.removeBody(gameEntity.id);
@@ -242,116 +269,137 @@ export function createNetworkSystem(
 
         // Set up state change handlers
         // Transform changes
-        $(entity.transform).onChange(() => {
-            if(!gameEntity) return;
-            const transformBuffer: TransformBuffer = {
-                transform: {
-                    position: new Vector3(entity.transform.positionX, entity.transform.positionY, entity.transform.positionZ),
-                    rotation: new Quaternion(entity.transform.quaternionX, entity.transform.quaternionY, entity.transform.quaternionZ, entity.transform.quaternionW),
-                    velocity: new Vector3(entity.transform.linearVelocityX, entity.transform.linearVelocityY, entity.transform.linearVelocityZ),
-                    angularVelocity: new Vector3(entity.transform.angularVelocityX, entity.transform.angularVelocityY, entity.transform.angularVelocityZ)
-                },
-                tick: {
-                    tick: entity.tick.tick,
-                    timestamp: entity.tick.timestamp,
-                    lastProcessedInputTimestamp: entity.tick.lastProcessedInputTimestamp,
-                    lastProcessedInputTick: entity.tick.lastProcessedInputTick
-                }
-            };
-
-            // Store server transform for debug visualization
-            if (debugMode) {
-                gameEntity.serverTransform = {
-                    position: new Vector3(entity.transform.positionX, entity.transform.positionY, entity.transform.positionZ),
-                    rotation: new Quaternion(entity.transform.quaternionX, entity.transform.quaternionY, entity.transform.quaternionZ, entity.transform.quaternionW),
-                    velocity: new Vector3(entity.transform.linearVelocityX, entity.transform.linearVelocityY, entity.transform.linearVelocityZ),
-                    angularVelocity: new Vector3(entity.transform.angularVelocityX, entity.transform.angularVelocityY, entity.transform.angularVelocityZ)
+        if (entity.transform && entity.tick) {
+            $(entity.transform).onChange(() => {
+                if(!gameEntity) return;
+                const transformBuffer: TransformBuffer = {
+                    transform: {
+                        position: new Vector3(entity.transform!.positionX, entity.transform!.positionY, entity.transform!.positionZ),
+                        rotation: new Quaternion(entity.transform!.quaternionX, entity.transform!.quaternionY, entity.transform!.quaternionZ, entity.transform!.quaternionW),
+                        velocity: new Vector3(entity.transform!.linearVelocityX, entity.transform!.linearVelocityY, entity.transform!.linearVelocityZ),
+                        angularVelocity: new Vector3(entity.transform!.angularVelocityX, entity.transform!.angularVelocityY, entity.transform!.angularVelocityZ)
+                    },
+                    tick: {
+                        tick: entity.tick!.tick,
+                        timestamp: entity.tick!.timestamp,
+                        lastProcessedInputTimestamp: entity.tick!.lastProcessedInputTimestamp,
+                        lastProcessedInputTick: entity.tick!.lastProcessedInputTick
+                    }
                 };
-            }
-            if (entity?.tick?.tick !== physicsWorldSystem.getCurrentTick()) {
-                physicsWorldSystem.setCurrentTick(entity.tick.tick);
-            }
-            networkPredictionSystem.addEntityState(id, transformBuffer);    
-            ecsWorld.reindex(gameEntity);
-        });
+
+                // Store server transform for debug visualization
+                if (debugMode) {
+                    gameEntity.serverTransform = {
+                        position: new Vector3(entity.transform!.positionX, entity.transform!.positionY, entity.transform!.positionZ),
+                        rotation: new Quaternion(entity.transform!.quaternionX, entity.transform!.quaternionY, entity.transform!.quaternionZ, entity.transform!.quaternionW),
+                        velocity: new Vector3(entity.transform!.linearVelocityX, entity.transform!.linearVelocityY, entity.transform!.linearVelocityZ),
+                        angularVelocity: new Vector3(entity.transform!.angularVelocityX, entity.transform!.angularVelocityY, entity.transform!.angularVelocityZ)
+                    };
+                }
+                if (entity?.tick?.tick !== physicsWorldSystem.getCurrentTick()) {
+                    physicsWorldSystem.setCurrentTick(entity.tick!.tick);
+                }
+                networkPredictionSystem.addEntityState(id, transformBuffer);    
+                ecsWorld.reindex(gameEntity);
+            });
+        }
 
         // Game state changes
-        $(entity.gameState).onChange(() => {
-            if(!gameEntity) return;
-            gameEntity.gameState!.health = entity.gameState.health;
-            gameEntity.gameState!.maxHealth = entity.gameState.maxHealth;
-            gameEntity.gameState!.hasFlag = entity.gameState.hasFlag;
-            gameEntity.gameState!.carryingFlag = entity.gameState.carryingFlag;
-            gameEntity.gameState!.carriedBy = entity.gameState.carriedBy;
-            gameEntity.gameState!.atBase = entity.gameState.atBase;
-            gameEntity.gameState!.team = entity.gameState.team;
-            ecsWorld.reindex(gameEntity);
-        });
+        if (entity.gameState) {
+            $(entity.gameState).onChange(() => {
+                if(!gameEntity) return;
+                gameEntity.gameState!.health = entity.gameState!.health;
+                gameEntity.gameState!.maxHealth = entity.gameState!.maxHealth;
+                gameEntity.gameState!.hasFlag = entity.gameState!.hasFlag;
+                gameEntity.gameState!.carryingFlag = entity.gameState!.carryingFlag;
+                gameEntity.gameState!.carriedBy = entity.gameState!.carriedBy;
+                gameEntity.gameState!.atBase = entity.gameState!.atBase;
+                gameEntity.gameState!.team = entity.gameState!.team;
+                ecsWorld.reindex(gameEntity);
+            });
+        }
 
         // Tick changes
-        $(entity.tick).onChange(() => {
-            if(!gameEntity) return;
-            gameEntity.tick!.tick = entity.tick.tick;
-            gameEntity.tick!.timestamp = entity.tick.timestamp;
-            gameEntity.tick!.lastProcessedInputTimestamp = entity.tick.lastProcessedInputTimestamp;
-            gameEntity.tick!.lastProcessedInputTick = entity.tick.lastProcessedInputTick;
-            // ecsWorld.reindex(gameEntity);
-        });
+        if (entity.tick) {
+            $(entity.tick).onChange(() => {
+                if(!gameEntity) return;
+                gameEntity.tick!.tick = entity.tick!.tick;
+                gameEntity.tick!.timestamp = entity.tick!.timestamp;
+                gameEntity.tick!.lastProcessedInputTimestamp = entity.tick!.lastProcessedInputTimestamp;
+                gameEntity.tick!.lastProcessedInputTick = entity.tick!.lastProcessedInputTick;
+                // ecsWorld.reindex(gameEntity);
+            });
+        }
 
         // Owner changes
-        $(entity.owner).onChange(() => {
-            if (!gameEntity || !entity.owner.id) return;
-            gameEntity.owner!.id = entity.owner.id;
-            gameEntity.owner!.isLocal = room.sessionId === entity.owner.id;
-            ecsWorld.reindex(gameEntity);
-        });
+        if (entity.owner) {
+            $(entity.owner).onChange(() => {
+                if (!gameEntity || !entity.owner?.id) return;
+                gameEntity.owner!.id = entity.owner.id;
+                gameEntity.owner!.isLocal = room.sessionId === entity.owner.id;
+                ecsWorld.reindex(gameEntity);
+            });
+        }
 
         // Asset changes
-        $(entity.asset).onChange(() => {
-            if (!gameEntity || !entity.asset.assetPath) return;
-            gameEntity.asset!.assetPath = entity.asset.assetPath;
-            gameEntity.asset!.assetType = entity.asset.assetType;
-            gameEntity.asset!.scale = entity.asset.scale;
-            ecsWorld.reindex(gameEntity);
-        });
+        if (entity.asset) {
+            $(entity.asset).onChange(() => {
+                if (!gameEntity || !entity.asset?.assetPath) return;
+                gameEntity.asset!.assetPath = entity.asset.assetPath;
+                gameEntity.asset!.assetType = entity.asset.assetType;
+                gameEntity.asset!.scale = entity.asset.scale;
+                ecsWorld.reindex(gameEntity);
+            });
+        }
 
         // Vehicle changes
-        if (entity.type === EntityType.Vehicle) {
+        if (entity.vehicle) {
             // Weapon changes
             $(entity.vehicle).onChange(() => {
                 if (!gameEntity) return;
 
-                gameEntity.vehicle!.vehicleType = entity.vehicle.vehicleType as VehicleType;
-                gameEntity.vehicle!.activeWeaponIndex = entity.vehicle.activeWeaponIndex;
-                $(entity.vehicle).weapons.onChange((weapon: WeaponSchema, index: number) => {
-                    if (!weapon?.name) return;
-                    gameEntity.vehicle!.weapons[index] = {
-                        id: index.toString(),
-                        name: weapon.name,
-                        projectileType: weapon.projectileType as ProjectileType,
-                        damage: weapon.damage,
-                        minFireRate: weapon.minFireRate,
-                        maxFireRate: weapon.maxFireRate,
-                        heatPerShot: weapon.heatPerShot,
-                        heatDissipationRate: weapon.heatDissipationRate,
-                        projectileSpeed: weapon.projectileSpeed,
-                        range: weapon.range,
-                    }
-                    ecsWorld.reindex(gameEntity);
-                });
+                gameEntity.vehicle!.vehicleType = entity.vehicle!.vehicleType as VehicleType;
+                gameEntity.vehicle!.activeWeaponIndex = entity.vehicle!.activeWeaponIndex;
+                if (entity.vehicle?.weapons) {
+                    $(entity.vehicle).weapons.onChange((weapon: WeaponSchema, index: number) => {
+                        if (!weapon?.name) return;
+                        gameEntity.vehicle!.weapons[index] = {
+                            id: index.toString(),
+                            name: weapon.name,
+                            projectileType: weapon.projectileType as ProjectileType,
+                            damage: weapon.damage,
+                            minFireRate: weapon.minFireRate,
+                            maxFireRate: weapon.maxFireRate,
+                            heatPerShot: weapon.heatPerShot,
+                            heatDissipationRate: weapon.heatDissipationRate,
+                            projectileSpeed: weapon.projectileSpeed,
+                            range: weapon.range,
+                        }
+                        ecsWorld.reindex(gameEntity);
+                    });
+                }
                 ecsWorld.reindex(gameEntity);
             });
         }
 
         // Projectile changes
-        if (entity.type === EntityType.Projectile) {
+        if (entity.projectile) {
             $(entity.projectile).onChange(() => {
                 if (!gameEntity) return;
-                gameEntity.projectile!.damage = entity.projectile.damage;
-                gameEntity.projectile!.range = entity.projectile.range;
-                gameEntity.projectile!.distanceTraveled = entity.projectile.distanceTraveled;
-                gameEntity.projectile!.sourceId = entity.projectile.sourceId;
-                gameEntity.projectile!.speed = entity.projectile.speed;
+                gameEntity.projectile!.damage = entity.projectile!.damage;
+                gameEntity.projectile!.range = entity.projectile!.range;
+                gameEntity.projectile!.distanceTraveled = entity.projectile!.distanceTraveled;
+                gameEntity.projectile!.sourceId = entity.projectile!.sourceId;
+                gameEntity.projectile!.speed = entity.projectile!.speed;
+                if (entity.projectile?.impact) {
+                    gameEntity.projectile!.impact = {
+                        position: new Vector3(entity.projectile!.impact!.positionX, entity.projectile!.impact!.positionY, entity.projectile!.impact!.positionZ),
+                        normal: new Vector3(entity.projectile!.impact!.normalX, entity.projectile!.impact!.normalY, entity.projectile!.impact!.normalZ),
+                        impactVelocity: entity.projectile!.impact!.impactVelocity,
+                        targetId: entity.projectile!.impact!.targetId,
+                        targetType: entity.projectile!.impact!.targetType
+                    }
+                }
                 ecsWorld.reindex(gameEntity);
             });
         }

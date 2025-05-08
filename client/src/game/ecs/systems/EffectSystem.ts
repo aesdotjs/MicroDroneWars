@@ -12,6 +12,12 @@ export function createEffectSystem(scene: Scene) {
     muzzleFlashMaterial.specularColor = new Color3(0, 0, 0);
     muzzleFlashMaterial.emissiveColor = new Color3(1, 0.7, 0.3);
     muzzleFlashMaterial.alpha = 0.8;
+    const muzzleFlashTexture = new Texture('assets/textures/muzzle_flash.png', scene);
+    muzzleFlashMaterial.diffuseTexture = muzzleFlashTexture;
+    muzzleFlashMaterial.diffuseTexture.hasAlpha = true;
+    muzzleFlashMaterial.useAlphaFromDiffuseTexture = true;
+    muzzleFlashMaterial.backFaceCulling = false;
+    muzzleFlashMaterial.separateCullingPass = true;
 
     const bulletMaterial = new StandardMaterial('bulletMaterial', scene);
     bulletMaterial.emissiveColor = new Color3(1, 1, 0.3);
@@ -41,13 +47,6 @@ export function createEffectSystem(scene: Scene) {
     missileTrailMaterial.alpha = 0.8;
     missileTrailMaterial.backFaceCulling = false;
 
-    const trailMaterial = new StandardMaterial('trailMaterial', scene);
-    trailMaterial.disableLighting = true;
-    trailMaterial.emissiveColor = new Color3(1, 0.5, 0.2);
-    trailMaterial.diffuseColor = new Color3(1, 0.5, 0.2);
-    trailMaterial.specularColor = new Color3(0, 0, 0);
-    trailMaterial.alpha = 0.8;
-    trailMaterial.backFaceCulling = false;
 
     const impactMaterial = new StandardMaterial('impactMaterial', scene);
     impactMaterial.emissiveColor = new Color3(1, 0.3, 0.1);
@@ -57,7 +56,8 @@ export function createEffectSystem(scene: Scene) {
     const activeMuzzleFlashes = new Map<string, Mesh>();
     const activeProjectiles = new Map<string, Mesh>();
     const activeTrails = new Map<string, TrailMesh>();
-    const activeImpacts = new Map<string, ParticleSystem>();
+    const activeImpactParticles = new Map<string, ParticleSystem>();
+    const activeImpactSprites = new Map<string, Mesh>();
     const muzzleFlashTimeouts = new Map<string, NodeJS.Timeout>();
 
     // Create muzzle flash effect
@@ -66,6 +66,11 @@ export function createEffectSystem(scene: Scene) {
         const weaponTrigger = entity.asset?.triggerMeshes?.find(mesh => 
             'missile' === mesh.metadata?.gltf?.extras?.type
         );
+
+        if (!entity.render?.mesh) {
+            console.warn('No render mesh found for entity', entity.id);
+            return;
+        }
 
         let spawnPointPosition: Vector3;
         let spawnPointRotation: Quaternion;
@@ -104,10 +109,17 @@ export function createEffectSystem(scene: Scene) {
 
         // Create muzzle flash mesh
         const muzzleFlash = MeshBuilder.CreatePlane('muzzleFlash', { size: 1.0 }, scene);
-        muzzleFlash.position = spawnPointPosition;
+        
+        // Parent to the entity's render mesh
+        muzzleFlash.parent = entity.render.mesh;
+        
+        // Set local position relative to parent
+        const localPos = spawnPointPosition.subtract(entity.render.mesh.absolutePosition);
+        muzzleFlash.position = localPos;
+        
         muzzleFlash.material = muzzleFlashMaterial;
         muzzleFlash.billboardMode = Mesh.BILLBOARDMODE_ALL;
-        muzzleFlash.rotation.y = Math.PI;
+        muzzleFlash.rotation.y = Math.PI; // Flip the texture to face forward
 
         activeMuzzleFlashes.set(entity.id, muzzleFlash);
 
@@ -164,34 +176,152 @@ export function createEffectSystem(scene: Scene) {
     }
 
     // Create impact effect
-    function createImpactEffect(position: Vector3, type: ProjectileType): void {
-        const impactId = `impact_${Date.now()}`;
-        const impact = new ParticleSystem('impact', 100, scene);
-        impact.emitter = position;
-        impact.minEmitBox = new Vector3(-0.2, -0.2, -0.2);
-        impact.maxEmitBox = new Vector3(0.2, 0.2, 0.2);
-        impact.color1 = new Color4(1, 0.5, 0.2, 1);
-        impact.color2 = new Color4(1, 0.2, 0.1, 1);
-        impact.colorDead = new Color4(0, 0, 0, 0);
-        impact.minSize = 0.2;
-        impact.maxSize = 0.5;
-        impact.minLifeTime = 0.1;
-        impact.maxLifeTime = 0.3;
-        impact.emitRate = 1000;
+    function createImpactParticle(
+        position: Vector3,
+        normal: Vector3,
+        impactId: string,
+        type: ProjectileType
+    ): void {
+        const particleCount = type === ProjectileType.Missile ? 20 : 10;
+        const impact = new ParticleSystem('impact', particleCount, scene);
+        
+        // Offset position slightly along normal to prevent clipping
+        const offsetAmount = 0.05; // Small offset in meters
+        const offsetPosition = position.clone().add(normal.scale(offsetAmount));
+        
+        // Ensure we're using the exact position passed in
+        impact.emitter = offsetPosition;
+        
+        // Calculate emission direction based on normal
+        const normalDir = normal.normalize();
+        const tangent = Vector3.Cross(normalDir, Vector3.Up()).normalize();
+        const bitangent = Vector3.Cross(normalDir, tangent).normalize();
+        
+        // Create emission box aligned with normal
+        const emissionSize = type === ProjectileType.Missile ? 0.5 : 0.2;
+        impact.minEmitBox = new Vector3(-emissionSize, -emissionSize, -emissionSize);
+        impact.maxEmitBox = new Vector3(emissionSize, emissionSize, emissionSize);
+
+        if (type === ProjectileType.Missile) {
+            // Create static explosion sprite
+            const explosionIndex = Math.floor(Math.random() * 9).toString().padStart(2, '0');
+            const explosionTexture = new Texture(`assets/textures/explosion/explosion${explosionIndex}.png`, scene);
+            
+            // Create smoke particle system
+            const smokeIndex = Math.floor(Math.random() * 5 + 1).toString().padStart(2, '0');
+            const smokeTexture = new Texture(`assets/textures/smoke/blackSmoke${smokeIndex}.png`, scene);
+            
+            // Set up explosion sprite
+            const explosionSprite = MeshBuilder.CreatePlane('explosion', { size: 2.0 }, scene);
+            explosionSprite.position = offsetPosition; // Use the same offset position
+            explosionSprite.billboardMode = Mesh.BILLBOARDMODE_ALL;
+            explosionSprite.rotation.y = Math.PI;
+            
+            const explosionMaterial = new StandardMaterial('explosionMaterial', scene);
+            explosionMaterial.diffuseTexture = explosionTexture;
+            explosionMaterial.diffuseTexture.hasAlpha = true;
+            explosionMaterial.useAlphaFromDiffuseTexture = true;
+            explosionMaterial.backFaceCulling = false;
+            explosionMaterial.disableLighting = true;
+            explosionMaterial.specularColor = new Color3(0, 0, 0);
+            explosionMaterial.emissiveColor = new Color3(1, 0.7, 0.3);
+            explosionMaterial.alpha = 0.8;
+            explosionMaterial.separateCullingPass = true;
+            explosionSprite.material = explosionMaterial;
+            explosionSprite.renderingGroupId = 1;
+            
+            // Set up smoke particles
+            impact.particleTexture = smokeTexture;
+            impact.isBillboardBased = true;
+            impact.billboardMode = ParticleSystem.BILLBOARDMODE_ALL;
+            
+            // Explosion effect for missiles
+            impact.color1 = new Color4(0.8, 0.8, 0.8, 0.8);
+            impact.color2 = new Color4(0.5, 0.5, 0.5, 0.5);
+            impact.colorDead = new Color4(0.2, 0.2, 0.2, 0);
+            impact.minSize = 0.5;
+            impact.maxSize = 1.0;
+            impact.minLifeTime = 0.3;
+            impact.maxLifeTime = 1.5;
+            impact.emitRate = 0; // No continuous emission
+            impact.manualEmitCount = particleCount; // Emit all particles at once
+            impact.minEmitPower = 3;
+            impact.maxEmitPower = 6;
+            
+            // Create a more spherical explosion pattern
+            impact.direction1 = normalDir.scale(-1).add(tangent.scale(0.5)).add(bitangent.scale(0.5));
+            impact.direction2 = normalDir.scale(-1).add(tangent.scale(-0.5)).add(bitangent.scale(-0.5));
+
+            // Store explosion sprite for cleanup
+            activeImpactParticles.set(impactId, impact);
+            activeImpactSprites.set(impactId, explosionSprite);
+
+            // Remove sprite after max lifetime
+            setTimeout(() => {
+                const sprite = activeImpactSprites.get(impactId);
+                if (sprite) {
+                    sprite.dispose();
+                    activeImpactSprites.delete(impactId);
+                }
+            }, 300);
+
+        } else {
+            // Bullet sparkle effect
+            const sparkleTexture = new Texture('assets/textures/sparkle.png', scene);
+            impact.particleTexture = sparkleTexture;
+            impact.isBillboardBased = true;
+            impact.billboardMode = ParticleSystem.BILLBOARDMODE_ALL;
+            
+            // Sparkle effect for bullets
+            impact.color1 = new Color4(1, 0.8, 0.2, 1);
+            impact.color2 = new Color4(1, 0.4, 0.1, 1);
+            impact.colorDead = new Color4(0.2, 0.1, 0.1, 0);
+            impact.minSize = 0.05;
+            impact.maxSize = 0.1;
+            impact.minLifeTime = 1.2;
+            impact.maxLifeTime = 1.5;
+            impact.emitRate = 0; // No continuous emission
+            impact.manualEmitCount = particleCount; // Emit all particles at once
+            impact.minEmitPower = 3;
+            impact.maxEmitPower = 5;
+            impact.gravity = new Vector3(0, -9.81, 0); // Add some gravity for more realistic effect
+            
+            // Create a more focused sparkle pattern
+            impact.direction1 = normalDir.scale(-1).add(tangent.scale(0.2)).add(bitangent.scale(0.2));
+            impact.direction2 = normalDir.scale(-1).add(tangent.scale(-0.2)).add(bitangent.scale(-0.2));
+
+            activeImpactParticles.set(impactId, impact);
+        }
+
         impact.blendMode = ParticleSystem.BLENDMODE_ONEONE;
-        impact.gravity = new Vector3(0, 0, 0);
-        impact.direction1 = new Vector3(-1, -1, -1);
-        impact.direction2 = new Vector3(1, 1, 1);
         impact.minAngularSpeed = 0;
         impact.maxAngularSpeed = Math.PI;
-        impact.minEmitPower = 1;
-        impact.maxEmitPower = 3;
-        impact.updateSpeed = 0.01;
+
+        // speed gradient
+        impact.addVelocityGradient(0, 1, 1.5);
+        impact.addVelocityGradient(0.1, 0.8, 0.9);
+        impact.addVelocityGradient(0.7, 0.4, 0.5);
+        impact.addVelocityGradient(1, 0.1, 0.2);
+
+        // Auto-remove when all particles are dead
+        const checkInterval = setInterval(() => {
+            if (impact.particles.length === 0) {
+                clearInterval(checkInterval);
+                removeImpactParticle(impactId);
+            }
+        }, 100);
+
         impact.start();
+    }
 
-        activeImpacts.set(impactId, impact);
-
-        setTimeout(() => removeImpactEffect(impactId), 300);
+    function createImpactEffects(entity: GameEntity): void {
+        const impactId = `impact_${entity.id}`;
+        createImpactParticle(
+            entity.projectile!.impact!.position,
+            entity.projectile!.impact!.normal,
+            impactId,
+            entity.projectile!.projectileType
+        );
     }
 
     // Remove effects
@@ -220,12 +350,12 @@ export function createEffectSystem(scene: Scene) {
         }
     }
 
-    function removeImpactEffect(impactId: string): void {
-        const impact = activeImpacts.get(impactId);
+    function removeImpactParticle(impactId: string): void {
+        const impact = activeImpactParticles.get(impactId);
         if (impact) {
             impact.stop();
             impact.dispose();
-            activeImpacts.delete(impactId);
+            activeImpactParticles.delete(impactId);
         }
     }
 
@@ -234,7 +364,7 @@ export function createEffectSystem(scene: Scene) {
         activeMuzzleFlashes.forEach(muzzleFlash => muzzleFlash.dispose());
         activeProjectiles.forEach(projectile => projectile.dispose());
         activeTrails.forEach(trail => trail.dispose());
-        activeImpacts.forEach(impact => {
+        activeImpactParticles.forEach(impact => {
             impact.stop();
             impact.dispose();
         });
@@ -243,7 +373,8 @@ export function createEffectSystem(scene: Scene) {
         activeMuzzleFlashes.clear();
         activeProjectiles.clear();
         activeTrails.clear();
-        activeImpacts.clear();
+        activeImpactParticles.clear();
+        activeImpactSprites.clear();
         muzzleFlashTimeouts.clear();
 
         muzzleFlashMaterial.dispose();
@@ -251,14 +382,13 @@ export function createEffectSystem(scene: Scene) {
         missileMaterial.dispose();
         bulletTrailMaterial.dispose();
         missileTrailMaterial.dispose();
-        trailMaterial.dispose();
         impactMaterial.dispose();
     }
 
     return {
         createMuzzleFlash,
         createProjectileMesh,
-        createImpactEffect,
+        createImpactEffects,
         removeProjectileMesh,
         cleanup,
         update: () => {

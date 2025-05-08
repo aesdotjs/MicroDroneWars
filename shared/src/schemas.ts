@@ -57,6 +57,18 @@ export class VehicleSchema extends Schema {
     @type("number") activeWeaponIndex = 0;
 }
 
+export class ImpactSchema extends Schema {
+    @type("float32") positionX = 0;
+    @type("float32") positionY = 0;
+    @type("float32") positionZ = 0;
+    @type("float32") normalX = 0;
+    @type("float32") normalY = 0;
+    @type("float32") normalZ = 0;
+    @type("float32") impactVelocity = 0;
+    @type("string") targetId = "";
+    @type("string") targetType = "";
+}
+
 /**
  * Projectile component schema
  */
@@ -67,6 +79,7 @@ export class ProjectileSchema extends Schema {
     @type("number") distanceTraveled = 0;
     @type("string") sourceId = "";
     @type("number") speed = 0;
+    @type(ImpactSchema) impact?: ImpactSchema;
 }
 
 /**
@@ -120,25 +133,25 @@ export class EntitySchema extends Schema {
     @type("string") type = "";
 
     /** Transform component */
-    @type(TransformSchema) transform = new TransformSchema();
+    @type(TransformSchema) transform?: TransformSchema;
 
     /** Vehicle component */
-    @type(VehicleSchema) vehicle = new VehicleSchema();
+    @type(VehicleSchema) vehicle?: VehicleSchema;
 
     /** Projectile component */
-    @type(ProjectileSchema) projectile = new ProjectileSchema();
+    @type(ProjectileSchema) projectile?: ProjectileSchema;
 
     /** Tick and timestamp component */
-    @type(TickSchema) tick = new TickSchema();
+    @type(TickSchema) tick?: TickSchema;
 
     /** Owner component */
-    @type(OwnerSchema) owner = new OwnerSchema();
+    @type(OwnerSchema) owner?: OwnerSchema;
 
     /** Game state component */
-    @type(GameStateSchema) gameState = new GameStateSchema();
+    @type(GameStateSchema) gameState?: GameStateSchema;
 
     /** Asset component */
-    @type(AssetSchema) asset = new AssetSchema();
+    @type(AssetSchema) asset?: AssetSchema;
 }
 
 /**

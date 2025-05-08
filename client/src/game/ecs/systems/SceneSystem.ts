@@ -65,6 +65,7 @@ export function createSceneSystem(engine: Engine) {
         getCamera: () => camera,
         getShadowGenerator: () => shadowGenerator,
         getGlowLayer: () => glowLayer,
+        getEffectSystem: () => effectSystem,
         update: (dt: number) => {
             effectSystem.update();
             // Update entity positions and rotations
@@ -88,8 +89,6 @@ export function createSceneSystem(engine: Engine) {
 
                 if (entity.type === EntityType.Projectile && !entity.render?.mesh) {
                     entity.render = { mesh: effectSystem.createProjectileMesh(entity) };
-                    effectSystem.createMuzzleFlash(entity);
-                    // console.log('created projectile mesh', entity.render.mesh.name);
                 }
 
                 // Update position and rotation for all entities with meshes

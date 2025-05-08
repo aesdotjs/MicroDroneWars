@@ -1,5 +1,5 @@
 import { GameEntity } from '@shared/ecs/types';
-import { State, EntitySchema, WeaponSchema } from '@shared/schemas';
+import { State, EntitySchema, WeaponSchema, ImpactSchema, TransformSchema, GameStateSchema, VehicleSchema, ProjectileSchema, OwnerSchema, AssetSchema, TickSchema } from '@shared/schemas';
 import { world as ecsWorld } from "@shared/ecs/world";
 import { createPhysicsWorldSystem } from '@shared/ecs/systems/PhysicsWorldSystem';
 import { createInputSystem } from './InputSystems';
@@ -23,6 +23,9 @@ export function createStateSyncSystem(
         }
         // Update transform data
         if (entity.transform) {
+            if (!entityState.transform) {
+                entityState.transform = new TransformSchema();
+            }
             if (entity.transform.position) {
                 entityState.transform.positionX = entity.transform.position.x;
                 entityState.transform.positionY = entity.transform.position.y;
@@ -48,6 +51,9 @@ export function createStateSyncSystem(
 
         // Update game state data
         if (entity.gameState) {
+            if (!entityState.gameState) {
+                entityState.gameState = new GameStateSchema();
+            }
             entityState.gameState.health = entity.gameState.health;
             entityState.gameState.maxHealth = entity.gameState.maxHealth;
             entityState.gameState.team = entity.gameState.team;
@@ -59,6 +65,9 @@ export function createStateSyncSystem(
 
         // Update vehicle data
         if (entity.vehicle) {
+            if (!entityState.vehicle) {
+                entityState.vehicle = new VehicleSchema();
+            }
             entityState.vehicle.vehicleType = entity.vehicle.vehicleType;
             if (entity.vehicle.weapons) {
                 // Clear existing weapons
@@ -86,21 +95,44 @@ export function createStateSyncSystem(
 
         // Update projectile data
         if (entity.projectile) {
+            if (!entityState.projectile) {
+                entityState.projectile = new ProjectileSchema();
+            }
             entityState.projectile.projectileType = entity.projectile.projectileType;
             entityState.projectile.damage = entity.projectile.damage;
             entityState.projectile.range = entity.projectile.range;
             entityState.projectile.distanceTraveled = entity.projectile.distanceTraveled;
             entityState.projectile.sourceId = entity.projectile.sourceId;
             entityState.projectile.speed = entity.transform?.velocity?.length() || 0;
+            if (entity.projectile.impact) {
+                if (!entityState.projectile.impact) {
+                    entityState.projectile.impact = new ImpactSchema();
+                }
+                entityState.projectile.impact.targetId = entity.projectile.impact.targetId;
+                entityState.projectile.impact.targetType = entity.projectile.impact.targetType;
+                entityState.projectile.impact.positionX = entity.projectile.impact.position.x;
+                entityState.projectile.impact.positionY = entity.projectile.impact.position.y;
+                entityState.projectile.impact.positionZ = entity.projectile.impact.position.z;
+                entityState.projectile.impact.normalX = entity.projectile.impact.normal.x;
+                entityState.projectile.impact.normalY = entity.projectile.impact.normal.y;
+                entityState.projectile.impact.normalZ = entity.projectile.impact.normal.z;
+                entityState.projectile.impact.impactVelocity = entity.projectile.impact.impactVelocity;
+            }
         }
 
         // Update Owner data
         if (entity.owner) {
+            if (!entityState.owner) {
+                entityState.owner = new OwnerSchema();
+            }
             entityState.owner.id = entity.owner.id;
         }
 
         // Update asset data
         if (entity.asset) {
+            if (!entityState.asset) {
+                entityState.asset = new AssetSchema();
+            }
             entityState.asset.assetPath = entity.asset.assetPath;
             entityState.asset.assetType = entity.asset.assetType;
             entityState.asset.scale = entity.asset.scale;
@@ -108,6 +140,9 @@ export function createStateSyncSystem(
 
         // Update tick data
         if (entity.tick) {
+            if (!entityState.tick) {
+                entityState.tick = new TickSchema();
+            }
             entityState.tick.tick = physicsWorldSystem.getCurrentTick();
             entityState.tick.timestamp = Date.now();
             entityState.tick.lastProcessedInputTimestamp = inputSystem.inputProcessor.getLastProcessedInputTimestamp(entity.id) ?? Date.now();

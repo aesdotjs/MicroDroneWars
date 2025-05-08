@@ -13,16 +13,17 @@ export function createProjectileSystem(
         update: (dt: number) => {
             const projectiles = ecsWorld.with("projectile", "transform");
             for (const entity of projectiles) {
+                // Remove if exceeded range or has impact
+                if (entity.projectile?.impact || entity.projectile!.distanceTraveled >= entity.projectile!.range) {
+                    ecsWorld.remove(entity);
+                    continue;
+                }
                 if (entity.physics?.body) {
                     physicsWorldSystem.applyBodyTransform(entity, entity.physics.body);  
                 }
                 // Update distance traveled
                 const distance = entity.transform!.velocity.length() * dt;
                 entity.projectile!.distanceTraveled += distance;
-                // Remove if exceeded range
-                if (entity.projectile!.distanceTraveled >= entity.projectile!.range) {
-                    ecsWorld.remove(entity);
-                }
             }
         }
     };
