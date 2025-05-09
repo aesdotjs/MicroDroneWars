@@ -1,6 +1,7 @@
 
 import { world as ecsWorld } from '@shared/ecs/world';
 import { createPhysicsWorldSystem } from '@shared/ecs/systems/PhysicsWorldSystem';
+import { ProjectileType } from '@shared/ecs/types';
 
 /**
  * Projectile system that updates projectile positions and handles lifetime
@@ -13,8 +14,15 @@ export function createProjectileSystem(
         update: (dt: number) => {
             const projectiles = ecsWorld.with("projectile", "transform");
             for (const entity of projectiles) {
-                // Remove if exceeded range or has impact
-                if (entity.projectile?.impact || entity.projectile!.distanceTraveled >= entity.projectile!.range) {
+                if (entity.projectile?.impact) {
+                    if (entity.projectile.projectileType === ProjectileType.Missile) {
+                        physicsWorldSystem.applyMissileImpact(entity);
+                    }
+                    ecsWorld.remove(entity);
+                    continue;
+                }
+                // Remove if exceeded range
+                if (entity.projectile!.distanceTraveled >= entity.projectile!.range) {
                     ecsWorld.remove(entity);
                     continue;
                 }

@@ -64,6 +64,28 @@ export function createEffectSystem(scene: Scene) {
     missileTrailMaterial.alpha = 0.8;
     missileTrailMaterial.backFaceCulling = false;
 
+    // Create explosion materials
+    const explosionMaterial = new StandardMaterial('explosionMaterial', scene);
+    explosionMaterial.diffuseTexture = explosionTextures[0]; // Will be changed per instance
+    explosionMaterial.diffuseTexture.hasAlpha = true;
+    explosionMaterial.useAlphaFromDiffuseTexture = true;
+    explosionMaterial.backFaceCulling = false;
+    explosionMaterial.disableLighting = true;
+    explosionMaterial.specularColor = new Color3(0, 0, 0);
+    explosionMaterial.emissiveColor = new Color3(1, 0.7, 0.3);
+    explosionMaterial.alpha = 0.8;
+    explosionMaterial.separateCullingPass = true;
+
+    const bulletExplosionMaterial = new StandardMaterial('bulletExplosionMaterial', scene);
+    bulletExplosionMaterial.diffuseTexture = explosionTextures[0]; // Will be changed per instance
+    bulletExplosionMaterial.diffuseTexture.hasAlpha = true;
+    bulletExplosionMaterial.useAlphaFromDiffuseTexture = true;
+    bulletExplosionMaterial.backFaceCulling = false;
+    bulletExplosionMaterial.disableLighting = true;
+    bulletExplosionMaterial.specularColor = new Color3(0, 0, 0);
+    bulletExplosionMaterial.emissiveColor = new Color3(1, 0.7, 0.3);
+    bulletExplosionMaterial.alpha = 0.8;
+    bulletExplosionMaterial.separateCullingPass = true;
 
     const impactMaterial = new StandardMaterial('impactMaterial', scene);
     impactMaterial.emissiveColor = new Color3(1, 0.3, 0.1);
@@ -205,7 +227,6 @@ export function createEffectSystem(scene: Scene) {
     ): void {
         const particleCount = type === ProjectileType.Missile ? 20 : 10;
         const impact = new ParticleSystem('impact', particleCount, scene);
-        console.log(position);
         // Offset position slightly along normal to prevent clipping
         const offsetAmount = 0.05; // Small offset in meters
         const offsetPosition = position.clone().add(normal.scale(offsetAmount));
@@ -234,16 +255,9 @@ export function createEffectSystem(scene: Scene) {
             explosionSprite.billboardMode = Mesh.BILLBOARDMODE_ALL;
             explosionSprite.rotation.y = Math.PI;
             
-            const explosionMaterial = new StandardMaterial('explosionMaterial', scene);
+            // Update texture on the shared material
             explosionMaterial.diffuseTexture = explosionTexture;
             explosionMaterial.diffuseTexture.hasAlpha = true;
-            explosionMaterial.useAlphaFromDiffuseTexture = true;
-            explosionMaterial.backFaceCulling = false;
-            explosionMaterial.disableLighting = true;
-            explosionMaterial.specularColor = new Color3(0, 0, 0);
-            explosionMaterial.emissiveColor = new Color3(1, 0.7, 0.3);
-            explosionMaterial.alpha = 0.8;
-            explosionMaterial.separateCullingPass = true;
             explosionSprite.material = explosionMaterial;
             explosionSprite.renderingGroupId = 1;
             
@@ -288,6 +302,19 @@ export function createEffectSystem(scene: Scene) {
             impact.isBillboardBased = true;
             impact.billboardMode = ParticleSystem.BILLBOARDMODE_ALL;
             
+            // Create small explosion sprite for bullets
+            const bulletExplosionTexture = explosionTextures[Math.floor(Math.random() * explosionTextures.length)];
+            const bulletExplosionSprite = MeshBuilder.CreatePlane('bulletExplosion', { size: 0.2 }, scene);
+            bulletExplosionSprite.position = offsetPosition;
+            bulletExplosionSprite.billboardMode = Mesh.BILLBOARDMODE_ALL;
+            bulletExplosionSprite.rotation.y = Math.PI;
+            
+            // Update texture on the shared material
+            bulletExplosionMaterial.diffuseTexture = bulletExplosionTexture;
+            bulletExplosionMaterial.diffuseTexture.hasAlpha = true;
+            bulletExplosionSprite.material = bulletExplosionMaterial;
+            bulletExplosionSprite.renderingGroupId = 1;
+            
             // Sparkle effect for bullets
             impact.color1 = new Color4(1, 0.8, 0.2, 1);
             impact.color2 = new Color4(1, 0.4, 0.1, 1);
@@ -307,6 +334,16 @@ export function createEffectSystem(scene: Scene) {
             impact.direction2 = normalDir.scale(-1).add(tangent.scale(-0.2)).add(bitangent.scale(-0.2));
 
             activeImpactParticles.set(impactId, impact);
+            activeImpactSprites.set(impactId, bulletExplosionSprite);
+
+            // Remove sprite after shorter lifetime for bullets
+            setTimeout(() => {
+                const sprite = activeImpactSprites.get(impactId);
+                if (sprite) {
+                    sprite.dispose();
+                    activeImpactSprites.delete(impactId);
+                }
+            }, 150); // Shorter lifetime for bullet explosions
         }
 
         impact.blendMode = ParticleSystem.BLENDMODE_ONEONE;
@@ -424,6 +461,8 @@ export function createEffectSystem(scene: Scene) {
         bulletTrailMaterial.dispose();
         missileTrailMaterial.dispose();
         impactMaterial.dispose();
+        explosionMaterial.dispose();
+        bulletExplosionMaterial.dispose();
     }
 
     return {
