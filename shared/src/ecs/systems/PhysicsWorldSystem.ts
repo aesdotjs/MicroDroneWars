@@ -577,9 +577,9 @@ export function createPhysicsWorldSystem() {
             if (!entity.projectile?.impact) return;
 
             const impactPosition = entity.projectile.impact.position;
-            const explosionRadius = 2; // meters
-            const maxImpulse = 100; // maximum impulse force
-            const minImpulse = 10; // minimum impulse force
+            const explosionRadius = 4; // meters
+            const maxVelocity = 20; // maximum velocity change
+            const minVelocity = 5; // minimum velocity change
 
             // Find all vehicle entities
             const vehicles = ecsWorld.with("vehicle", "physics", "transform");
@@ -596,63 +596,22 @@ export function createPhysicsWorldSystem() {
                 // Calculate direction from impact to vehicle
                 const direction = vehicle.transform.position.subtract(impactPosition).normalize();
                 
-                // Calculate impulse force based on distance (inverse square falloff)
+                // Calculate velocity change based on distance (inverse square falloff)
                 const distanceRatio = 1 - (distance / explosionRadius);
-                const impulseForce = minImpulse + (maxImpulse - minImpulse) * (distanceRatio * distanceRatio);
+                const velocityChange = minVelocity + (maxVelocity - minVelocity) * (distanceRatio * distanceRatio);
 
-                // Create impulse vector
-                const impulse = new CANNON.Vec3(
-                    direction.x * impulseForce,
-                    direction.y * impulseForce,
-                    direction.z * impulseForce
-                );
+                // Apply velocity change directly
+                vehicle.physics.body.velocity.x += direction.x * velocityChange;
+                vehicle.physics.body.velocity.y += direction.y * velocityChange;
+                vehicle.physics.body.velocity.z += direction.z * velocityChange;
 
-                // Calculate the relative position for applying the impulse
-                // This is the closest point on the vehicle's collision shape to the explosion
-                const relativePosition = new CANNON.Vec3();
-                const vehiclePosition = vehicle.physics.body.position;
-                
-                // Get the vehicle's collision shape
-                const shape = vehicle.physics.body.shapes[0];
-                if (!shape) continue;
+                // Add some upward velocity for a more dramatic effect
+                // vehicle.physics.body.velocity.y += velocityChange * 0.5;
 
-                // Calculate the closest point on the shape to the explosion
-                if (shape.type === CANNON.Shape.types.SPHERE) {
-                    // For spheres, project the explosion point onto the sphere's surface
-                    const radius = (shape as CANNON.Sphere).radius;
-                    const toExplosion = new CANNON.Vec3(
-                        impactPosition.x - vehiclePosition.x,
-                        impactPosition.y - vehiclePosition.y,
-                        impactPosition.z - vehiclePosition.z
-                    );
-                    toExplosion.normalize();
-                    toExplosion.scale(radius, relativePosition);
-                } else if (shape.type === CANNON.Shape.types.BOX) {
-                    // For boxes, find the closest point on the box surface
-                    const box = shape as CANNON.Box;
-                    const halfExtents = box.halfExtents;
-                    
-                    // Transform explosion point to box local space
-                    const localPoint = new CANNON.Vec3(
-                        impactPosition.x - vehiclePosition.x,
-                        impactPosition.y - vehiclePosition.y,
-                        impactPosition.z - vehiclePosition.z
-                    );
-                    vehicle.physics.body.quaternion.inverse().vmult(localPoint, localPoint);
-
-                    // Clamp point to box surface
-                    relativePosition.set(
-                        Math.max(-halfExtents.x, Math.min(halfExtents.x, localPoint.x)),
-                        Math.max(-halfExtents.y, Math.min(halfExtents.y, localPoint.y)),
-                        Math.max(-halfExtents.z, Math.min(halfExtents.z, localPoint.z))
-                    );
-
-                    // Transform back to world space
-                    vehicle.physics.body.quaternion.vmult(relativePosition, relativePosition);
-                }
-
-                // Apply impulse at the calculated relative position
-                vehicle.physics.body.applyImpulse(impulse, relativePosition);
+                // Dampen angular velocity to prevent spinning
+                vehicle.physics.body.angularVelocity.x *= 0.5;
+                vehicle.physics.body.angularVelocity.y *= 0.5;
+                vehicle.physics.body.angularVelocity.z *= 0.5;
             }
         }
     };  
