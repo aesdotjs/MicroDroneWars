@@ -68,7 +68,7 @@ export function createGameModeSystem(
             };
 
             // Create physics for the map entity
-            physicsWorldSystem.createMeshPhysics(mapEntity);
+            // physicsWorldSystem.createMeshPhysics(mapEntity);
 
             // Add the entity to the world
             ecsWorld.add(mapEntity);

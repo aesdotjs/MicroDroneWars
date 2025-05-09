@@ -175,6 +175,9 @@ export function handleProjectileCollision(projectile: GameEntity, other: GameEnt
         // console.log('other is dead');
     }
     const contactEq = event?.bodyB?.world.contacts[0];
+    // console.log(event?.bodyB?.world.contacts);
+    // console.log(contactEq.ri.x, contactEq.ri.y, contactEq.ri.z, contactEq.bi.position.x, contactEq.bi.position.y, contactEq.bi.position.z);
+    // console.log(event.contactPoint, event.normal);
     const position = new Vector3(contactEq.bi.position.x + contactEq.ri.x, contactEq.bi.position.y + contactEq.ri.y, contactEq.bi.position.z + contactEq.ri.z);
     projectile.projectile.impact = {
         position,

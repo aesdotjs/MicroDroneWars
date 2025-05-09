@@ -12,6 +12,71 @@ export function createPhysicsWorldSystem() {
     world.defaultContactMaterial.friction = 0.3;
     world.defaultContactMaterial.restitution = 0.3;
 
+    // Add postStep event listener for projectile raycasting
+    world.addEventListener('postStep', () => {
+        // Find all projectiles
+        const projectiles = ecsWorld.with("projectile", "transform", "physics");
+        for (const projectile of projectiles) {
+            if (!projectile.physics?.body || !projectile.transform) continue;
+
+            // Get current position and velocity
+            const position = projectile.physics.body.position;
+            const velocity = projectile.physics.body.velocity.scale(1/60);
+            
+            // Skip if velocity is too small
+            if (velocity.lengthSquared() < 0.01) continue;
+
+            // Calculate end position by adding velocity to current position
+            const toPosition = new CANNON.Vec3();
+            toPosition.copy(position);
+            toPosition.vadd(velocity, toPosition);
+
+            // Create ray from current position to end position
+            const ray = new CANNON.Ray(
+                position,
+                toPosition
+            );
+            
+            // Set ray properties
+            ray.mode = CANNON.Ray.CLOSEST;
+            ray.skipBackfaces = true;
+            ray.checkCollisionResponse = true;
+
+            // Cast ray
+            const result = new CANNON.RaycastResult();
+            ray.intersectWorld(world, {
+                result: result,
+                collisionFilterMask: collisionMasks.Projectile
+            });
+
+            // If we hit something, set the impact component
+            if (result.hasHit) {
+                const hitPoint = new Vector3(
+                    result.hitPointWorld.x,
+                    result.hitPointWorld.y,
+                    result.hitPointWorld.z
+                );
+                const hitNormal = new Vector3(
+                    -result.hitNormalWorld.x,
+                    -result.hitNormalWorld.y,
+                    -result.hitNormalWorld.z
+                );
+                // Find the hit entity
+                const hitBody = result.body;
+                const hitEntity = ecsWorld.entities.find(e => e.physics?.body?.id === hitBody?.id);
+                if (hitEntity) {
+                    projectile.projectile!.impact = {
+                        position: hitPoint,
+                        normal: hitNormal,
+                        impactVelocity: velocity.length(),
+                        targetId: hitEntity.id,
+                        targetType: hitEntity.type || ""
+                    };
+                }
+            }
+        }
+    });
+
     const environmentMaterial = new CANNON.Material('environmentMaterial');
     const vehicleMaterial = new CANNON.Material('vehicleMaterial');
     const projectileMaterial = new CANNON.Material('projectileMaterial');
@@ -430,12 +495,13 @@ export function createPhysicsWorldSystem() {
                 collisionFilterMask: collisionMasks.Projectile,
                 type: CANNON.Body.DYNAMIC
             });
+            
 
             // Add collision shape based on projectile type
             if (weapon.projectileType === ProjectileType.Bullet) {
-                body.addShape(new CANNON.Box(new CANNON.Vec3(0.05, 0.05, 0.1)));
+                body.addShape(new CANNON.Sphere(0.1));
             } else if (weapon.projectileType === ProjectileType.Missile) {
-                body.addShape(new CANNON.Box(new CANNON.Vec3(0.1, 0.05, 0.1)));
+                body.addShape(new CANNON.Sphere(0.1));
             }
             
             // Add body to CANNON world

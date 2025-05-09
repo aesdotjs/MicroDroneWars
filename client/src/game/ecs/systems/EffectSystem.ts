@@ -1,4 +1,4 @@
-import { Scene, Vector3, Mesh, StandardMaterial, Color3, Color4, ParticleSystem, Texture, MeshBuilder, Quaternion, TrailMesh } from '@babylonjs/core';
+import { Scene, Vector3, Mesh, StandardMaterial, Color3, Color4, ParticleSystem, Texture, MeshBuilder, Quaternion, TrailMesh, MeshUVSpaceRenderer, PBRMaterial, AbstractMesh } from '@babylonjs/core';
 import { world as ecsWorld } from '@shared/ecs/world';
 import { GameEntity, ProjectileType } from '@shared/ecs/types';
 
@@ -18,6 +18,23 @@ export function createEffectSystem(scene: Scene) {
     muzzleFlashMaterial.useAlphaFromDiffuseTexture = true;
     muzzleFlashMaterial.backFaceCulling = false;
     muzzleFlashMaterial.separateCullingPass = true;
+
+    // Preload explosion and smoke textures
+    const explosionTextures: Texture[] = [];
+    const smokeTextures: Texture[] = [];
+    const sparkleTexture = new Texture('assets/textures/sparkle.png', scene);
+
+    // Load explosion textures
+    for (let i = 0; i <= 8; i++) {
+        const index = i.toString().padStart(2, '0');
+        explosionTextures.push(new Texture(`assets/textures/explosion/explosion${index}.png`, scene));
+    }
+
+    // Load smoke textures
+    for (let i = 1; i <= 5; i++) {
+        const index = i.toString().padStart(2, '0');
+        smokeTextures.push(new Texture(`assets/textures/smoke/blackSmoke${index}.png`, scene));
+    }
 
     const bulletMaterial = new StandardMaterial('bulletMaterial', scene);
     bulletMaterial.emissiveColor = new Color3(1, 1, 0.3);
@@ -51,6 +68,10 @@ export function createEffectSystem(scene: Scene) {
     const impactMaterial = new StandardMaterial('impactMaterial', scene);
     impactMaterial.emissiveColor = new Color3(1, 0.3, 0.1);
     impactMaterial.alpha = 0.8;
+
+    // Preload bullet hole texture
+    const bulletHoleTexture = new Texture('assets/textures/bulletHole1.png', scene);
+    const decalSize = new Vector3(0.25 * 0.2, 0.25 * 0.2, 1 * 0.2);
 
     // Active effects
     const activeMuzzleFlashes = new Map<string, Mesh>();
@@ -184,7 +205,7 @@ export function createEffectSystem(scene: Scene) {
     ): void {
         const particleCount = type === ProjectileType.Missile ? 20 : 10;
         const impact = new ParticleSystem('impact', particleCount, scene);
-        
+        console.log(position);
         // Offset position slightly along normal to prevent clipping
         const offsetAmount = 0.05; // Small offset in meters
         const offsetPosition = position.clone().add(normal.scale(offsetAmount));
@@ -203,17 +224,13 @@ export function createEffectSystem(scene: Scene) {
         impact.maxEmitBox = new Vector3(emissionSize, emissionSize, emissionSize);
 
         if (type === ProjectileType.Missile) {
-            // Create static explosion sprite
-            const explosionIndex = Math.floor(Math.random() * 9).toString().padStart(2, '0');
-            const explosionTexture = new Texture(`assets/textures/explosion/explosion${explosionIndex}.png`, scene);
-            
-            // Create smoke particle system
-            const smokeIndex = Math.floor(Math.random() * 5 + 1).toString().padStart(2, '0');
-            const smokeTexture = new Texture(`assets/textures/smoke/blackSmoke${smokeIndex}.png`, scene);
+            // Pick random textures from preloaded arrays
+            const explosionTexture = explosionTextures[Math.floor(Math.random() * explosionTextures.length)];
+            const smokeTexture = smokeTextures[Math.floor(Math.random() * smokeTextures.length)];
             
             // Set up explosion sprite
             const explosionSprite = MeshBuilder.CreatePlane('explosion', { size: 2.0 }, scene);
-            explosionSprite.position = offsetPosition; // Use the same offset position
+            explosionSprite.position = offsetPosition;
             explosionSprite.billboardMode = Mesh.BILLBOARDMODE_ALL;
             explosionSprite.rotation.y = Math.PI;
             
@@ -242,7 +259,7 @@ export function createEffectSystem(scene: Scene) {
             impact.minSize = 0.5;
             impact.maxSize = 1.0;
             impact.minLifeTime = 0.3;
-            impact.maxLifeTime = 1.5;
+            impact.maxLifeTime = 1;
             impact.emitRate = 0; // No continuous emission
             impact.manualEmitCount = particleCount; // Emit all particles at once
             impact.minEmitPower = 3;
@@ -267,7 +284,6 @@ export function createEffectSystem(scene: Scene) {
 
         } else {
             // Bullet sparkle effect
-            const sparkleTexture = new Texture('assets/textures/sparkle.png', scene);
             impact.particleTexture = sparkleTexture;
             impact.isBillboardBased = true;
             impact.billboardMode = ParticleSystem.BILLBOARDMODE_ALL;
@@ -278,8 +294,8 @@ export function createEffectSystem(scene: Scene) {
             impact.colorDead = new Color4(0.2, 0.1, 0.1, 0);
             impact.minSize = 0.05;
             impact.maxSize = 0.1;
-            impact.minLifeTime = 1.2;
-            impact.maxLifeTime = 1.5;
+            impact.minLifeTime = 0.5;
+            impact.maxLifeTime = 1;
             impact.emitRate = 0; // No continuous emission
             impact.manualEmitCount = particleCount; // Emit all particles at once
             impact.minEmitPower = 3;
@@ -303,25 +319,50 @@ export function createEffectSystem(scene: Scene) {
         impact.addVelocityGradient(0.7, 0.4, 0.5);
         impact.addVelocityGradient(1, 0.1, 0.2);
 
-        // Auto-remove when all particles are dead
-        const checkInterval = setInterval(() => {
-            if (impact.particles.length === 0) {
-                clearInterval(checkInterval);
-                removeImpactParticle(impactId);
-            }
-        }, 100);
-
+        setTimeout(() => {
+            removeImpactParticle(impactId);
+        }, 1500);
         impact.start();
+    }
+
+    function createImpactDecal(
+        position: Vector3,
+        normal: Vector3,
+        targetMesh: Mesh
+    ): void {
+        // Calculate random rotation for variety
+        const angle = Math.random() * Math.PI * 2;
+        console.log('createImpactDecal', targetMesh);
+        // Create the decal
+        targetMesh.decalMap!.renderTexture(
+            bulletHoleTexture,
+            position,
+            normal,
+            decalSize,
+            angle
+        );
     }
 
     function createImpactEffects(entity: GameEntity): void {
         const impactId = `impact_${entity.id}`;
+        const impact = entity.projectile!.impact!;
+        
+        // Create particle effects
         createImpactParticle(
-            entity.projectile!.impact!.position,
-            entity.projectile!.impact!.normal,
+            impact.position,
+            impact.normal,
             impactId,
             entity.projectile!.projectileType
         );
+        // Create decal if we have a valid target mesh (decal map not working, hard to get the correct mesh)
+        // const targetEntity = ecsWorld.entities.find(entity => entity.id === impact.targetId);
+        // if (targetEntity?.render?.mesh) {
+        //     createImpactDecal(
+        //         impact.position,
+        //         impact.normal,
+        //         targetEntity.render.mesh
+        //     );
+        // }
     }
 
     // Remove effects
@@ -354,7 +395,7 @@ export function createEffectSystem(scene: Scene) {
         const impact = activeImpactParticles.get(impactId);
         if (impact) {
             impact.stop();
-            impact.dispose();
+            impact.dispose(false);
             activeImpactParticles.delete(impactId);
         }
     }
