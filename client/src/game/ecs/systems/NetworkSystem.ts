@@ -1,5 +1,5 @@
 import { Room } from 'colyseus.js';
-import { State, EntitySchema, WeaponSchema } from '@shared/schemas';
+import { State, EntitySchema, WeaponSchema, TransformSchema, GameStateSchema, TickSchema, OwnerSchema, AssetSchema, VehicleSchema, ProjectileSchema } from '@shared/schemas';
 import { world as ecsWorld } from '@shared/ecs/world';
 import { Vector3, Quaternion, Scene } from '@babylonjs/core';
 import { GameEntity, TransformBuffer, EntityType, VehicleType, ProjectileType } from '@shared/ecs/types';
@@ -199,23 +199,6 @@ export function createNetworkSystem(
         } else { // Entity already exists in ECS world (most likely a projectile)
             const gameEntity = ecsWorld.entities.find(e => e.id === id);
             if (gameEntity) {
-                // if (gameEntity.transform) {
-                //     const transformBuffer: TransformBuffer = {
-                //         transform: {
-                //             position: gameEntity.transform!.position,
-                //             rotation: gameEntity.transform!.rotation,
-                //             velocity: gameEntity.transform!.velocity,
-                //             angularVelocity: gameEntity.transform!.angularVelocity
-                //         },
-                //         tick: {
-                //             tick: gameEntity.tick!.tick,
-                //             timestamp: gameEntity.tick!.timestamp,
-                //             lastProcessedInputTimestamp: gameEntity.tick!.lastProcessedInputTimestamp,
-                //             lastProcessedInputTick: gameEntity.tick!.lastProcessedInputTick
-                //         }
-                //     };
-                //     networkPredictionSystem.addEntityState(id, transformBuffer);
-                // }
                 if (newEntity.vehicle) {
                     gameEntity.vehicle!.weapons = newEntity.vehicle!.weapons;
                     gameEntity.vehicle!.activeWeaponIndex = newEntity.vehicle!.activeWeaponIndex;
@@ -269,9 +252,43 @@ export function createNetworkSystem(
 
         // Set up state change handlers
         // Transform changes
-        if (entity.transform && entity.tick) {
-            $(entity.transform).onChange(() => {
-                if(!gameEntity) return;
+        // if (entity.transform && entity.tick) {
+        //     $(entity.transform).onChange(() => {
+        //         if(!gameEntity) return;
+        //         const transformBuffer: TransformBuffer = {
+        //             transform: {
+        //                 position: new Vector3(entity.transform!.positionX, entity.transform!.positionY, entity.transform!.positionZ),
+        //                 rotation: new Quaternion(entity.transform!.quaternionX, entity.transform!.quaternionY, entity.transform!.quaternionZ, entity.transform!.quaternionW),
+        //                 velocity: new Vector3(entity.transform!.linearVelocityX, entity.transform!.linearVelocityY, entity.transform!.linearVelocityZ),
+        //                 angularVelocity: new Vector3(entity.transform!.angularVelocityX, entity.transform!.angularVelocityY, entity.transform!.angularVelocityZ)
+        //             },
+        //             tick: {
+        //                 tick: entity.tick!.tick,
+        //                 timestamp: entity.tick!.timestamp,
+        //                 lastProcessedInputTimestamp: entity.tick!.lastProcessedInputTimestamp,
+        //                 lastProcessedInputTick: entity.tick!.lastProcessedInputTick
+        //             }
+        //         };
+
+        //         // Store server transform for debug visualization
+        //         if (debugMode) {
+        //             gameEntity.serverTransform = {
+        //                 position: new Vector3(entity.transform!.positionX, entity.transform!.positionY, entity.transform!.positionZ),
+        //                 rotation: new Quaternion(entity.transform!.quaternionX, entity.transform!.quaternionY, entity.transform!.quaternionZ, entity.transform!.quaternionW),
+        //                 velocity: new Vector3(entity.transform!.linearVelocityX, entity.transform!.linearVelocityY, entity.transform!.linearVelocityZ),
+        //                 angularVelocity: new Vector3(entity.transform!.angularVelocityX, entity.transform!.angularVelocityY, entity.transform!.angularVelocityZ)
+        //             };
+        //         }
+        //         if (entity?.tick?.tick !== physicsWorldSystem.getCurrentTick()) {
+        //             physicsWorldSystem.setCurrentTick(entity.tick!.tick);
+        //         }
+        //         networkPredictionSystem.addEntityState(id, transformBuffer);    
+        //         ecsWorld.reindex(gameEntity);
+        //     });
+        // }
+        $(entity).listen("transform", (transform: TransformSchema | undefined) => {
+            if(!gameEntity || !transform) return;
+            $(transform).onChange(() => {
                 const transformBuffer: TransformBuffer = {
                     transform: {
                         position: new Vector3(entity.transform!.positionX, entity.transform!.positionY, entity.transform!.positionZ),
@@ -300,68 +317,135 @@ export function createNetworkSystem(
                     physicsWorldSystem.setCurrentTick(entity.tick!.tick);
                 }
                 networkPredictionSystem.addEntityState(id, transformBuffer);    
-                ecsWorld.reindex(gameEntity);
             });
-        }
+            ecsWorld.reindex(gameEntity);
+        });
 
         // Game state changes
-        if (entity.gameState) {
-            $(entity.gameState).onChange(() => {
-                if(!gameEntity) return;
-                gameEntity.gameState!.health = entity.gameState!.health;
-                gameEntity.gameState!.maxHealth = entity.gameState!.maxHealth;
-                gameEntity.gameState!.hasFlag = entity.gameState!.hasFlag;
-                gameEntity.gameState!.carryingFlag = entity.gameState!.carryingFlag;
-                gameEntity.gameState!.carriedBy = entity.gameState!.carriedBy;
-                gameEntity.gameState!.atBase = entity.gameState!.atBase;
-                gameEntity.gameState!.team = entity.gameState!.team;
-                ecsWorld.reindex(gameEntity);
+        // if (entity.gameState) {
+        //     $(entity.gameState).onChange(() => {
+        //         if(!gameEntity) return;
+        //         gameEntity.gameState!.health = entity.gameState!.health;
+        //         gameEntity.gameState!.maxHealth = entity.gameState!.maxHealth;
+        //         gameEntity.gameState!.hasFlag = entity.gameState!.hasFlag;
+        //         gameEntity.gameState!.carryingFlag = entity.gameState!.carryingFlag;
+        //         gameEntity.gameState!.carriedBy = entity.gameState!.carriedBy;
+        //         gameEntity.gameState!.atBase = entity.gameState!.atBase;
+        //         gameEntity.gameState!.team = entity.gameState!.team;
+        //         ecsWorld.reindex(gameEntity);
+        //     });
+        // }
+        $(entity).listen("gameState", (gameState: GameStateSchema | undefined) => {
+            if(!gameEntity || !gameState) return;
+            $(gameState).onChange(() => {
+                gameEntity.gameState!.health = gameState!.health;
+                gameEntity.gameState!.maxHealth = gameState!.maxHealth;
+                gameEntity.gameState!.hasFlag = gameState!.hasFlag;
+                gameEntity.gameState!.carryingFlag = gameState!.carryingFlag;
+                gameEntity.gameState!.carriedBy = gameState!.carriedBy;
+                gameEntity.gameState!.atBase = gameState!.atBase;
+                gameEntity.gameState!.team = gameState!.team;
             });
-        }
+            ecsWorld.reindex(gameEntity);
+        });
 
         // Tick changes
-        if (entity.tick) {
-            $(entity.tick).onChange(() => {
-                if(!gameEntity) return;
-                gameEntity.tick!.tick = entity.tick!.tick;
-                gameEntity.tick!.timestamp = entity.tick!.timestamp;
-                gameEntity.tick!.lastProcessedInputTimestamp = entity.tick!.lastProcessedInputTimestamp;
-                gameEntity.tick!.lastProcessedInputTick = entity.tick!.lastProcessedInputTick;
-                // ecsWorld.reindex(gameEntity);
+        // if (entity.tick) {
+        //     $(entity.tick).onChange(() => {
+        //         if(!gameEntity) return;
+        //         gameEntity.tick!.tick = entity.tick!.tick;
+        //         gameEntity.tick!.timestamp = entity.tick!.timestamp;
+        //         gameEntity.tick!.lastProcessedInputTimestamp = entity.tick!.lastProcessedInputTimestamp;
+        //         gameEntity.tick!.lastProcessedInputTick = entity.tick!.lastProcessedInputTick;
+        //         // ecsWorld.reindex(gameEntity);
+        //     });
+        // }
+        $(entity).listen("tick", (tick: TickSchema | undefined) => {
+            if(!gameEntity || !tick) return;
+            $(tick).onChange(() => {
+                gameEntity.tick!.tick = tick!.tick;
+                gameEntity.tick!.timestamp = tick!.timestamp;
+                gameEntity.tick!.lastProcessedInputTimestamp = tick!.lastProcessedInputTimestamp;
+                gameEntity.tick!.lastProcessedInputTick = tick!.lastProcessedInputTick;
             });
-        }
+            ecsWorld.reindex(gameEntity);
+        });
+        
 
         // Owner changes
-        if (entity.owner) {
-            $(entity.owner).onChange(() => {
-                if (!gameEntity || !entity.owner?.id) return;
-                gameEntity.owner!.id = entity.owner.id;
-                gameEntity.owner!.isLocal = room.sessionId === entity.owner.id;
-                ecsWorld.reindex(gameEntity);
+        // if (entity.owner) {
+        //     $(entity.owner).onChange(() => {
+        //         if (!gameEntity || !entity.owner?.id) return;
+        //         gameEntity.owner!.id = entity.owner.id;
+        //         gameEntity.owner!.isLocal = room.sessionId === entity.owner.id;
+        //         ecsWorld.reindex(gameEntity);
+        //     });
+        // }
+        $(entity).listen("owner", (owner: OwnerSchema | undefined) => {
+            if(!gameEntity || !owner) return;
+            $(owner).onChange(() => {
+                gameEntity.owner!.id = owner!.id;
+                gameEntity.owner!.isLocal = room.sessionId === owner!.id;
             });
-        }
+            ecsWorld.reindex(gameEntity);
+        });
 
         // Asset changes
-        if (entity.asset) {
-            $(entity.asset).onChange(() => {
-                if (!gameEntity || !entity.asset?.assetPath) return;
-                gameEntity.asset!.assetPath = entity.asset.assetPath;
-                gameEntity.asset!.assetType = entity.asset.assetType;
-                gameEntity.asset!.scale = entity.asset.scale;
-                ecsWorld.reindex(gameEntity);
+        // if (entity.asset) {
+        //     $(entity.asset).onChange(() => {
+        //         if (!gameEntity || !entity.asset?.assetPath) return;
+        //         gameEntity.asset!.assetPath = entity.asset.assetPath;
+        //         gameEntity.asset!.assetType = entity.asset.assetType;
+        //         gameEntity.asset!.scale = entity.asset.scale;
+        //         ecsWorld.reindex(gameEntity);
+        //     });
+        // }
+        $(entity).listen("asset", (asset: AssetSchema | undefined) => {
+            if(!gameEntity || !asset) return;
+            $(asset).onChange(() => {
+                gameEntity.asset!.assetPath = asset!.assetPath;
+                gameEntity.asset!.assetType = asset!.assetType;
+                gameEntity.asset!.scale = asset!.scale;
             });
-        }
+            ecsWorld.reindex(gameEntity);
+        });
 
         // Vehicle changes
-        if (entity.vehicle) {
-            // Weapon changes
-            $(entity.vehicle).onChange(() => {
-                if (!gameEntity) return;
+        // if (entity.vehicle) {
+        //     // Weapon changes
+        //     $(entity.vehicle).onChange(() => {
+        //         if (!gameEntity) return;
 
-                gameEntity.vehicle!.vehicleType = entity.vehicle!.vehicleType as VehicleType;
-                gameEntity.vehicle!.activeWeaponIndex = entity.vehicle!.activeWeaponIndex;
-                if (entity.vehicle?.weapons) {
-                    $(entity.vehicle).weapons.onChange((weapon: WeaponSchema, index: number) => {
+        //         gameEntity.vehicle!.vehicleType = entity.vehicle!.vehicleType as VehicleType;
+        //         gameEntity.vehicle!.activeWeaponIndex = entity.vehicle!.activeWeaponIndex;
+        //         if (entity.vehicle?.weapons) {
+        //             $(entity.vehicle).weapons.onChange((weapon: WeaponSchema, index: number) => {
+        //                 if (!weapon?.name) return;
+        //                 gameEntity.vehicle!.weapons[index] = {
+        //                     id: index.toString(),
+        //                     name: weapon.name,
+        //                     projectileType: weapon.projectileType as ProjectileType,
+        //                     damage: weapon.damage,
+        //                     minFireRate: weapon.minFireRate,
+        //                     maxFireRate: weapon.maxFireRate,
+        //                     heatPerShot: weapon.heatPerShot,
+        //                     heatDissipationRate: weapon.heatDissipationRate,
+        //                     projectileSpeed: weapon.projectileSpeed,
+        //                     range: weapon.range,
+        //                 }
+        //                 ecsWorld.reindex(gameEntity);
+        //             });
+        //         }
+        //         ecsWorld.reindex(gameEntity);
+        //     });
+        // }
+        $(entity).listen("vehicle", (vehicle: VehicleSchema | undefined) => {
+            if(!gameEntity || !vehicle) return;
+            $(vehicle).onChange(() => {
+                gameEntity.vehicle!.vehicleType = vehicle!.vehicleType as VehicleType;
+                gameEntity.vehicle!.activeWeaponIndex = vehicle!.activeWeaponIndex;
+                if (vehicle?.weapons) {
+                    $(vehicle).weapons.onChange((weapon: WeaponSchema, index: number) => {
                         if (!weapon?.name) return;
                         gameEntity.vehicle!.weapons[index] = {
                             id: index.toString(),
@@ -378,31 +462,52 @@ export function createNetworkSystem(
                         ecsWorld.reindex(gameEntity);
                     });
                 }
-                ecsWorld.reindex(gameEntity);
             });
-        }
+            ecsWorld.reindex(gameEntity);
+        });
 
         // Projectile changes
-        if (entity.projectile) {
-            $(entity.projectile).onChange(() => {
-                if (!gameEntity) return;
-                gameEntity.projectile!.damage = entity.projectile!.damage;
-                gameEntity.projectile!.range = entity.projectile!.range;
-                gameEntity.projectile!.distanceTraveled = entity.projectile!.distanceTraveled;
-                gameEntity.projectile!.sourceId = entity.projectile!.sourceId;
-                gameEntity.projectile!.speed = entity.projectile!.speed;
-                if (entity.projectile?.impact) {
+        // if (entity.projectile) {
+        //     $(entity.projectile).onChange(() => {
+        //         if (!gameEntity) return;
+        //         gameEntity.projectile!.damage = entity.projectile!.damage;
+        //         gameEntity.projectile!.range = entity.projectile!.range;
+        //         gameEntity.projectile!.distanceTraveled = entity.projectile!.distanceTraveled;
+        //         gameEntity.projectile!.sourceId = entity.projectile!.sourceId;
+        //         gameEntity.projectile!.speed = entity.projectile!.speed;
+        //         if (entity.projectile?.impact) {
+        //             gameEntity.projectile!.impact = {
+        //                 position: new Vector3(entity.projectile!.impact!.positionX, entity.projectile!.impact!.positionY, entity.projectile!.impact!.positionZ),
+        //                 normal: new Vector3(entity.projectile!.impact!.normalX, entity.projectile!.impact!.normalY, entity.projectile!.impact!.normalZ),
+        //                 impactVelocity: entity.projectile!.impact!.impactVelocity,
+        //                 targetId: entity.projectile!.impact!.targetId,
+        //                 targetType: entity.projectile!.impact!.targetType
+        //             }
+        //         }
+        //         ecsWorld.reindex(gameEntity);
+        //     });
+        // }
+        $(entity).listen("projectile", (projectile: ProjectileSchema | undefined) => {
+            if(!gameEntity || !projectile) return;
+            $(projectile).onChange(() => {
+                gameEntity.projectile!.damage = projectile!.damage;
+                gameEntity.projectile!.range = projectile!.range;
+                gameEntity.projectile!.distanceTraveled = projectile!.distanceTraveled;
+                gameEntity.projectile!.sourceId = projectile!.sourceId;
+                gameEntity.projectile!.speed = projectile!.speed;
+                if (projectile?.impact) {
                     gameEntity.projectile!.impact = {
-                        position: new Vector3(entity.projectile!.impact!.positionX, entity.projectile!.impact!.positionY, entity.projectile!.impact!.positionZ),
-                        normal: new Vector3(entity.projectile!.impact!.normalX, entity.projectile!.impact!.normalY, entity.projectile!.impact!.normalZ),
-                        impactVelocity: entity.projectile!.impact!.impactVelocity,
-                        targetId: entity.projectile!.impact!.targetId,
-                        targetType: entity.projectile!.impact!.targetType
+                        position: new Vector3(projectile.impact.positionX, projectile.impact.positionY, projectile.impact.positionZ),
+                        normal: new Vector3(projectile.impact.normalX, projectile.impact.normalY, projectile.impact.normalZ),
+                        impactVelocity: projectile.impact.impactVelocity,
+                        targetId: projectile.impact.targetId,
+                        targetType: projectile.impact.targetType
                     }
                 }
-                ecsWorld.reindex(gameEntity);
             });
-        }
+            ecsWorld.reindex(gameEntity);
+        });
+        log('entities count', ecsWorld.entities.length);
     });
     
     

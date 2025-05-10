@@ -85,7 +85,6 @@ export function createDroneSystem(
                 body.angularVelocity.y *= 0.95;
                 body.angularVelocity.z *= 0.95;
 
-                physicsWorldSystem.applyBodyTransform(entity, body);
             }
         },
         applyInput: (dt: number, entity: GameEntity, input: InputComponent) => {
@@ -192,7 +191,6 @@ export function createDroneSystem(
                 body.quaternion = combinedQuat.mult(body.quaternion);
             }
 
-            physicsWorldSystem.applyBodyTransform(entity, body);
         }
     };
 }
@@ -313,7 +311,6 @@ export function createPlaneSystem(
                 body.angularVelocity.y *= 0.95;
                 body.angularVelocity.z *= 0.95;
 
-                physicsWorldSystem.applyBodyTransform(entity, body);
             }
         },
         applyInput: (dt: number, entity: GameEntity, input: InputComponent) => {
@@ -406,7 +403,6 @@ export function createPlaneSystem(
                 body.angularVelocity.z += right.z * pitchAmount;
             }
 
-            physicsWorldSystem.applyBodyTransform(entity, body);
         }
     };
 }

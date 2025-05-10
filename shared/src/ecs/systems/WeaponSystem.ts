@@ -74,8 +74,8 @@ export function createWeaponSystem(
                         bulletCounters.set(entity.id, count);
                         projectileId = count;
                     }
-
-                    const projectile = physicsWorldSystem.createProjectile(entity, activeWeapon, `${entity.id}_${projectileId}`);
+                    const aimPoint = new Vector3(input.aimPointX, input.aimPointY, input.aimPointZ);
+                    const projectile = physicsWorldSystem.createProjectile(entity, activeWeapon, `${entity.id}_${projectileId}`, aimPoint);
                     // Add to ECS world
                     ecsWorld.add(projectile);
                     

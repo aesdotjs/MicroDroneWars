@@ -247,6 +247,11 @@ export interface InputComponent {
     /** Mouse movement delta */
     mouseDelta: { x: number; y: number };
 
+    /** Aim point */
+    aimPointX: number;
+    aimPointY: number;
+    aimPointZ: number;
+
     /** Filled in by the physics/network systems */
     tick: number;
     timestamp: number;

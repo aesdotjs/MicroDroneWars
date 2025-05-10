@@ -294,7 +294,7 @@ export function createEffectSystem(scene: Scene) {
                     sprite.dispose();
                     activeImpactSprites.delete(impactId);
                 }
-            }, 300);
+            }, 150);
 
         } else {
             // Bullet sparkle effect

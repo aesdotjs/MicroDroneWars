@@ -26,9 +26,6 @@ export function createProjectileSystem(
                     ecsWorld.remove(entity);
                     continue;
                 }
-                if (entity.physics?.body) {
-                    physicsWorldSystem.applyBodyTransform(entity, entity.physics.body);  
-                }
                 // Update distance traveled
                 const distance = entity.transform!.velocity.length() * dt;
                 entity.projectile!.distanceTraveled += distance;

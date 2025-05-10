@@ -195,6 +195,25 @@ export function createPhysicsWorldSystem() {
 
     // Map to track which bodies belong to which entities
     const entityBodies = new Map<string, CANNON.Body>();
+    const physicsEntities = ecsWorld.with("physics", "transform");
+
+    const applyBodyTransform = (entity: GameEntity) => {
+            const body = entity.physics?.body;
+            if (!body) return;
+            entity.transform!.position.x = body.position.x;
+            entity.transform!.position.y = body.position.y;
+            entity.transform!.position.z = body.position.z;
+            entity.transform!.rotation.x = body.quaternion.x;
+            entity.transform!.rotation.y = body.quaternion.y;
+            entity.transform!.rotation.z = body.quaternion.z;
+            entity.transform!.rotation.w = body.quaternion.w;
+            entity.transform!.velocity.x = body.velocity.x;
+            entity.transform!.velocity.y = body.velocity.y;
+            entity.transform!.velocity.z = body.velocity.z;
+            entity.transform!.angularVelocity.x = body.angularVelocity.x;
+            entity.transform!.angularVelocity.y = body.angularVelocity.y;
+            entity.transform!.angularVelocity.z = body.angularVelocity.z;
+    }
 
     return {
         getWorld: () => world,
@@ -230,6 +249,10 @@ export function createPhysicsWorldSystem() {
         update: (deltaTime: number) => {
             world.step(TIME_STEP, deltaTime, MAX_SUB_STEPS);
             currentTick++;
+            for (const entity of physicsEntities) {
+                if (!entity.physics?.body || !entity.transform) continue;
+                applyBodyTransform(entity);
+            }
         },
 
         dispose: () => {
@@ -437,7 +460,8 @@ export function createPhysicsWorldSystem() {
         createProjectile(
             shooter: GameEntity, 
             weapon: WeaponComponent,
-            projectileId: string
+            projectileId: string,
+            aimPoint: Vector3
         ): GameEntity {
             const weaponTrigger = shooter?.asset?.triggerMeshes?.find(mesh => 'missile' === mesh.metadata?.gltf?.extras?.type);
             let spawnPointPosition: Vector3;
@@ -465,16 +489,18 @@ export function createPhysicsWorldSystem() {
                 spawnPointRotation = shooter.transform!.rotation;
             }
 
-            const forward = new Vector3(0, 0, 1);
-            forward.rotateByQuaternionAroundPointToRef(
-                spawnPointRotation,
-                Vector3.Zero(),
-                forward
-            );
+            // Calculate direction from spawn point to aim point
+            const direction = aimPoint.subtract(spawnPointPosition).normalize();
 
             // Calculate projectile velocity by combining shooter velocity and projectile speed
-            const projectileVelocity = forward.scale(weapon.projectileSpeed);
-            projectileVelocity.addInPlace(shooter.transform!.velocity);
+            const projectileVelocity = direction.scale(weapon.projectileSpeed);
+            
+            // For missiles, only inherit 75% of the vehicle's velocity
+            if (weapon.projectileType === ProjectileType.Missile) {
+                projectileVelocity.addInPlace(shooter.transform!.velocity.scale(0.75));
+            } else {
+                projectileVelocity.addInPlace(shooter.transform!.velocity);
+            }
 
             // Create projectile body
             const body = new CANNON.Body({
@@ -558,21 +584,7 @@ export function createPhysicsWorldSystem() {
                 }
             };
         },
-        applyBodyTransform(entity: GameEntity, body: CANNON.Body) {
-            entity.transform!.position.x = body.position.x;
-            entity.transform!.position.y = body.position.y;
-            entity.transform!.position.z = body.position.z;
-            entity.transform!.rotation.x = body.quaternion.x;
-            entity.transform!.rotation.y = body.quaternion.y;
-            entity.transform!.rotation.z = body.quaternion.z;
-            entity.transform!.rotation.w = body.quaternion.w;
-            entity.transform!.velocity.x = body.velocity.x;
-            entity.transform!.velocity.y = body.velocity.y;
-            entity.transform!.velocity.z = body.velocity.z;
-            entity.transform!.angularVelocity.x = body.angularVelocity.x;
-            entity.transform!.angularVelocity.y = body.angularVelocity.y;
-            entity.transform!.angularVelocity.z = body.angularVelocity.z;
-        },
+        applyBodyTransform,
         applyMissileImpact(entity: GameEntity) {
             if (!entity.projectile?.impact) return;
 

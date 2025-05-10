@@ -85,7 +85,6 @@ export function createNetworkPredictionSystem(
             if (buffer.length < 2 || id === playerEntity?.id) return;
             const entity = ecsWorld.entities.find(e => e.id === id);
             if (!entity || !entity.transform) return;
-
             // Sort buffer by timestamp to ensure correct order
             buffer.sort((a, b) => a.tick.timestamp - b.tick.timestamp);
 
@@ -273,6 +272,7 @@ export function createNetworkPredictionSystem(
                 for (const input of unprocessedInputs) {
                     physicsSystem.applyInput(1/60, entity, input);
                 }
+                physicsWorldSystem.applyBodyTransform(entity);
                 pendingInputs = unprocessedInputs;
             } else {
                 // Buffer remote states for interpolation
@@ -290,7 +290,7 @@ export function createNetworkPredictionSystem(
         addInput: (dt: number, input: InputComponent, isIdle: boolean, currentTick: number) => {
             // const currentTick = physicsWorldSystem.getCurrentTick();
             const playerEntity = ecsWorld.with("physics", "vehicle", "transform", "owner").where(({owner}) => owner?.isLocal).entities[0];
-            // Create final input with timestamp and tick
+            // Create final input
             const finalInput: InputComponent = {
                 ...input,
                 // timestamp: Date.now(),
@@ -307,6 +307,10 @@ export function createNetworkPredictionSystem(
             // Update local player immediately
             let projectileId: number | undefined;
             if (playerEntity) {
+                const aimPoint = sceneSystem.getAimPoint();
+                finalInput.aimPointX = aimPoint.x;
+                finalInput.aimPointY = aimPoint.y;
+                finalInput.aimPointZ = aimPoint.z;
                 physicsSystem.applyInput(dt, playerEntity, finalInput);
                 // Always update weapon system if entity has weapons
                 if (playerEntity.vehicle?.weapons) {

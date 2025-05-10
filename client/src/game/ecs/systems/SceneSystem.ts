@@ -66,6 +66,14 @@ export function createSceneSystem(engine: Engine) {
         getShadowGenerator: () => shadowGenerator,
         getGlowLayer: () => glowLayer,
         getEffectSystem: () => effectSystem,
+        getAimPoint: () => {
+            const x = engine.getRenderWidth() / 2;
+            const y = engine.getRenderHeight() / 2;
+            const pick = scene.pick(x, y);
+            return pick.hit
+                ? pick.pickedPoint!
+                : camera.getForwardRay(1000).origin.add(camera.getForwardRay(1000).direction.scale(1000));
+        },
         update: (dt: number) => {
             effectSystem.update();
             // Update entity positions and rotations
@@ -93,9 +101,6 @@ export function createSceneSystem(engine: Engine) {
 
                 // Update position and rotation for all entities with meshes
                 if (entity.render?.mesh) {
-                    // if (entity.type === EntityType.Projectile) {
-                    //     console.log('mesh position z', entity.render.mesh.position.z, entity.transform.position.z, entity.render.mesh.name);
-                    // }
                     entity.render.mesh.position.copyFrom(entity.transform.position);
                     if (entity.transform.rotation) {
                         entity.render.mesh.rotationQuaternion = entity.transform.rotation;

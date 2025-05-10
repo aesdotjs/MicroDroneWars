@@ -1,6 +1,7 @@
 <template>
   <div class="game-container">
     <canvas id="renderCanvas"></canvas>
+    <GameHUD />
     <DebugPanel :expanded="debugPanelExpanded" @update:expanded="onUpdateDebugPanel" />
   </div>
 </template>
@@ -9,6 +10,7 @@
 import { onMounted, onBeforeUnmount, ref } from 'vue';
 import { Game } from '@/game/Game';
 import DebugPanel from './DebugPanel.vue';
+import GameHUD from './GameHUD.vue';
 
 let game: Game;
 let debugPanelExpanded = ref(false);

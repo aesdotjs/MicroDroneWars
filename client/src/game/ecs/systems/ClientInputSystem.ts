@@ -71,6 +71,10 @@ export function createClientInputSystem(canvas: HTMLCanvasElement) {
         zoomReleased: new KeyBinding(""),
         
         mouseDelta:   new KeyBinding(""),
+
+        aimPointX:      new KeyBinding(""),
+        aimPointY:      new KeyBinding(""),
+        aimPointZ:      new KeyBinding(""),
         tick:         new KeyBinding(""),
         timestamp:    new KeyBinding(""),
         projectileId: new KeyBinding(""),

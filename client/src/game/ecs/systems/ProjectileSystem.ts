@@ -25,9 +25,6 @@ export function createProjectileSystem(
                     ecsWorld.remove(entity);
                     continue;
                 }
-                if (entity.physics?.body) {
-                    physicsWorldSystem.applyBodyTransform(entity, entity.physics.body);  
-                }
             }
         }
     };
