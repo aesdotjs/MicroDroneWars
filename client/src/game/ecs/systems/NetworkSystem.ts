@@ -250,42 +250,6 @@ export function createNetworkSystem(
         }
         const gameEntity = ecsWorld.entities.find(e => e.id === id);
 
-        // Set up state change handlers
-        // Transform changes
-        // if (entity.transform && entity.tick) {
-        //     $(entity.transform).onChange(() => {
-        //         if(!gameEntity) return;
-        //         const transformBuffer: TransformBuffer = {
-        //             transform: {
-        //                 position: new Vector3(entity.transform!.positionX, entity.transform!.positionY, entity.transform!.positionZ),
-        //                 rotation: new Quaternion(entity.transform!.quaternionX, entity.transform!.quaternionY, entity.transform!.quaternionZ, entity.transform!.quaternionW),
-        //                 velocity: new Vector3(entity.transform!.linearVelocityX, entity.transform!.linearVelocityY, entity.transform!.linearVelocityZ),
-        //                 angularVelocity: new Vector3(entity.transform!.angularVelocityX, entity.transform!.angularVelocityY, entity.transform!.angularVelocityZ)
-        //             },
-        //             tick: {
-        //                 tick: entity.tick!.tick,
-        //                 timestamp: entity.tick!.timestamp,
-        //                 lastProcessedInputTimestamp: entity.tick!.lastProcessedInputTimestamp,
-        //                 lastProcessedInputTick: entity.tick!.lastProcessedInputTick
-        //             }
-        //         };
-
-        //         // Store server transform for debug visualization
-        //         if (debugMode) {
-        //             gameEntity.serverTransform = {
-        //                 position: new Vector3(entity.transform!.positionX, entity.transform!.positionY, entity.transform!.positionZ),
-        //                 rotation: new Quaternion(entity.transform!.quaternionX, entity.transform!.quaternionY, entity.transform!.quaternionZ, entity.transform!.quaternionW),
-        //                 velocity: new Vector3(entity.transform!.linearVelocityX, entity.transform!.linearVelocityY, entity.transform!.linearVelocityZ),
-        //                 angularVelocity: new Vector3(entity.transform!.angularVelocityX, entity.transform!.angularVelocityY, entity.transform!.angularVelocityZ)
-        //             };
-        //         }
-        //         if (entity?.tick?.tick !== physicsWorldSystem.getCurrentTick()) {
-        //             physicsWorldSystem.setCurrentTick(entity.tick!.tick);
-        //         }
-        //         networkPredictionSystem.addEntityState(id, transformBuffer);    
-        //         ecsWorld.reindex(gameEntity);
-        //     });
-        // }
         $(entity).listen("transform", (transform: TransformSchema | undefined) => {
             if(!gameEntity || !transform) return;
             $(transform).onChange(() => {
@@ -321,20 +285,6 @@ export function createNetworkSystem(
             ecsWorld.reindex(gameEntity);
         });
 
-        // Game state changes
-        // if (entity.gameState) {
-        //     $(entity.gameState).onChange(() => {
-        //         if(!gameEntity) return;
-        //         gameEntity.gameState!.health = entity.gameState!.health;
-        //         gameEntity.gameState!.maxHealth = entity.gameState!.maxHealth;
-        //         gameEntity.gameState!.hasFlag = entity.gameState!.hasFlag;
-        //         gameEntity.gameState!.carryingFlag = entity.gameState!.carryingFlag;
-        //         gameEntity.gameState!.carriedBy = entity.gameState!.carriedBy;
-        //         gameEntity.gameState!.atBase = entity.gameState!.atBase;
-        //         gameEntity.gameState!.team = entity.gameState!.team;
-        //         ecsWorld.reindex(gameEntity);
-        //     });
-        // }
         $(entity).listen("gameState", (gameState: GameStateSchema | undefined) => {
             if(!gameEntity || !gameState) return;
             $(gameState).onChange(() => {
@@ -349,17 +299,6 @@ export function createNetworkSystem(
             ecsWorld.reindex(gameEntity);
         });
 
-        // Tick changes
-        // if (entity.tick) {
-        //     $(entity.tick).onChange(() => {
-        //         if(!gameEntity) return;
-        //         gameEntity.tick!.tick = entity.tick!.tick;
-        //         gameEntity.tick!.timestamp = entity.tick!.timestamp;
-        //         gameEntity.tick!.lastProcessedInputTimestamp = entity.tick!.lastProcessedInputTimestamp;
-        //         gameEntity.tick!.lastProcessedInputTick = entity.tick!.lastProcessedInputTick;
-        //         // ecsWorld.reindex(gameEntity);
-        //     });
-        // }
         $(entity).listen("tick", (tick: TickSchema | undefined) => {
             if(!gameEntity || !tick) return;
             $(tick).onChange(() => {
@@ -372,15 +311,6 @@ export function createNetworkSystem(
         });
         
 
-        // Owner changes
-        // if (entity.owner) {
-        //     $(entity.owner).onChange(() => {
-        //         if (!gameEntity || !entity.owner?.id) return;
-        //         gameEntity.owner!.id = entity.owner.id;
-        //         gameEntity.owner!.isLocal = room.sessionId === entity.owner.id;
-        //         ecsWorld.reindex(gameEntity);
-        //     });
-        // }
         $(entity).listen("owner", (owner: OwnerSchema | undefined) => {
             if(!gameEntity || !owner) return;
             $(owner).onChange(() => {
@@ -391,15 +321,6 @@ export function createNetworkSystem(
         });
 
         // Asset changes
-        // if (entity.asset) {
-        //     $(entity.asset).onChange(() => {
-        //         if (!gameEntity || !entity.asset?.assetPath) return;
-        //         gameEntity.asset!.assetPath = entity.asset.assetPath;
-        //         gameEntity.asset!.assetType = entity.asset.assetType;
-        //         gameEntity.asset!.scale = entity.asset.scale;
-        //         ecsWorld.reindex(gameEntity);
-        //     });
-        // }
         $(entity).listen("asset", (asset: AssetSchema | undefined) => {
             if(!gameEntity || !asset) return;
             $(asset).onChange(() => {
@@ -411,34 +332,6 @@ export function createNetworkSystem(
         });
 
         // Vehicle changes
-        // if (entity.vehicle) {
-        //     // Weapon changes
-        //     $(entity.vehicle).onChange(() => {
-        //         if (!gameEntity) return;
-
-        //         gameEntity.vehicle!.vehicleType = entity.vehicle!.vehicleType as VehicleType;
-        //         gameEntity.vehicle!.activeWeaponIndex = entity.vehicle!.activeWeaponIndex;
-        //         if (entity.vehicle?.weapons) {
-        //             $(entity.vehicle).weapons.onChange((weapon: WeaponSchema, index: number) => {
-        //                 if (!weapon?.name) return;
-        //                 gameEntity.vehicle!.weapons[index] = {
-        //                     id: index.toString(),
-        //                     name: weapon.name,
-        //                     projectileType: weapon.projectileType as ProjectileType,
-        //                     damage: weapon.damage,
-        //                     minFireRate: weapon.minFireRate,
-        //                     maxFireRate: weapon.maxFireRate,
-        //                     heatPerShot: weapon.heatPerShot,
-        //                     heatDissipationRate: weapon.heatDissipationRate,
-        //                     projectileSpeed: weapon.projectileSpeed,
-        //                     range: weapon.range,
-        //                 }
-        //                 ecsWorld.reindex(gameEntity);
-        //             });
-        //         }
-        //         ecsWorld.reindex(gameEntity);
-        //     });
-        // }
         $(entity).listen("vehicle", (vehicle: VehicleSchema | undefined) => {
             if(!gameEntity || !vehicle) return;
             $(vehicle).onChange(() => {
@@ -459,7 +352,6 @@ export function createNetworkSystem(
                             projectileSpeed: weapon.projectileSpeed,
                             range: weapon.range,
                         }
-                        ecsWorld.reindex(gameEntity);
                     });
                 }
             });
