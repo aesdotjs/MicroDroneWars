@@ -463,7 +463,21 @@ export function createPhysicsWorldSystem() {
             projectileId: string,
             aimPoint: Vector3
         ): GameEntity {
-            const weaponTrigger = shooter?.asset?.triggerMeshes?.find(mesh => 'missile' === mesh.metadata?.gltf?.extras?.type);
+            // Get all weapon triggers
+            const weaponTriggers = shooter?.asset?.triggerMeshes?.filter(mesh => 
+                ['missile', 'bullet_0', 'bullet_1'].includes(mesh.metadata?.gltf?.extras?.type)
+            ) || [];
+
+            // Determine which trigger to use based on projectile type and ID
+            let weaponTrigger;
+            if (weapon.projectileType === ProjectileType.Missile) {
+                weaponTrigger = weaponTriggers.find(mesh => mesh.metadata?.gltf?.extras?.type === 'missile');
+            } else {
+                // For bullets, alternate between bullet_0 and bullet_1 based on projectile ID
+                const bulletIndex = parseInt(projectileId.split('_').pop() || '0') % 2;
+                weaponTrigger = weaponTriggers.find(mesh => mesh.metadata?.gltf?.extras?.type === `bullet_${bulletIndex}`);
+            }
+
             let spawnPointPosition: Vector3;
             let spawnPointRotation: Quaternion;
             
@@ -480,12 +494,24 @@ export function createPhysicsWorldSystem() {
                     spawnPointPosition
                 );
                 spawnPointPosition.addInPlace(shooter.transform!.position);
+
+                // Get forward direction from rotation
+                const forward = new Vector3(0, 0, 1);
+                forward.rotateByQuaternionToRef(shooter.transform!.rotation, forward);
+                
+                // Move spawn point 20cm forward from the trigger position
+                spawnPointPosition.addInPlace(forward.scale(0.2));
                 
                 // Combine rotations
                 spawnPointRotation = shooter.transform!.rotation.multiply(localRotation);
             } else {
                 // Fallback to vehicle position/rotation if no trigger mesh found
-                spawnPointPosition = shooter.transform!.position;
+                spawnPointPosition = shooter.transform!.position.clone();
+                // Get forward direction
+                const forward = new Vector3(0, 0, 1);
+                forward.rotateByQuaternionToRef(shooter.transform!.rotation, forward);
+                // Move spawn point 20cm forward
+                spawnPointPosition.addInPlace(forward.scale(0.2));
                 spawnPointRotation = shooter.transform!.rotation;
             }
 

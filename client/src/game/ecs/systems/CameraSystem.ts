@@ -10,8 +10,8 @@ export function createCameraSystem(scene: Scene, camera: ArcRotateCamera) {
     
     // Find local player using owner component
     let attachedEntity: GameEntity | null = null;
-    const FOLLOW_DISTANCE = 10;
-    const FOLLOW_HEIGHT = 5;
+    const FOLLOW_DISTANCE = 3;
+    const FOLLOW_HEIGHT = 1;
     const FOLLOW_SPEED = 0.1;
     const ROTATION_SPEED = 0.1;
 
@@ -75,7 +75,7 @@ export function createCameraSystem(scene: Scene, camera: ArcRotateCamera) {
 
             // Update camera position and target
             camera.position = cameraPos;
-            camera.target = position.add(new Vector3(0, 2, 0));
+            camera.target = position;
         }
     };
 } 

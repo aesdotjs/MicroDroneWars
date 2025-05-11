@@ -1,4 +1,4 @@
-import { Vector3, Quaternion, Mesh, TransformNode } from '@babylonjs/core';
+import { Vector3, Quaternion, Mesh, TransformNode, AnimationGroup } from '@babylonjs/core';
 import type { Body as CannonBody, Vec3 } from 'cannon-es';
 
 export enum VehicleType {
@@ -544,6 +544,8 @@ export interface AssetComponent {
     collisionMeshes?: Mesh[];
     /** Array of trigger meshes in the entity */
     triggerMeshes?: Mesh[];
+    /** Array of animation groups in the entity */
+    animationGroups?: AnimationGroup[];
     /** Whether the assets are loaded */
     isLoaded: boolean;
     /** The path to the asset file */

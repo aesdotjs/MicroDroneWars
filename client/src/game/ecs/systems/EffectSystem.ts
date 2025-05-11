@@ -104,11 +104,28 @@ export function createEffectSystem(scene: Scene) {
     const muzzleFlashTimeouts = new Map<string, NodeJS.Timeout>();
 
     // Create muzzle flash effect
-    function createMuzzleFlash(entity: GameEntity): void {
-        // Get the active weapon's trigger mesh
-        const weaponTrigger = entity.asset?.triggerMeshes?.find(mesh => 
-            'missile' === mesh.metadata?.gltf?.extras?.type
-        );
+    function createMuzzleFlash(entity: GameEntity, projectileId: number): void {
+        // Get all weapon triggers
+        const weaponTriggers = entity.asset?.triggerMeshes?.filter(mesh => 
+            ['missile', 'bullet_0', 'bullet_1'].includes(mesh.metadata?.gltf?.extras?.type)
+        ) || [];
+
+        // Get the active weapon's projectile type
+        const activeWeapon = entity.vehicle?.weapons[entity.vehicle.activeWeaponIndex];
+        if (!activeWeapon) {
+            console.warn('No active weapon found for entity', entity.id);
+            return;
+        }
+
+        // Determine which trigger to use based on projectile type and ID
+        let weaponTrigger;
+        if (activeWeapon.projectileType === ProjectileType.Missile) {
+            weaponTrigger = weaponTriggers.find(mesh => mesh.metadata?.gltf?.extras?.type === 'missile');
+        } else {
+            // For bullets, alternate between bullet_0 and bullet_1 based on projectile ID
+            const bulletIndex = projectileId % 2;
+            weaponTrigger = weaponTriggers.find(mesh => mesh.metadata?.gltf?.extras?.type === `bullet_${bulletIndex}`);
+        }
 
         if (!entity.render?.mesh) {
             console.warn('No render mesh found for entity', entity.id);

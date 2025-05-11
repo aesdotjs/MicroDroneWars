@@ -316,7 +316,7 @@ export function createNetworkPredictionSystem(
                 if (playerEntity.vehicle?.weapons) {
                     projectileId = weaponSystem.applyInput(dt, playerEntity, finalInput);
                     if (projectileId) {
-                        effectSystem.createMuzzleFlash(playerEntity);
+                        effectSystem.createMuzzleFlash(playerEntity, projectileId);
                     }
                 }
             }

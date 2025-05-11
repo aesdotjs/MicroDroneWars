@@ -1,12 +1,51 @@
-import { Scene, Engine, Vector3, HemisphericLight, ArcRotateCamera, Color4, Quaternion, MeshBuilder, StandardMaterial, Color3, DirectionalLight, ShadowGenerator, GlowLayer, Vector2, Mesh } from '@babylonjs/core';
+import { Scene, Engine, Vector3, HemisphericLight, ArcRotateCamera, Color4, Quaternion, MeshBuilder, StandardMaterial, Color3, DirectionalLight, ShadowGenerator, GlowLayer, Vector2, Mesh, AnimationGroup } from '@babylonjs/core';
 
 import { world as ecsWorld } from '@shared/ecs/world';
-import { EntityType } from '@shared/ecs/types';
+import { EntityType, GameEntity } from '@shared/ecs/types';
 import { createEffectSystem } from './EffectSystem';
 import { useGameDebug } from '@/composables/useGameDebug';
 import { Inspector } from '@babylonjs/inspector';
 
 const { log } = useGameDebug();
+
+// Add these constants at the top of the file after imports
+const ROTOR_ANIMATION_CONFIG = {
+    minSpeed: 3,    // Minimum animation speed when vehicle is stationary
+    maxSpeed: 10,    // Maximum animation speed at max velocity
+    minVelocity: 0,   // Velocity at which minSpeed is applied
+    maxVelocity: 20,  // Velocity at which maxSpeed is applied
+    smoothing: 0.1    // Smoothing factor for speed changes (0-1)
+};
+
+/**
+ * Updates rotor animation speed based on vehicle velocity
+ */
+function updateRotorAnimation(entity: GameEntity, dt: number) {
+    if (!entity.asset?.animationGroups || !entity.transform) return;
+
+    // Find the rotor animation group
+    const rotorAnim = entity.asset.animationGroups.find((group: AnimationGroup) => 
+        group.name.toLowerCase().includes('rotor')
+    );
+    
+    if (!rotorAnim) return;
+
+    // Get current velocity magnitude
+    const velocity = entity.transform.velocity.length();
+    
+    // Calculate target speed ratio based on velocity
+    const velocityRatio = Math.min(1, Math.max(0, 
+        (velocity - ROTOR_ANIMATION_CONFIG.minVelocity) / 
+        (ROTOR_ANIMATION_CONFIG.maxVelocity - ROTOR_ANIMATION_CONFIG.minVelocity)
+    ));
+    
+    const targetSpeed = ROTOR_ANIMATION_CONFIG.minSpeed + 
+        (ROTOR_ANIMATION_CONFIG.maxSpeed - ROTOR_ANIMATION_CONFIG.minSpeed) * velocityRatio;
+
+    // Smoothly interpolate current speed to target speed
+    const currentSpeed = rotorAnim.speedRatio;
+    rotorAnim.speedRatio = currentSpeed + (targetSpeed - currentSpeed) * ROTOR_ANIMATION_CONFIG.smoothing;
+}
 
 /**
  * Creates a system that handles scene initialization, setup, and rendering
@@ -79,6 +118,12 @@ export function createSceneSystem(engine: Engine) {
             // Update entity positions and rotations
             for (const entity of renderables) {
                 if (!entity.transform) continue;
+
+                // Update rotor animation speed for vehicles
+                if (entity.type === EntityType.Vehicle) {
+                    updateRotorAnimation(entity, dt);
+                }
+
                 // Handle asset-based mesh creation
                 if (entity.asset?.isLoaded && entity.asset.meshes && !entity.render) {
                     console.log('Creating mesh for entity:', entity.id);

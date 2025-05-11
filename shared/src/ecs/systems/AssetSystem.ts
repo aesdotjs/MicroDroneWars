@@ -183,6 +183,14 @@ export function createAssetSystem(
         };
     };
 
+    /**
+     * Gets the animation groups from a container
+     * @param container - The container to get the animation groups from
+     * @returns The animation groups from the container
+     */
+    const getContainerAnimationGroups = (container: AssetContainer) => {
+        return container.animationGroups;
+    };
 
     /**
      * Loads an asset for an entity
@@ -200,7 +208,7 @@ export function createAssetSystem(
                     const visibleMeshes = getContainerVisibleMeshes(container);
                     const collisionMeshes = getContainerCollisionMeshes(container);
                     const triggerMeshes = getContainerTriggerMeshes(container);    
-    
+                    const animationGroups = getContainerAnimationGroups(container);
                     // Hide collision and trigger meshes
                     collisionMeshes.forEach(mesh => {
                         mesh.isVisible = false;
@@ -213,6 +221,7 @@ export function createAssetSystem(
                     entity.asset!.collisionMeshes = collisionMeshes;
                     entity.asset!.triggerMeshes = triggerMeshes;
                     entity.asset!.isLoaded = true;
+                    entity.asset!.animationGroups = animationGroups;
                     if (
                         isServer ||
                         entity.type === EntityType.Environment ||
@@ -240,7 +249,8 @@ export function createAssetSystem(
                 const visibleMeshes = getContainerVisibleMeshes(container);
                 const collisionMeshes = getContainerCollisionMeshes(container);
                 const triggerMeshes = getContainerTriggerMeshes(container);
-    
+                const animationGroups = getContainerAnimationGroups(container);
+
                 // Hide collision and trigger meshes
                 collisionMeshes.forEach(mesh => {
                     mesh.isVisible = false;
@@ -252,6 +262,7 @@ export function createAssetSystem(
                 entity.asset!.meshes = visibleMeshes;
                 entity.asset!.collisionMeshes = collisionMeshes;
                 entity.asset!.triggerMeshes = triggerMeshes;
+                entity.asset!.animationGroups = animationGroups;
                 if (
                     isServer ||
                     entity.type === EntityType.Environment ||

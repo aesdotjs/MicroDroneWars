@@ -176,7 +176,7 @@ export function createNetworkSystem(
                     if (entity.projectile?.sourceId !== room.sessionId) {
                         const vehicle = ecsWorld.entities.find(e => e.id === entity.projectile?.sourceId);
                         if (vehicle) {
-                            sceneSystem.getEffectSystem().createMuzzleFlash(vehicle);
+                            sceneSystem.getEffectSystem().createMuzzleFlash(vehicle, parseInt(entity.id.split('_').pop() || '0'));
                         }
                     }
                 }
