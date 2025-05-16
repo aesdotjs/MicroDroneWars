@@ -238,26 +238,42 @@ export function createNetworkPredictionSystem(
                 
                 // Update physics body state
                 if (entity.physics?.body) {
-                    entity.physics.body.position.set(
-                        state.transform.position.x,
-                        state.transform.position.y,
-                        state.transform.position.z
+                    // Set translation (position)
+                    entity.physics.body.setTranslation(
+                        {
+                            x: state.transform.position.x,
+                            y: state.transform.position.y,
+                            z: state.transform.position.z
+                        },
+                        true // wake up the body
                     );
-                    entity.physics.body.quaternion.set(
-                        state.transform.rotation.x,
-                        state.transform.rotation.y,
-                        state.transform.rotation.z,
-                        state.transform.rotation.w
+                    // Set rotation (quaternion)
+                    entity.physics.body.setRotation(
+                        {
+                            x: state.transform.rotation.x,
+                            y: state.transform.rotation.y,
+                            z: state.transform.rotation.z,
+                            w: state.transform.rotation.w
+                        },
+                        true
                     );
-                    entity.physics.body.velocity.set(
-                        state.transform.velocity.x,
-                        state.transform.velocity.y,
-                        state.transform.velocity.z
+                    // Set linear velocity
+                    entity.physics.body.setLinvel(
+                        {
+                            x: state.transform.velocity.x,
+                            y: state.transform.velocity.y,
+                            z: state.transform.velocity.z
+                        },
+                        true
                     );
-                    entity.physics.body.angularVelocity.set(
-                        state.transform.angularVelocity.x,
-                        state.transform.angularVelocity.y,
-                        state.transform.angularVelocity.z
+                    // Set angular velocity
+                    entity.physics.body.setAngvel(
+                        {
+                            x: state.transform.angularVelocity.x,
+                            y: state.transform.angularVelocity.y,
+                            z: state.transform.angularVelocity.z
+                        },
+                        true
                     );
                 }
                 // Replay unprocessed inputs

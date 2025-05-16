@@ -1,5 +1,5 @@
 import { Vector3, Quaternion, Mesh, TransformNode, AnimationGroup } from '@babylonjs/core';
-import type { Body as CannonBody, Vec3 } from 'cannon-es';
+import type { RigidBody, Collider, Vector3 as RapierVector3, Quaternion as RapierQuaternion } from '@dimforge/rapier3d-deterministic-compat';
 
 export enum VehicleType {
     Drone = 'drone',
@@ -111,7 +111,8 @@ export type TransformComponent = {
 };
 
 export type PhysicsComponent = {
-    body: CannonBody;
+    body: RigidBody;
+    colliders: Collider[];
     mass: number;
     drag: number;
     angularDrag: number;
@@ -229,7 +230,7 @@ export interface InputComponent {
     /** Fire weapon edge‐trigger only */
     firePressed: boolean;
     fireReleased: boolean;
-    /** “Held” flag if you still want it client‐side */
+    /** "Held" flag if you still want it client‐side */
     fire: boolean;
 
     /** Zoom edge‐trigger only */
@@ -264,26 +265,26 @@ export interface InputComponent {
  */
 export interface CollisionEvent {
     /** First colliding body */
-    bodyA: CannonBody;
+    bodyA: RigidBody;
     /** Second colliding body */
-    bodyB: CannonBody;
+    bodyB: RigidBody;
     /** Contact information between the bodies */
     target: {
         contacts: {
             /** Gets the impact velocity along the contact normal */
             getImpactVelocityAlongNormal: () => number;
             /** Gets the contact normal vector */
-            getNormal: () => CANNON.Vec3;
+            getNormal: () => RapierVector3;
             /** Contact normal vector */
-            ni: CANNON.Vec3;
+            ni: RapierVector3;
             /** Contact point on body A */
-            ri: CANNON.Vec3;
+            ri: RapierVector3;
             /** Contact point on body B */
-            rj: CANNON.Vec3;
+            rj: RapierVector3;
             /** Body A */
-            bi: CannonBody;
+            bi: RigidBody;
             /** Body B */
-            bj: CannonBody;
+            bj: RigidBody;
         }[];
     };
 }
@@ -314,7 +315,7 @@ export enum CollisionSeverity {
  */
 export interface VehicleCollisionEvent {
     /** The vehicle body involved in the collision */
-    body: CannonBody;
+    body: RigidBody;
     /** Contact information */
     // contacts is inside a target object
     target: {
@@ -322,11 +323,11 @@ export interface VehicleCollisionEvent {
             /** Gets the impact velocity along the contact normal */
             getImpactVelocityAlongNormal: () => number;
             /** Gets the contact normal vector */
-            getNormal: () => CANNON.Vec3;
+            getNormal: () => RapierVector3;
             /** Contact point on body A */
-            ri: CANNON.Vec3;
+            ri: RapierVector3;
             /** Contact point on body B */
-            rj: CANNON.Vec3;
+            rj: RapierVector3;
         }[];
     };    
 }

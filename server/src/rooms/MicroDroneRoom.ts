@@ -11,7 +11,6 @@ import { createStateSyncSystem } from "src/ecs/systems/StateSyncSystem";
 import { createHealthSystem } from "@shared/ecs/systems/HealthSystems";
 import { createFlagSystem } from "@shared/ecs/systems/FlagSystems";
 import { createInputSystem } from "../ecs/systems/InputSystems";
-import { createCollisionSystem } from "@shared/ecs/systems/CollisionSystems";
 import { createGameModeSystem, GameMode, GameModeConfig } from "../ecs/systems/GameModeSystem";
 import { createAssetSystem } from "@shared/ecs/systems/AssetSystem";
 import { createEntitySystem } from "@shared/ecs/systems/EntitySystem";
@@ -37,7 +36,6 @@ export class MicroDroneRoom extends Room<State> {
     private healthSystem!: ReturnType<typeof createHealthSystem>;
     private flagSystem!: ReturnType<typeof createFlagSystem>;
     private inputSystem!: ReturnType<typeof createInputSystem>;
-    private collisionSystem!: ReturnType<typeof createCollisionSystem>;
     private gameModeSystem!: ReturnType<typeof createGameModeSystem>;
     private assetSystem!: ReturnType<typeof createAssetSystem>;
     private entitySystem!: ReturnType<typeof createEntitySystem>;
@@ -75,7 +73,7 @@ export class MicroDroneRoom extends Room<State> {
         }
 
         // Initialize physics world system
-        this.physicsWorldSystem = createPhysicsWorldSystem();
+        this.physicsWorldSystem = await createPhysicsWorldSystem();
         
         // Initialize weapon system
         this.weaponSystem = createWeaponSystem(this.physicsWorldSystem, true);
@@ -97,7 +95,6 @@ export class MicroDroneRoom extends Room<State> {
         this.healthSystem = createHealthSystem();
         this.projectileSystem = createProjectileSystem(this.physicsWorldSystem);
         this.flagSystem = createFlagSystem();
-        this.collisionSystem = createCollisionSystem(this.physicsWorldSystem.getWorld());
         this.assetSystem = createAssetSystem(this.serverEngine, this.serverScene, this.physicsWorldSystem, true);
         // this.assetSystem.preloadAssets();
 
@@ -145,7 +142,6 @@ export class MicroDroneRoom extends Room<State> {
             this.physicsSystem.update(1 / this.TICK_RATE);
             this.weaponSystem.update(1 / this.TICK_RATE);
             this.inputSystem.update(1 / this.TICK_RATE);
-            this.collisionSystem.update(1 / this.TICK_RATE);
             this.healthSystem.update(1 / this.TICK_RATE);
             this.flagSystem.update(1 / this.TICK_RATE);
             this.projectileSystem.update(1 / this.TICK_RATE);

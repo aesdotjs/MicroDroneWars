@@ -1,218 +1,176 @@
-import * as CANNON from 'cannon-es';
+// import * as CANNON from 'cannon-es';
+import RAPIER from '@dimforge/rapier3d-deterministic-compat';
+import initRapier3D from '../../utils/init-rapier3d';
 import { world as ecsWorld } from '../world';
-import { GameEntity, VehicleType, DroneSettings, PlaneSettings, CollisionGroups, collisionMasks, EntityType, PhysicsComponent, WeaponComponent, ProjectileType } from '../types';
+import { GameEntity, VehicleType, DroneSettings, PlaneSettings, CollisionGroups, collisionMasks, EntityType, PhysicsComponent, WeaponComponent, ProjectileType, CollisionType, CollisionSeverity } from '../types';
 import { Vector3, Quaternion, Mesh } from '@babylonjs/core';
 /**
- * Creates a system that manages the physics world for both client and server
+ * Creates a system that manages the physics world for both client and server using Rapier
  */
 export function createPhysicsWorldSystem() {
-    const world = new CANNON.World();
-    world.gravity.set(0, -9.82, 0);
-    world.broadphase = new CANNON.SAPBroadphase(world);
-    world.defaultContactMaterial.friction = 0.3;
-    world.defaultContactMaterial.restitution = 0.3;
+    initRapier3D();
+    const world = new RAPIER.World({ x: 0, y: -9.82, z: 0 });
+    const eventQueue = new RAPIER.EventQueue(true);
 
-    // Add postStep event listener for projectile raycasting
-    world.addEventListener('postStep', () => {
-        // Find all projectiles
-        const projectiles = ecsWorld.with("projectile", "transform", "physics");
-        for (const projectile of projectiles) {
-            if (!projectile.physics?.body || !projectile.transform) continue;
+    // Rapier doesn't use materials like Cannon, so we skip material setup
 
-            // Get current position and velocity
-            const position = projectile.physics.body.position;
-            const velocity = projectile.physics.body.velocity.scale(1/60);
-            
-            // Skip if velocity is too small
-            if (velocity.lengthSquared() < 0.01) continue;
-
-            // Calculate end position by adding velocity to current position
-            const toPosition = new CANNON.Vec3();
-            toPosition.copy(position);
-            toPosition.vadd(velocity, toPosition);
-
-            // Create ray from current position to end position
-            const ray = new CANNON.Ray(
-                position,
-                toPosition
-            );
-            
-            // Set ray properties
-            ray.mode = CANNON.Ray.CLOSEST;
-            ray.skipBackfaces = true;
-            ray.checkCollisionResponse = true;
-
-            // Cast ray
-            const result = new CANNON.RaycastResult();
-            ray.intersectWorld(world, {
-                result: result,
-                collisionFilterMask: collisionMasks.Projectile
-            });
-
-            // If we hit something, set the impact component
-            if (result.hasHit) {
-                const hitPoint = new Vector3(
-                    result.hitPointWorld.x,
-                    result.hitPointWorld.y,
-                    result.hitPointWorld.z
-                );
-                const hitNormal = new Vector3(
-                    -result.hitNormalWorld.x,
-                    -result.hitNormalWorld.y,
-                    -result.hitNormalWorld.z
-                );
-                // Find the hit entity
-                const hitBody = result.body;
-                const hitEntity = ecsWorld.entities.find(e => e.physics?.body?.id === hitBody?.id);
-                if (hitEntity) {
-                    projectile.projectile!.impact = {
-                        position: hitPoint,
-                        normal: hitNormal,
-                        impactVelocity: velocity.length(),
-                        targetId: hitEntity.id,
-                        targetType: hitEntity.type || ""
-                    };
-                }
-            }
-        }
-    });
-
-    const environmentMaterial = new CANNON.Material('environmentMaterial');
-    const vehicleMaterial = new CANNON.Material('vehicleMaterial');
-    const projectileMaterial = new CANNON.Material('projectileMaterial');
-    const flagMaterial = new CANNON.Material('flagMaterial');
-    const meshMaterial = new CANNON.Material('meshMaterial');
-
-    // Configure vehicle vehicle contact material
-    const vehicleVehicleContactMaterial = new CANNON.ContactMaterial(
-        vehicleMaterial,
-        vehicleMaterial,
-        { 
-            friction: 0.5, 
-            restitution: 0.3,
-            contactEquationStiffness: 1e6,
-            contactEquationRelaxation: 3
-        }
-    );
-    world.addContactMaterial(vehicleVehicleContactMaterial);
-
-    // Configure projectile-vehicle contact material
-    const projectileVehicleContactMaterial = new CANNON.ContactMaterial(
-        projectileMaterial,
-        vehicleMaterial,
-        {
-            friction: 0.5,
-            restitution: 0.3,
-            contactEquationStiffness: 1e6,
-            contactEquationRelaxation: 4
-        }
-    );
-    world.addContactMaterial(projectileVehicleContactMaterial);
-
-    // Configure mesh-vehicle contact material
-    const meshVehicleContactMaterial = new CANNON.ContactMaterial(
-        meshMaterial,
-        vehicleMaterial,
-        {
-            friction: 0.5,
-            restitution: 0.3,
-            contactEquationStiffness: 1e6,
-            contactEquationRelaxation: 3
-        }
-    );
-    world.addContactMaterial(meshVehicleContactMaterial);
-
-    // Configure mesh-projectile contact material
-    const meshProjectileContactMaterial = new CANNON.ContactMaterial(
-        meshMaterial,
-        projectileMaterial,
-        {
-            friction: 0.0,
-            restitution: 0.0,
-            contactEquationStiffness: 1e9,
-            contactEquationRelaxation: 4
-        }
-    );
-    world.addContactMaterial(meshProjectileContactMaterial); 
-
-    // Configure environment-vehicle contact material
-    const environmentVehicleContactMaterial = new CANNON.ContactMaterial(
-        environmentMaterial,
-        vehicleMaterial,
-        {
-            friction: 0.5,
-            restitution: 0.3,
-            contactEquationStiffness: 1e6,
-            contactEquationRelaxation: 3
-        }
-    );
-    world.addContactMaterial(environmentVehicleContactMaterial);
-    
-    // Configure environment-projectile contact material
-    const environmentProjectileContactMaterial = new CANNON.ContactMaterial(
-        environmentMaterial,
-        projectileMaterial,
-        {
-            friction: 0.0,
-            restitution: 0.0,
-            contactEquationStiffness: 1e9,
-            contactEquationRelaxation: 4
-        }
-    );
-    world.addContactMaterial(environmentProjectileContactMaterial);
-    
-    // Configure environment-mesh contact material
-    const environmentMeshContactMaterial = new CANNON.ContactMaterial(
-        environmentMaterial,
-        meshMaterial,
-        {
-            friction: 0.5,
-            restitution: 0.3,
-            contactEquationStiffness: 1e6,
-            contactEquationRelaxation: 3
-        }
-    );
-    world.addContactMaterial(environmentMeshContactMaterial);
-    
-    // Configure vehicle-flag contact material
-    const vehicleFlagContactMaterial = new CANNON.ContactMaterial(
-        vehicleMaterial,
-        flagMaterial,
-        {
-            friction: 0.5,
-            restitution: 0.3,
-            contactEquationStiffness: 1e6,
-            contactEquationRelaxation: 3
-        }
-    );
-    world.addContactMaterial(vehicleFlagContactMaterial);
-    
+    // Map to track which bodies belong to which entities
+    const entityBodies = new Map<string, RAPIER.RigidBody>();
+    const entityColliders = new Map<string, RAPIER.Collider[]>();
+    const physicsEntities = ecsWorld.with("physics", "transform");
 
     let currentTick = 0;
     const TICK_RATE = 60;
     const TIME_STEP = 1 / TICK_RATE;
     const MAX_SUB_STEPS = 1;
 
-    // Map to track which bodies belong to which entities
-    const entityBodies = new Map<string, CANNON.Body>();
-    const physicsEntities = ecsWorld.with("physics", "transform");
-
+    // Helper to apply Rapier body transform to ECS entity
     const applyBodyTransform = (entity: GameEntity) => {
-            const body = entity.physics?.body;
-            if (!body) return;
-            entity.transform!.position.x = body.position.x;
-            entity.transform!.position.y = body.position.y;
-            entity.transform!.position.z = body.position.z;
-            entity.transform!.rotation.x = body.quaternion.x;
-            entity.transform!.rotation.y = body.quaternion.y;
-            entity.transform!.rotation.z = body.quaternion.z;
-            entity.transform!.rotation.w = body.quaternion.w;
-            entity.transform!.velocity.x = body.velocity.x;
-            entity.transform!.velocity.y = body.velocity.y;
-            entity.transform!.velocity.z = body.velocity.z;
-            entity.transform!.angularVelocity.x = body.angularVelocity.x;
-            entity.transform!.angularVelocity.y = body.angularVelocity.y;
-            entity.transform!.angularVelocity.z = body.angularVelocity.z;
+        const body = entity.physics?.body;
+        if (!body) return;
+        const translation = body.translation();
+        const rotation = body.rotation();
+        const linvel = body.linvel();
+        const angvel = body.angvel();
+        entity.transform!.position.x = translation.x;
+        entity.transform!.position.y = translation.y;
+        entity.transform!.position.z = translation.z;
+        entity.transform!.rotation.x = rotation.x;
+        entity.transform!.rotation.y = rotation.y;
+        entity.transform!.rotation.z = rotation.z;
+        entity.transform!.rotation.w = rotation.w;
+        entity.transform!.velocity.x = linvel.x;
+        entity.transform!.velocity.y = linvel.y;
+        entity.transform!.velocity.z = linvel.z;
+        entity.transform!.angularVelocity.x = angvel.x;
+        entity.transform!.angularVelocity.y = angvel.y;
+        entity.transform!.angularVelocity.z = angvel.z;
+    };
+
+    // --- Collision event handling ---
+    function determineCollisionType(colliderA: RAPIER.Collider, colliderB: RAPIER.Collider): CollisionType {
+        const groupA = colliderA.collisionGroups() >> 16;
+        const groupB = colliderB.collisionGroups() >> 16;
+        const isGroundCollision = (groupA & CollisionGroups.Environment) !== 0 || (groupB & CollisionGroups.Environment) !== 0;
+        const isVehicleCollision = (groupA & (CollisionGroups.Drones | CollisionGroups.Planes)) !== 0 && (groupB & (CollisionGroups.Drones | CollisionGroups.Planes)) !== 0;
+        const isProjectileCollision = (groupA & CollisionGroups.Projectiles) !== 0 || (groupB & CollisionGroups.Projectiles) !== 0;
+        const isFlagCollision = (groupA & CollisionGroups.Flags) !== 0 || (groupB & CollisionGroups.Flags) !== 0;
+        if (isGroundCollision) return CollisionType.VehicleEnvironment;
+        if (isVehicleCollision) return CollisionType.VehicleVehicle;
+        if (isProjectileCollision) return CollisionType.VehicleProjectile;
+        if (isFlagCollision) return CollisionType.VehicleFlag;
+        return CollisionType.VehicleEnvironment;
+    }
+
+    function determineCollisionSeverity(impactVelocity: number): CollisionSeverity {
+        const absVelocity = Math.abs(impactVelocity);
+        if (absVelocity >= 15) return CollisionSeverity.Heavy;
+        if (absVelocity >= 10) return CollisionSeverity.Medium;
+        return CollisionSeverity.Light;
+    }
+
+    function handleCollisionEvent(handle1: number, handle2: number, started: boolean) {
+        // Find the colliders
+        const colliderA = world.getCollider(handle1);
+        const colliderB = world.getCollider(handle2);
+        if (!colliderA || !colliderB) return;
+        // Find the entities by collider
+        const entityA = ecsWorld.entities.find(e => e.physics?.colliders?.includes(colliderA));
+        const entityB = ecsWorld.entities.find(e => e.physics?.colliders?.includes(colliderB));
+        if (!entityA || !entityB) return;
+        // Only handle collision start events
+        if (!started) return;
+        // Get collision type
+        const collisionType = determineCollisionType(colliderA, colliderB);
+        // Get impact velocity (approximate as difference in linvel)
+        const bodyA = entityA.physics?.body;
+        const bodyB = entityB.physics?.body;
+        let impactVelocity = 0;
+        if (bodyA && bodyB) {
+            const linvelA = bodyA.linvel();
+            const linvelB = bodyB.linvel();
+            impactVelocity = Math.sqrt(
+                Math.pow(linvelA.x - linvelB.x, 2) +
+                Math.pow(linvelA.y - linvelB.y, 2) +
+                Math.pow(linvelA.z - linvelB.z, 2)
+            );
+        }
+        const severity = determineCollisionSeverity(impactVelocity);
+        // Compose event object
+        const event = {
+            type: collisionType,
+            severity: severity,
+            bodyA: bodyA,
+            bodyB: bodyB,
+            impactVelocity: impactVelocity,
+            // Rapier does not provide direct contact point/normal in event queue, so we comment these:
+            contactPoint: undefined, // TODO: Use contact pairs API if needed
+            normal: undefined, // TODO: Use contact pairs API if needed
+            timestamp: Date.now()
+        };
+        // Handle vehicle collisions
+        if (entityA.type === EntityType.Vehicle) {
+            handleVehicleCollision(entityA, entityB, event);
+        }
+        if (entityB.type === EntityType.Vehicle) {
+            handleVehicleCollision(entityB, entityA, event);
+        }
+        // Handle projectile collisions
+        if (entityA.type === EntityType.Projectile) {
+            handleProjectileCollision(entityA, entityB, event);
+        }
+        if (entityB.type === EntityType.Projectile) {
+            handleProjectileCollision(entityB, entityA, event);
+        }
+        // Handle flag collisions
+        if (entityA.gameState?.hasFlag) {
+            handleFlagCollision(entityA, entityB, event);
+        }
+        if (entityB.gameState?.hasFlag) {
+            handleFlagCollision(entityB, entityA, event);
+        }
+    }
+
+    // --- ECS collision handlers (ported from old CollisionSystems) ---
+    function handleVehicleCollision(vehicle: GameEntity, other: GameEntity, event: any) {
+        if (!vehicle.gameState?.health) return;
+        let damage = 0;
+        switch (event.severity) {
+            case CollisionSeverity.Light:
+                damage = event.impactVelocity * 0.05;
+                break;
+            case CollisionSeverity.Medium:
+                damage = event.impactVelocity * 0.1;
+                break;
+            case CollisionSeverity.Heavy:
+                damage = event.impactVelocity * 0.2;
+                break;
+        }
+        const isEnvironmentCollision = !other.gameState || other.type === EntityType.Environment;
+        if (isEnvironmentCollision) {
+            damage *= 1.5;
+        }
+        vehicle.gameState.health = Math.max(0, vehicle.gameState.health - damage);
+        if (vehicle.gameState.health <= 0) {
+            vehicle.gameState.health = 0;
+            // Destruction effects could be triggered here
+        }
+    }
+    function handleProjectileCollision(projectile: GameEntity, other: GameEntity, event: any) {
+        if (!projectile.gameState || !projectile.projectile) {
+            console.warn('Projectile missing required components:', projectile.id);
+            return;
+        }
+        // Damage logic can be added here if needed
+        // Rapier does not provide direct contact point/normal in event queue, so we comment these:
+        // const position = ...
+        // projectile.projectile.impact = { ... };
+    }
+    function handleFlagCollision(flag: GameEntity, other: GameEntity, event: any) {
+        if (other.vehicle && !flag.gameState!.carriedBy) {
+            flag.gameState!.carriedBy = other.id;
+            other.gameState!.hasFlag = true;
+        }
     }
 
     return {
@@ -221,34 +179,42 @@ export function createPhysicsWorldSystem() {
         setCurrentTick: (tick: number) => {
             currentTick = tick;
         },
-        
+
         addBody: (entity: GameEntity) => {
-            if (!entity.physics?.body) {
-                console.warn(`Entity ${entity.id} has no physics body to add`);
+            if (!entity.physics?.body || !entity.physics?.colliders) {
+                console.warn(`Entity ${entity.id} has no physics body/colliders to add`);
                 return;
             }
-
-            // Add body to world if not already added
-            if (!world.bodies.includes(entity.physics.body)) {
-                world.addBody(entity.physics.body);
+            // Add body/colliders to world if not already added
+            if (!entityBodies.has(entity.id)) {
                 entityBodies.set(entity.id, entity.physics.body);
+                entityColliders.set(entity.id, entity.physics.colliders);
             }
         },
 
         removeBody: (entityId: string) => {
             const body = entityBodies.get(entityId);
+            const colliders = entityColliders.get(entityId);
+            if (colliders) {
+                for (const collider of colliders) {
+                    world.removeCollider(collider, true);
+                }
+                entityColliders.delete(entityId);
+            }
             if (body) {
-                // wait for the next frame to remove the body
-                setTimeout(() => {
-                    world.removeBody(body);
-                    // console.log('removing body for', entityId, world.bodies.length);
-                }, 0);
+                world.removeRigidBody(body);
+                entityBodies.delete(entityId);
             }
         },
-        
+
         update: (deltaTime: number) => {
-            world.step(TIME_STEP, deltaTime, MAX_SUB_STEPS);
+            world.timestep = TIME_STEP;
+            world.step(eventQueue);
             currentTick++;
+            // Handle collision events
+            eventQueue.drainCollisionEvents((handle1, handle2, started) => {
+                handleCollisionEvent(handle1, handle2, started);
+            });
             for (const entity of physicsEntities) {
                 if (!entity.physics?.body || !entity.transform) continue;
                 applyBodyTransform(entity);
@@ -256,29 +222,23 @@ export function createPhysicsWorldSystem() {
         },
 
         dispose: () => {
-            // Remove all bodies from world
-            world.bodies.forEach(body => {
-                world.removeBody(body);
-            });
+            // Remove all bodies and colliders from world
+            for (const [entityId, colliders] of entityColliders.entries()) {
+                for (const collider of colliders) {
+                    world.removeCollider(collider, true);
+                }
+            }
+            for (const [entityId, body] of entityBodies.entries()) {
+                world.removeRigidBody(body);
+            }
             entityBodies.clear();
+            entityColliders.clear();
         },
         getVehiclePhysicsConfig(vehicleType: VehicleType) {
             return vehicleType === VehicleType.Drone ? DroneSettings : PlaneSettings;
         },
         createMeshPhysics(entity: GameEntity) {
-            // Determine material based on entity type
-            let material = meshMaterial;
-            if (entity.type === EntityType.Vehicle) {
-                material = vehicleMaterial;
-            } else if (entity.type === EntityType.Projectile) {
-                material = projectileMaterial;
-            } else if (entity.type === EntityType.Flag) {
-                material = flagMaterial;
-            } else if (entity.type === EntityType.Environment) {
-                material = environmentMaterial;
-            }
-
-            // determine mass based on entity type
+            // Determine collision group and mask based on entity type
             let physicsComponent = {
                 mass: 0,
                 drag: 0.0,
@@ -291,46 +251,52 @@ export function createPhysicsWorldSystem() {
                 thrust: 0.0,
                 lift: 0.0,
                 torque: 0.0
-            }
-
-            //determine collision group and mask based on entity type
+            };
             let collisionGroup = CollisionGroups.Environment;
             let collisionMask = collisionMasks.Environment;
+            let mass = 0;
             if (entity.type === EntityType.Vehicle) {
                 physicsComponent = this.getVehiclePhysicsConfig(entity.vehicle!.vehicleType);
                 collisionGroup = entity.vehicle!.vehicleType === VehicleType.Drone ? CollisionGroups.Drones : CollisionGroups.Planes;
                 collisionMask = entity.vehicle!.vehicleType === VehicleType.Drone ? collisionMasks.Drone : collisionMasks.Plane;
+                mass = physicsComponent.mass;
             } else if (entity.type === EntityType.Projectile) {
                 collisionGroup = CollisionGroups.Projectiles;
                 collisionMask = collisionMasks.Projectile;
+                mass = 0.1;
             } else if (entity.type === EntityType.Flag) {
                 collisionGroup = CollisionGroups.Flags;
                 collisionMask = collisionMasks.Flag;
+                mass = 0;
             }
 
-            const body = new CANNON.Body({
-                mass: physicsComponent.mass,
-                material: material,
-                collisionFilterGroup: collisionGroup,
-                collisionFilterMask: collisionMask,
-                position: new CANNON.Vec3(entity.transform!.position.x, entity.transform!.position.y, entity.transform!.position.z),
-                quaternion: new CANNON.Quaternion(entity.transform!.rotation.x, entity.transform!.rotation.y, entity.transform!.rotation.z, entity.transform!.rotation.w)
+            // Create RigidBodyDesc
+            const rbDesc = mass > 0 ? RAPIER.RigidBodyDesc.dynamic() : RAPIER.RigidBodyDesc.fixed();
+            rbDesc.setTranslation(
+                entity.transform!.position.x,
+                entity.transform!.position.y,
+                entity.transform!.position.z
+            );
+            rbDesc.setRotation({
+                x: entity.transform!.rotation.x,
+                y: entity.transform!.rotation.y,
+                z: entity.transform!.rotation.z,
+                w: entity.transform!.rotation.w
             });
+            const body = world.createRigidBody(rbDesc);
 
-            // If entity has collider meshes, use them
+            // Create colliders (multiple if needed)
+            const colliders: RAPIER.Collider[] = [];
             if (entity.asset?.collisionMeshes && entity.asset.collisionMeshes.length > 0) {
                 entity.asset.collisionMeshes.forEach(mesh => {
                     // Get world matrix and bake transformations
                     const worldMatrix = mesh.computeWorldMatrix(true);
-                    
                     // Get the scale from the world matrix
                     const scale = new Vector3();
                     worldMatrix.decompose(scale, undefined, undefined);
-                    
                     // Get absolute position and rotation
                     const absolutePosition = mesh.absolutePosition.clone();
                     const absoluteRotation = mesh.absoluteRotationQuaternion;
-                    
                     // Get the size in local space and apply world scale
                     const boundingBox = mesh.getBoundingInfo().boundingBox;
                     const size = boundingBox.extendSize.clone();
@@ -338,120 +304,88 @@ export function createPhysicsWorldSystem() {
                     size.x *= scale.x;
                     size.y *= scale.y;
                     size.z *= scale.z;
-                    
                     // Create a shape based on the mesh metadata
-                    let shape: CANNON.Shape;
+                    let colliderDesc: RAPIER.ColliderDesc;
                     if (mesh.metadata?.gltf?.extras?.shape === "sphere") {
                         // For spheres, use the largest dimension as radius
                         const radius = Math.max(size.x, size.y, size.z) / 2;
-                        shape = new CANNON.Sphere(radius);
+                        colliderDesc = RAPIER.ColliderDesc.ball(radius);
                     } else if (mesh.metadata?.gltf?.extras?.shape === "plane") {
                         // For planes, we need to create a box shape with very small height
                         // to approximate a plane while maintaining proper scaling
-                        shape = new CANNON.Box(new CANNON.Vec3(
-                            Math.abs(size.x / 2),
-                            0.01, // Very small height to approximate a plane
-                            Math.abs(size.z / 2)
-                        ));
-                        
-                        // Set the body quaternion to match the plane's normal
-                        const normal = new Vector3(0, 1, 0);
-                        normal.rotateByQuaternionAroundPointToRef(absoluteRotation, Vector3.Zero(), normal);
-                        const quat = new CANNON.Quaternion();
-                        quat.setFromVectors(new CANNON.Vec3(0, 1, 0), new CANNON.Vec3(normal.x, normal.y, normal.z));
-                        body.quaternion.mult(quat, body.quaternion);
+                        colliderDesc = RAPIER.ColliderDesc.cuboid(Math.abs(size.x / 2), 0.01, Math.abs(size.z / 2));
                     } else {
                         // For boxes, use the actual size with world scale applied
-                        shape = new CANNON.Box(new CANNON.Vec3(
-                            Math.abs(size.x / 2),
-                            Math.abs(size.y / 2),
-                            Math.abs(size.z / 2)
-                        ));
+                        colliderDesc = RAPIER.ColliderDesc.cuboid(Math.abs(size.x / 2), Math.abs(size.y / 2), Math.abs(size.z / 2));
                     }
-
-                    // Add the shape to the body with the correct position and orientation
-                    const offset = new CANNON.Vec3(
-                        absolutePosition.x,
-                        absolutePosition.y,
-                        absolutePosition.z
-                    );
-                    const orientation = new CANNON.Quaternion(
-                        absoluteRotation.x,
-                        absoluteRotation.y,
-                        absoluteRotation.z,
-                        absoluteRotation.w
-                    );
-                    body.addShape(shape, offset, orientation);
+                    colliderDesc.setCollisionGroups((collisionGroup << 16) | collisionMask);
+                    // Set translation and rotation relative to the body if needed
+                    colliderDesc.setTranslation(absolutePosition.x, absolutePosition.y, absolutePosition.z);
+                    if (absoluteRotation) {
+                        colliderDesc.setRotation({
+                            x: absoluteRotation.x,
+                            y: absoluteRotation.y,
+                            z: absoluteRotation.z,
+                            w: absoluteRotation.w
+                        });
+                    }
+                    const collider = world.createCollider(colliderDesc, body);
+                    colliders.push(collider);
                 });
             } else {
                 // Fallback to using the entity's bounding box
                 const mesh = entity.render?.mesh;
                 if (mesh) {
                     const size = mesh.getBoundingInfo().boundingBox.extendSize;
-                    const shape = new CANNON.Box(new CANNON.Vec3(
-                        Math.abs(size.x),
-                        Math.abs(size.y),
-                        Math.abs(size.z)
-                    ));
-                    body.addShape(shape);
+                    const colliderDesc = RAPIER.ColliderDesc.cuboid(Math.abs(size.x), Math.abs(size.y), Math.abs(size.z));
+                    colliderDesc.setCollisionGroups((collisionGroup << 16) | collisionMask);
+                    const collider = world.createCollider(colliderDesc, body);
+                    colliders.push(collider);
                 }
+            }
+            if (colliders.length === 0) {
+                // fallback: create a small box
+                const colliderDesc = RAPIER.ColliderDesc.cuboid(0.5, 0.5, 0.5);
+                colliderDesc.setCollisionGroups((collisionGroup << 16) | collisionMask);
+                const collider = world.createCollider(colliderDesc, body);
+                colliders.push(collider);
             }
             entity.physics = {
                 body: body,
+                colliders: colliders,
                 ...physicsComponent
             };
             this.addBody(entity);
         },
-        createFlagBody(position: Vector3): CANNON.Body {
-            const body = new CANNON.Body({
-                mass: 0, // Static body
-                material: flagMaterial,
-                collisionFilterGroup: CollisionGroups.Flags,
-                collisionFilterMask: collisionMasks.Flag,
-                position: new CANNON.Vec3(position.x, position.y, position.z),
-                quaternion: new CANNON.Quaternion(0, 0, 0, 1)
-            });
-            const shape = new CANNON.Box(new CANNON.Vec3(0.5, 0.5, 0.5));
-            body.addShape(shape);
+        createFlagBody(position: Vector3): RAPIER.RigidBody {
+            const rbDesc = RAPIER.RigidBodyDesc.fixed().setTranslation(position.x, position.y, position.z);
+            const body = world.createRigidBody(rbDesc);
+            const colliderDesc = RAPIER.ColliderDesc.cuboid(0.5, 0.5, 0.5);
+            colliderDesc.setCollisionGroups((CollisionGroups.Flags << 16) | collisionMasks.Flag);
+            world.createCollider(colliderDesc, body);
             return body;
         },
         // Create collider bodies from a collection of meshes
-        createColliderBodies(meshes: Mesh[]): CANNON.Body[] {
-            const bodies: CANNON.Body[] = [];
-            
-            meshes.forEach(mesh => {
-                // Create a body for each mesh
-                const body = new CANNON.Body({
-                    mass: 0, // Static body
-                    material: meshMaterial,
-                    position: new CANNON.Vec3(mesh.position.x, mesh.position.y, mesh.position.z),
-                    quaternion: new CANNON.Quaternion(
-                        mesh.rotationQuaternion?.x || 0,
-                        mesh.rotationQuaternion?.y || 0,
-                        mesh.rotationQuaternion?.z || 0,
-                        mesh.rotationQuaternion?.w || 1
-                    )
-                });
-                // Add collision shape based on mesh type
+        createColliderBodies(meshes: Mesh[]): RAPIER.RigidBody[] {
+            const bodies: RAPIER.RigidBody[] = [];
+            for (const mesh of meshes) {
+                const rbDesc = RAPIER.RigidBodyDesc.fixed().setTranslation(mesh.position.x, mesh.position.y, mesh.position.z);
+                const body = world.createRigidBody(rbDesc);
+                let colliderDesc: RAPIER.ColliderDesc;
                 if (mesh.getClassName() === "BoxMesh") {
                     const size = mesh.getBoundingInfo().boundingBox.extendSize;
-                    const shape = new CANNON.Box(new CANNON.Vec3(size.x, size.y, size.z));
-                    body.addShape(shape);
+                    colliderDesc = RAPIER.ColliderDesc.cuboid(size.x, size.y, size.z);
                 } else if (mesh.getClassName() === "SphereMesh") {
                     const radius = mesh.getBoundingInfo().boundingSphere.radius;
-                    const shape = new CANNON.Sphere(radius);
-                    body.addShape(shape);
+                    colliderDesc = RAPIER.ColliderDesc.ball(radius);
                 } else {
-                    // For other mesh types, use a box approximation
                     const size = mesh.getBoundingInfo().boundingBox.extendSize;
-                    const shape = new CANNON.Box(new CANNON.Vec3(size.x, size.y, size.z));
-                    body.addShape(shape);
+                    colliderDesc = RAPIER.ColliderDesc.cuboid(size.x, size.y, size.z);
                 }
-
+                colliderDesc.setCollisionGroups((CollisionGroups.Environment << 16) | collisionMasks.Environment);
+                world.createCollider(colliderDesc, body);
                 bodies.push(body);
-                world.addBody(body);
-            });
-
+            }
             return bodies;
         },
         /**
@@ -529,36 +463,25 @@ export function createPhysicsWorldSystem() {
             }
 
             // Create projectile body
-            const body = new CANNON.Body({
-                mass: 0,
-                position: new CANNON.Vec3(
-                    spawnPointPosition.x,
-                    spawnPointPosition.y,
-                    spawnPointPosition.z
-                ),
-                velocity: new CANNON.Vec3(
-                    projectileVelocity.x,
-                    projectileVelocity.y,
-                    projectileVelocity.z
-                ),
-                fixedRotation: true,
-                collisionResponse: false,
-                collisionFilterGroup: CollisionGroups.Projectiles,
-                collisionFilterMask: collisionMasks.Projectile,
-                type: CANNON.Body.DYNAMIC
-            });
-            
+            const rbDesc = RAPIER.RigidBodyDesc.dynamic()
+                .setTranslation(spawnPointPosition.x, spawnPointPosition.y, spawnPointPosition.z)
+                .setLinvel(projectileVelocity.x, projectileVelocity.y, projectileVelocity.z)
+                .setCcdEnabled(true);
+            const body = world.createRigidBody(rbDesc);
 
             // Add collision shape based on projectile type
+            let colliderDesc: RAPIER.ColliderDesc;
             if (weapon.projectileType === ProjectileType.Bullet) {
-                body.addShape(new CANNON.Sphere(0.1));
+                colliderDesc = RAPIER.ColliderDesc.ball(0.1);
             } else if (weapon.projectileType === ProjectileType.Missile) {
-                body.addShape(new CANNON.Sphere(0.1));
+                colliderDesc = RAPIER.ColliderDesc.ball(0.1);
+            } else {
+                colliderDesc = RAPIER.ColliderDesc.ball(0.1);
             }
-            
-            // Add body to CANNON world
-            world.addBody(body);
+            colliderDesc.setCollisionGroups((CollisionGroups.Projectiles << 16) | collisionMasks.Projectile);
+            const collider = world.createCollider(colliderDesc, body);
             entityBodies.set(projectileId, body);
+            entityColliders.set(projectileId, [collider]);
 
             // Create and return projectile entity
             return {
@@ -572,7 +495,8 @@ export function createPhysicsWorldSystem() {
                 },
                 physics: {
                     body,
-                    mass: 0,
+                    colliders: [collider],
+                    mass: 0.1,
                     drag: 0.1,
                     angularDrag: 0.1,
                     maxSpeed: weapon.projectileSpeed,
@@ -639,17 +563,20 @@ export function createPhysicsWorldSystem() {
                 const velocityChange = minVelocity + (maxVelocity - minVelocity) * (distanceRatio * distanceRatio);
 
                 // Apply velocity change directly
-                vehicle.physics.body.velocity.x += direction.x * velocityChange;
-                vehicle.physics.body.velocity.y += direction.y * velocityChange;
-                vehicle.physics.body.velocity.z += direction.z * velocityChange;
-
-                // Add some upward velocity for a more dramatic effect
-                // vehicle.physics.body.velocity.y += velocityChange * 0.5;
+                const linvel = vehicle.physics.body.linvel();
+                vehicle.physics.body.setLinvel({
+                    x: linvel.x + direction.x * velocityChange,
+                    y: linvel.y + direction.y * velocityChange,
+                    z: linvel.z + direction.z * velocityChange
+                }, true);
 
                 // Dampen angular velocity to prevent spinning
-                vehicle.physics.body.angularVelocity.x *= 0.5;
-                vehicle.physics.body.angularVelocity.y *= 0.5;
-                vehicle.physics.body.angularVelocity.z *= 0.5;
+                const angvel = vehicle.physics.body.angvel();
+                vehicle.physics.body.setAngvel({
+                    x: angvel.x * 0.5,
+                    y: angvel.y * 0.5,
+                    z: angvel.z * 0.5
+                }, true);
             }
         }
     };  

@@ -5,7 +5,6 @@ import { createPhysicsWorldSystem } from '@shared/ecs/systems/PhysicsWorldSystem
 import { createCameraSystem } from './CameraSystem';
 import { createClientInputSystem } from './ClientInputSystem';
 import { createNetworkSystem } from './NetworkSystem';
-import { createCollisionSystem } from '@shared/ecs/systems/CollisionSystems';
 import { createFlagSystem } from '@shared/ecs/systems/FlagSystems';
 import { createSceneSystem } from './SceneSystem';
 import { createPhysicsSystem } from '@shared/ecs/systems/PhysicsSystem';
@@ -13,7 +12,7 @@ import { createAssetSystem } from '@shared/ecs/systems/AssetSystem';
 import { createWeaponSystem } from '@shared/ecs/systems/WeaponSystem';
 import { world as ecsWorld } from '@shared/ecs/world';
 import { createProjectileSystem } from "./ProjectileSystem";
-import CannonDebugger from "cannon-es-debugger-babylonjs";
+import { RapierDebugger } from "./RapierDebugger";
 
 export function createGameSystems(
     engine: Engine,
@@ -35,10 +34,10 @@ export function createGameSystems(
     physicsWorldSystem.setCurrentTick(room.state.serverTick);
     console.log('Physics world system initialized');
 
-    // Initialize cannon-es-debugger-babylonjs
-    const cannonDebugger = new (CannonDebugger as any)(scene, physicsWorldSystem.getWorld());
+    // Initialize Rapier debugger
+    const rapierDebugger = new RapierDebugger(scene, physicsWorldSystem.getWorld());
     let isDebugMode = false;
-    console.log('Cannon-es-debugger-babylonjs initialized');
+    console.log('Rapier debugger initialized');
 
     // Initialize weapon system
     console.log('Initializing weapon system...');
@@ -59,7 +58,6 @@ export function createGameSystems(
     console.log('Initializing projectile system...');
     const projectileSystem = createProjectileSystem(physicsWorldSystem, sceneSystem);
     console.log('Projectile system initialized');
-    const collisionSystem = createCollisionSystem(physicsWorldSystem.getWorld());
     const flagSystem = createFlagSystem();
     const assetSystem = createAssetSystem(engine, scene, physicsWorldSystem, false);
     assetSystem.preloadAssets();
@@ -143,33 +141,32 @@ export function createGameSystems(
                 weaponSystem.update(FIXED_TIME_STEP);
                 networkSystem.update(FIXED_TIME_STEP);
                 if (isDebugMode) {
-                    cannonDebugger.update();
+                    rapierDebugger.update();
                 }
                 projectileSystem.update(FIXED_TIME_STEP);
-                collisionSystem.update(FIXED_TIME_STEP);
                 flagSystem.update(FIXED_TIME_STEP);
                 cameraSystem.update(FIXED_TIME_STEP);
                 // Run exactly one tick
                 physicsWorldSystem.update(FIXED_TIME_STEP);
-                 
-                 accumulator -= FIXED_TIME_STEP;
-             }
-         } catch (error) {
-             console.error('Error in game systems update:', error);
-         }
-     }
-     console.log('Setting up render loop...');
-     engine.runRenderLoop(() => {
-         sceneSystem.render();
-     });
-     // Start the physics loop
-     console.log('Starting physics loop...');
-     scene.registerBeforeRender(() => {
+
+                accumulator -= FIXED_TIME_STEP;
+            }
+        } catch (error) {
+            console.error('Error in game systems update:', error);
+        }
+    }
+    console.log('Setting up render loop...');
+    engine.runRenderLoop(() => {
+        sceneSystem.render();
+    });
+    // Start the physics loop
+    console.log('Starting physics loop...');
+    scene.registerBeforeRender(() => {
         const dt = engine.getDeltaTime() / 1000;
         networkSystem.networkPredictionSystem.update(dt);
         sceneSystem.update(dt);
         update(dt);
-     });
+    });
 
     return {
         sceneSystem,
@@ -178,7 +175,6 @@ export function createGameSystems(
         cameraSystem,
         inputSystem,
         networkSystem,
-        collisionSystem,
         flagSystem,
         assetSystem,
 
@@ -187,7 +183,7 @@ export function createGameSystems(
             isDebugMode = enabled;
             // Enable/disable network system debug mode
             networkSystem.setDebugMode(enabled);
-            // Cannon debugger is automatically updated in the physics loop when isDebugMode is true
+            // Rapier debugger is automatically updated in the physics loop when isDebugMode is true
         },
         getDebugMode: () => isDebugMode,
 
@@ -200,6 +196,7 @@ export function createGameSystems(
                 inputSystem.cleanup();
                 networkSystem.cleanup();
                 assetSystem.cleanup();
+                rapierDebugger.dispose();
                 // Clean up ecsWorld
                 ecsWorld.clear();
             } catch (error) {
