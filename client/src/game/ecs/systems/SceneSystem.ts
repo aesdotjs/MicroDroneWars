@@ -79,8 +79,8 @@ export function createSceneSystem(engine: Engine) {
     console.log('Camera setup complete');
 
     console.log('Setting up glow layer...');
-    // const glowLayer = setupGlowLayer(scene); Glow layer is hungry on the GPU
-    const glowLayer = null;
+    const glowLayer = setupGlowLayer(scene);
+    // const glowLayer = null;
     console.log('Glow layer setup complete');
 
     Inspector.Show(scene, {
