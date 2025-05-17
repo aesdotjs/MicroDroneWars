@@ -1,6 +1,5 @@
 // import * as CANNON from 'cannon-es';
 import RAPIER from '@dimforge/rapier3d-deterministic-compat';
-import initRapier3D from '../../utils/init-rapier3d';
 import { world as ecsWorld } from '../world';
 import { GameEntity, VehicleType, DroneSettings, PlaneSettings, CollisionGroups, collisionMasks, EntityType, PhysicsComponent, WeaponComponent, ProjectileType, CollisionType, CollisionSeverity } from '../types';
 import { Vector3, Quaternion, Mesh } from '@babylonjs/core';
@@ -8,8 +7,8 @@ import { Vector3, Quaternion, Mesh } from '@babylonjs/core';
  * Creates a system that manages the physics world for both client and server using Rapier
  */
 export function createPhysicsWorldSystem() {
-    initRapier3D();
     const world = new RAPIER.World({ x: 0, y: -9.82, z: 0 });
+    world.timestep = 1 / 60;
     const eventQueue = new RAPIER.EventQueue(true);
 
     // Rapier doesn't use materials like Cannon, so we skip material setup
@@ -26,8 +25,8 @@ export function createPhysicsWorldSystem() {
 
     // Helper to apply Rapier body transform to ECS entity
     const applyBodyTransform = (entity: GameEntity) => {
-        const body = entity.physics?.body;
-        if (!body) return;
+            const body = entity.physics?.body;
+            if (!body) return;
         const translation = body.translation();
         const rotation = body.rotation();
         const linvel = body.linvel();
@@ -69,45 +68,16 @@ export function createPhysicsWorldSystem() {
         return CollisionSeverity.Light;
     }
 
-    function handleCollisionEvent(handle1: number, handle2: number, started: boolean) {
-        // Find the colliders
-        const colliderA = world.getCollider(handle1);
-        const colliderB = world.getCollider(handle2);
-        if (!colliderA || !colliderB) return;
-        // Find the entities by collider
-        const entityA = ecsWorld.entities.find(e => e.physics?.colliders?.includes(colliderA));
-        const entityB = ecsWorld.entities.find(e => e.physics?.colliders?.includes(colliderB));
-        if (!entityA || !entityB) return;
-        // Only handle collision start events
-        if (!started) return;
-        // Get collision type
-        const collisionType = determineCollisionType(colliderA, colliderB);
-        // Get impact velocity (approximate as difference in linvel)
-        const bodyA = entityA.physics?.body;
-        const bodyB = entityB.physics?.body;
-        let impactVelocity = 0;
-        if (bodyA && bodyB) {
-            const linvelA = bodyA.linvel();
-            const linvelB = bodyB.linvel();
-            impactVelocity = Math.sqrt(
-                Math.pow(linvelA.x - linvelB.x, 2) +
-                Math.pow(linvelA.y - linvelB.y, 2) +
-                Math.pow(linvelA.z - linvelB.z, 2)
-            );
-        }
-        const severity = determineCollisionSeverity(impactVelocity);
-        // Compose event object
-        const event = {
-            type: collisionType,
-            severity: severity,
-            bodyA: bodyA,
-            bodyB: bodyB,
-            impactVelocity: impactVelocity,
-            // Rapier does not provide direct contact point/normal in event queue, so we comment these:
-            contactPoint: undefined, // TODO: Use contact pairs API if needed
-            normal: undefined, // TODO: Use contact pairs API if needed
-            timestamp: Date.now()
-        };
+    function handleCollisionEvent(entityA: GameEntity, entityB: GameEntity, event: {
+        type: CollisionType,
+        severity: CollisionSeverity,
+        bodyA: RAPIER.RigidBody | undefined,
+        bodyB: RAPIER.RigidBody | undefined,
+        impactVelocity: number,
+        contactPoint?: Vector3,
+        normal?: Vector3,
+        timestamp: number
+    }) {
         // Handle vehicle collisions
         if (entityA.type === EntityType.Vehicle) {
             handleVehicleCollision(entityA, entityB, event);
@@ -179,7 +149,7 @@ export function createPhysicsWorldSystem() {
         setCurrentTick: (tick: number) => {
             currentTick = tick;
         },
-
+        
         addBody: (entity: GameEntity) => {
             if (!entity.physics?.body || !entity.physics?.colliders) {
                 console.warn(`Entity ${entity.id} has no physics body/colliders to add`);
@@ -206,14 +176,59 @@ export function createPhysicsWorldSystem() {
                 entityBodies.delete(entityId);
             }
         },
-
+        
         update: (deltaTime: number) => {
-            world.timestep = TIME_STEP;
             world.step(eventQueue);
             currentTick++;
             // Handle collision events
-            eventQueue.drainCollisionEvents((handle1, handle2, started) => {
-                handleCollisionEvent(handle1, handle2, started);
+            eventQueue.drainCollisionEvents((handle1: number, handle2: number, started: boolean) => {
+                if (!started) return;
+                const colliderA = world.getCollider(handle1);
+                const colliderB = world.getCollider(handle2);
+                if (!colliderA || !colliderB) return;
+                world.contactPair(colliderA, colliderB, (manifold: any, flipped: boolean) => {
+                    if (!manifold || manifold.numContacts() === 0) return;
+                    // Find the entities by collider
+                    const entityA = ecsWorld.entities.find(e => e.physics?.colliders?.includes(colliderA));
+                    const entityB = ecsWorld.entities.find(e => e.physics?.colliders?.includes(colliderB));
+                    if (!entityA || !entityB) return;
+                    // Get collision type
+                    const collisionType = determineCollisionType(colliderA, colliderB);
+                    // Get impact velocity (approximate as difference in linvel)
+                    const bodyA = entityA.physics?.body;
+                    const bodyB = entityB.physics?.body;
+                    let impactVelocity = 0;
+                    if (bodyA && bodyB) {
+                        const linvelA = bodyA.linvel();
+                        const linvelB = bodyB.linvel();
+                        impactVelocity = Math.sqrt(
+                            Math.pow(linvelA.x - linvelB.x, 2) +
+                            Math.pow(linvelA.y - linvelB.y, 2) +
+                            Math.pow(linvelA.z - linvelB.z, 2)
+                        );
+                    }
+                    const severity = determineCollisionSeverity(impactVelocity);
+                    // Extract contact point and normal from the first contact
+                    let contactPoint = undefined;
+                    let normal = undefined;
+                    if (manifold.numContacts() > 0) {
+                        const contact = manifold.contact(0);
+                        // world-space contact point on colliderA
+                        contactPoint = new Vector3(contact.point(0).x, contact.point(0).y, contact.point(0).z);
+                        // world-space normal (from A to B)
+                        normal = new Vector3(contact.normal().x, contact.normal().y, contact.normal().z);
+                    }
+                    handleCollisionEvent(entityA, entityB, {
+                        type: collisionType,
+                        severity: severity,
+                        bodyA: bodyA,
+                        bodyB: bodyB,
+                        impactVelocity: impactVelocity,
+                        contactPoint,
+                        normal,
+                        timestamp: Date.now()
+                    });
+                });
             });
             for (const entity of physicsEntities) {
                 if (!entity.physics?.body || !entity.transform) continue;
@@ -314,6 +329,31 @@ export function createPhysicsWorldSystem() {
                         // For planes, we need to create a box shape with very small height
                         // to approximate a plane while maintaining proper scaling
                         colliderDesc = RAPIER.ColliderDesc.cuboid(Math.abs(size.x / 2), 0.01, Math.abs(size.z / 2));
+                    } else if (mesh.metadata?.gltf?.extras?.shape === "trimesh") {
+                        // Trimesh support
+                        // Extract vertices and indices from mesh geometry
+                        const geometry = mesh.geometry || mesh._geometry;
+                        if (geometry && geometry.getVerticesData && geometry.getIndices) {
+                            const positions = geometry.getVerticesData("position");
+                            const indices = geometry.getIndices();
+                            if (positions && indices) {
+                                // Rapier expects Float32Array for vertices, Uint32Array for indices
+                                const vertices = new Float32Array(positions);
+                                let indexArray: Uint32Array;
+                                if (indices instanceof Uint32Array) {
+                                    indexArray = indices;
+                                } else {
+                                    indexArray = new Uint32Array(indices);
+                                }
+                                colliderDesc = RAPIER.ColliderDesc.trimesh(vertices, indexArray);
+                            } else {
+                                // fallback to box if no geometry
+                                colliderDesc = RAPIER.ColliderDesc.cuboid(Math.abs(size.x / 2), Math.abs(size.y / 2), Math.abs(size.z / 2));
+                            }
+                        } else {
+                            // fallback to box if no geometry
+                            colliderDesc = RAPIER.ColliderDesc.cuboid(Math.abs(size.x / 2), Math.abs(size.y / 2), Math.abs(size.z / 2));
+                        }
                     } else {
                         // For boxes, use the actual size with world scale applied
                         colliderDesc = RAPIER.ColliderDesc.cuboid(Math.abs(size.x / 2), Math.abs(size.y / 2), Math.abs(size.z / 2));

@@ -16,6 +16,7 @@ import { createAssetSystem } from "@shared/ecs/systems/AssetSystem";
 import { createEntitySystem } from "@shared/ecs/systems/EntitySystem";
 import { createWeaponSystem } from "@shared/ecs/systems/WeaponSystem";
 import { createProjectileSystem } from "src/ecs/systems/ProjectileSystem";
+import initRapier3D from '@shared/utils/init-rapier3d';
 // import * as xhr2 from "xhr2";
 import '@babylonjs/loaders/glTF/2.0/Extensions/ExtrasAsMetadata';
 import '@babylonjs/loaders/glTF/2.0/Extensions/KHR_lights_punctual';
@@ -53,6 +54,7 @@ export class MicroDroneRoom extends Room<State> {
      * @param options - Room creation options
      */
     async onCreate(options: Record<string, any>) {
+        await initRapier3D();
         this.state = new State();
         console.log("MicroDrone room created");
 
@@ -73,7 +75,7 @@ export class MicroDroneRoom extends Room<State> {
         }
 
         // Initialize physics world system
-        this.physicsWorldSystem = await createPhysicsWorldSystem();
+        this.physicsWorldSystem = createPhysicsWorldSystem();
         
         // Initialize weapon system
         this.weaponSystem = createWeaponSystem(this.physicsWorldSystem, true);

@@ -1,4 +1,3 @@
-import * as CANNON from 'cannon-es';
 import { Vector3, Quaternion } from '@babylonjs/core';
 import { world as ecsWorld } from '../world';
 import { GameEntity, WeaponComponent, InputComponent, ProjectileType, EntityType, CollisionGroups, collisionMasks } from '../types';

@@ -96,11 +96,11 @@ export function createDroneSystem(
             }
         },
         applyInput: (dt: number, entity: GameEntity, input: InputComponent) => {
-            const body = entity.physics!.body;
-            if (!body) {
+            if (!entity.physics || !entity.physics.body) {
                 console.warn(`Entity ${entity.id} has no physics body`);
                 return;
             }
+            const body = entity.physics.body;
             const settings = DroneSettings;
 
             // Get orientation vectors
@@ -211,8 +211,8 @@ export function createPlaneSystem(
     return {
         update: (dt: number) => {
             for (const entity of planes) {
-                const body = entity.physics!.body;
-                if (!body) continue;
+                if (!entity.physics || !entity.physics.body) continue;
+                const body = entity.physics.body;
                 const settings = PlaneSettings;
 
                 // Initialize engine power if needed
@@ -317,11 +317,11 @@ export function createPlaneSystem(
             }
         },
         applyInput: (dt: number, entity: GameEntity, input: InputComponent) => {
-            const body = entity.physics!.body;
-            if (!body) {
+            if (!entity.physics || !entity.physics.body) {
                 console.warn(`Entity ${entity.id} has no physics body`);
                 return;
             }
+            const body = entity.physics.body;
             const settings = PlaneSettings;
 
             // Initialize engine power if needed
