@@ -47,18 +47,28 @@ export function createPhysicsWorldSystem() {
     };
 
     // --- Collision event handling ---
-    function determineCollisionType(colliderA: RAPIER.Collider, colliderB: RAPIER.Collider): CollisionType {
-        const groupA = colliderA.collisionGroups() >> 16;
-        const groupB = colliderB.collisionGroups() >> 16;
-        const isGroundCollision = (groupA & CollisionGroups.Environment) !== 0 || (groupB & CollisionGroups.Environment) !== 0;
-        const isVehicleCollision = (groupA & (CollisionGroups.Drones | CollisionGroups.Planes)) !== 0 && (groupB & (CollisionGroups.Drones | CollisionGroups.Planes)) !== 0;
-        const isProjectileCollision = (groupA & CollisionGroups.Projectiles) !== 0 || (groupB & CollisionGroups.Projectiles) !== 0;
-        const isFlagCollision = (groupA & CollisionGroups.Flags) !== 0 || (groupB & CollisionGroups.Flags) !== 0;
-        if (isGroundCollision) return CollisionType.VehicleEnvironment;
-        if (isVehicleCollision) return CollisionType.VehicleVehicle;
-        if (isProjectileCollision) return CollisionType.VehicleProjectile;
-        if (isFlagCollision) return CollisionType.VehicleFlag;
-        return CollisionType.VehicleEnvironment;
+    function determineCollisionType(
+        entityA?: GameEntity,
+        entityB?: GameEntity
+    ): CollisionType {
+        // If either is a projectile
+        if (entityA?.type === EntityType.Projectile) {
+            if (entityB?.type === EntityType.Vehicle) return CollisionType.ProjectileVehicle;
+            if (entityB?.type === EntityType.Environment) return CollisionType.ProjectileEnvironment;
+            if (entityB?.type === EntityType.Flag) return CollisionType.ProjectileFlag;
+            return CollisionType.ProjectileOther;
+        }
+        if (entityB?.type === EntityType.Projectile) {
+            if (entityA?.type === EntityType.Vehicle) return CollisionType.ProjectileVehicle;
+            if (entityA?.type === EntityType.Environment) return CollisionType.ProjectileEnvironment;
+            if (entityA?.type === EntityType.Flag) return CollisionType.ProjectileFlag;
+            return CollisionType.ProjectileOther;
+        }
+        // Fallbacks for other types
+        if (entityA?.type === EntityType.Vehicle && entityB?.type === EntityType.Vehicle) return CollisionType.VehicleVehicle;
+        if (entityA?.type === EntityType.Flag || entityB?.type === EntityType.Flag) return CollisionType.VehicleFlag;
+        if (entityA?.type === EntityType.Environment || entityB?.type === EntityType.Environment) return CollisionType.VehicleEnvironment;
+        return CollisionType.Unknown;
     }
 
     function determineCollisionSeverity(impactVelocity: number): CollisionSeverity {
@@ -78,6 +88,7 @@ export function createPhysicsWorldSystem() {
         normal?: Vector3,
         timestamp: number
     }) {
+        console.log(event);
         // Handle vehicle collisions
         if (entityA.type === EntityType.Vehicle) {
             handleVehicleCollision(entityA, entityB, event);
@@ -131,10 +142,18 @@ export function createPhysicsWorldSystem() {
             console.warn('Projectile missing required components:', projectile.id);
             return;
         }
-        // Damage logic can be added here if needed
-        // Rapier does not provide direct contact point/normal in event queue, so we comment these:
-        // const position = ...
-        // projectile.projectile.impact = { ... };
+        console.log('[PhysicsWorldSystem] handleProjectileCollision', { projectileId: projectile.id, otherId: other.id, event });
+        // Restore impact logic if contact info is available
+        if (event.contactPoint && event.normal && other.id) {
+            console.log('[PhysicsWorldSystem] Setting projectile.impact', { position: event.contactPoint, normal: event.normal, impactVelocity: event.impactVelocity, targetId: other.id, targetType: other.type });
+            projectile.projectile.impact = {
+                position: event.contactPoint,
+                normal: event.normal,
+                impactVelocity: event.impactVelocity,
+                targetId: other.id,
+                targetType: other.type || ""
+            };
+        }
     }
     function handleFlagCollision(flag: GameEntity, other: GameEntity, event: any) {
         if (other.vehicle && !flag.gameState!.carriedBy) {
@@ -142,6 +161,27 @@ export function createPhysicsWorldSystem() {
             other.gameState!.hasFlag = true;
         }
     }
+
+    // --- Physics hooks for custom contact filtering ---
+    const physicsHooks = {
+        filterContactPair: (collider1: number, collider2: number, body1: number, body2: number) => {
+            const colliderA = world.getCollider(collider1);
+            const colliderB = world.getCollider(collider2);
+            // Find ECS entities by collider
+            const entityA = ecsWorld.entities.find(e => e.physics?.colliders?.includes(colliderA));
+            const entityB = ecsWorld.entities.find(e => e.physics?.colliders?.includes(colliderB));
+            // Ignore collision if one is a projectile and the other's id matches sourceId
+            if (
+                entityA?.type === EntityType.Projectile && entityA.projectile?.sourceId === entityB?.id ||
+                entityB?.type === EntityType.Projectile && entityB.projectile?.sourceId === entityA?.id
+            ) {
+                return null; // Ignore this contact pair
+            }
+            // Otherwise, allow normal contact computation
+            return RAPIER.SolverFlags.COMPUTE_IMPULSE;
+        },
+        filterIntersectionPair: () => true // Dummy, required by PhysicsHooks interface
+    };
 
     return {
         getWorld: () => world,
@@ -178,22 +218,26 @@ export function createPhysicsWorldSystem() {
         },
         
         update: (deltaTime: number) => {
-            world.step(eventQueue);
+            world.step(eventQueue, physicsHooks);
             currentTick++;
             // Handle collision events
             eventQueue.drainCollisionEvents((handle1: number, handle2: number, started: boolean) => {
+                console.log('[PhysicsWorldSystem] drainCollisionEvents', { handle1, handle2, started });
                 if (!started) return;
                 const colliderA = world.getCollider(handle1);
                 const colliderB = world.getCollider(handle2);
                 if (!colliderA || !colliderB) return;
                 world.contactPair(colliderA, colliderB, (manifold: any, flipped: boolean) => {
-                    if (!manifold || manifold.numContacts() === 0) return;
+                    console.log('[PhysicsWorldSystem] contactPair', { colliderA: colliderA.handle, colliderB: colliderB.handle, numContacts: manifold?.numContacts?.(), manifold });
+                    if (!manifold || (manifold.numContacts && manifold.numContacts() === 0)) return;
                     // Find the entities by collider
                     const entityA = ecsWorld.entities.find(e => e.physics?.colliders?.includes(colliderA));
                     const entityB = ecsWorld.entities.find(e => e.physics?.colliders?.includes(colliderB));
+                    console.log('[PhysicsWorldSystem] Entities found for collision', { entityA: entityA?.id, entityB: entityB?.id });
                     if (!entityA || !entityB) return;
                     // Get collision type
-                    const collisionType = determineCollisionType(colliderA, colliderB);
+                    const collisionType = determineCollisionType(entityA, entityB);
+                    console.log('[PhysicsWorldSystem] Collision type', collisionType);
                     // Get impact velocity (approximate as difference in linvel)
                     const bodyA = entityA.physics?.body;
                     const bodyB = entityB.physics?.body;
@@ -208,15 +252,32 @@ export function createPhysicsWorldSystem() {
                         );
                     }
                     const severity = determineCollisionSeverity(impactVelocity);
-                    // Extract contact point and normal from the first contact
+                    // Extract contact point and normal from the first contact using Rapier's TempContactManifold API
                     let contactPoint = undefined;
                     let normal = undefined;
-                    if (manifold.numContacts() > 0) {
-                        const contact = manifold.contact(0);
-                        // world-space contact point on colliderA
-                        contactPoint = new Vector3(contact.point(0).x, contact.point(0).y, contact.point(0).z);
-                        // world-space normal (from A to B)
-                        normal = new Vector3(contact.normal().x, contact.normal().y, contact.normal().z);
+                    if (manifold.numContacts && manifold.numContacts() > 0) {
+                        // Get the world-space normal
+                        normal = manifold.normal ? manifold.normal() : undefined;
+                        if (normal) {
+                            normal = new Vector3(normal.x, normal.y, normal.z);
+                        }
+                        // Get the world-space contact point for the first contact
+                        // Use solverContactPoint if available, else localContactPoint1/2
+                        let point = undefined;
+                        if (manifold.solverContactPoint) {
+                            point = manifold.solverContactPoint(0);
+                        } else if (manifold.localContactPoint1) {
+                            point = manifold.localContactPoint1(0);
+                        }
+                        if (point) {
+                            contactPoint = new Vector3(point.x, point.y, point.z);
+                        }
+                        // If 'flipped', swap normal direction
+                        if (flipped && normal) {
+                            normal = normal.scale(-1);
+                        }
+                    } else {
+                        console.warn('[PhysicsWorldSystem] No contacts in manifold', manifold);
                     }
                     handleCollisionEvent(entityA, entityB, {
                         type: collisionType,
@@ -359,6 +420,11 @@ export function createPhysicsWorldSystem() {
                         colliderDesc = RAPIER.ColliderDesc.cuboid(Math.abs(size.x / 2), Math.abs(size.y / 2), Math.abs(size.z / 2));
                     }
                     colliderDesc.setCollisionGroups((collisionGroup << 16) | collisionMask);
+                    // Enable physics hooks for vehicles and projectiles
+                    if (entity.type === EntityType.Vehicle || entity.type === EntityType.Projectile) {
+                        colliderDesc.setActiveHooks(RAPIER.ActiveHooks.FILTER_CONTACT_PAIRS);
+                    }
+                    colliderDesc.setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS);
                     // Set translation and rotation relative to the body if needed
                     colliderDesc.setTranslation(absolutePosition.x, absolutePosition.y, absolutePosition.z);
                     if (absoluteRotation) {
@@ -379,6 +445,11 @@ export function createPhysicsWorldSystem() {
                     const size = mesh.getBoundingInfo().boundingBox.extendSize;
                     const colliderDesc = RAPIER.ColliderDesc.cuboid(Math.abs(size.x), Math.abs(size.y), Math.abs(size.z));
                     colliderDesc.setCollisionGroups((collisionGroup << 16) | collisionMask);
+                    // Enable physics hooks for vehicles and projectiles
+                    if (entity.type === EntityType.Vehicle || entity.type === EntityType.Projectile) {
+                        colliderDesc.setActiveHooks(RAPIER.ActiveHooks.FILTER_CONTACT_PAIRS);
+                    }
+                    colliderDesc.setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS);
                     const collider = world.createCollider(colliderDesc, body);
                     colliders.push(collider);
                 }
@@ -387,6 +458,11 @@ export function createPhysicsWorldSystem() {
                 // fallback: create a small box
                 const colliderDesc = RAPIER.ColliderDesc.cuboid(0.5, 0.5, 0.5);
                 colliderDesc.setCollisionGroups((collisionGroup << 16) | collisionMask);
+                // Enable physics hooks for vehicles and projectiles
+                if (entity.type === EntityType.Vehicle || entity.type === EntityType.Projectile) {
+                    colliderDesc.setActiveHooks(RAPIER.ActiveHooks.FILTER_CONTACT_PAIRS);
+                }
+                colliderDesc.setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS);
                 const collider = world.createCollider(colliderDesc, body);
                 colliders.push(collider);
             }
@@ -402,6 +478,7 @@ export function createPhysicsWorldSystem() {
             const body = world.createRigidBody(rbDesc);
             const colliderDesc = RAPIER.ColliderDesc.cuboid(0.5, 0.5, 0.5);
             colliderDesc.setCollisionGroups((CollisionGroups.Flags << 16) | collisionMasks.Flag);
+            colliderDesc.setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS);
             world.createCollider(colliderDesc, body);
             return body;
         },
@@ -423,6 +500,7 @@ export function createPhysicsWorldSystem() {
                     colliderDesc = RAPIER.ColliderDesc.cuboid(size.x, size.y, size.z);
                 }
                 colliderDesc.setCollisionGroups((CollisionGroups.Environment << 16) | collisionMasks.Environment);
+                colliderDesc.setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS);
                 world.createCollider(colliderDesc, body);
                 bodies.push(body);
             }
@@ -469,23 +547,23 @@ export function createPhysicsWorldSystem() {
                 );
                 spawnPointPosition.addInPlace(shooter.transform!.position);
 
-                // Get forward direction from rotation
-                const forward = new Vector3(0, 0, 1);
-                forward.rotateByQuaternionToRef(shooter.transform!.rotation, forward);
+                // // Get forward direction from rotation
+                // const forward = new Vector3(0, 0, 1);
+                // forward.rotateByQuaternionToRef(shooter.transform!.rotation, forward);
                 
-                // Move spawn point 20cm forward from the trigger position
-                spawnPointPosition.addInPlace(forward.scale(0.2));
+                // // Move spawn point 20cm forward from the trigger position
+                // spawnPointPosition.addInPlace(forward.scale(0.2));
                 
                 // Combine rotations
                 spawnPointRotation = shooter.transform!.rotation.multiply(localRotation);
             } else {
                 // Fallback to vehicle position/rotation if no trigger mesh found
                 spawnPointPosition = shooter.transform!.position.clone();
-                // Get forward direction
-                const forward = new Vector3(0, 0, 1);
-                forward.rotateByQuaternionToRef(shooter.transform!.rotation, forward);
-                // Move spawn point 20cm forward
-                spawnPointPosition.addInPlace(forward.scale(0.2));
+                // // Get forward direction
+                // const forward = new Vector3(0, 0, 1);
+                // forward.rotateByQuaternionToRef(shooter.transform!.rotation, forward);
+                // // Move spawn point 20cm forward
+                // spawnPointPosition.addInPlace(forward.scale(0.2));
                 spawnPointRotation = shooter.transform!.rotation;
             }
 
@@ -506,6 +584,7 @@ export function createPhysicsWorldSystem() {
             const rbDesc = RAPIER.RigidBodyDesc.dynamic()
                 .setTranslation(spawnPointPosition.x, spawnPointPosition.y, spawnPointPosition.z)
                 .setLinvel(projectileVelocity.x, projectileVelocity.y, projectileVelocity.z)
+                .setGravityScale(0.0)
                 .setCcdEnabled(true);
             const body = world.createRigidBody(rbDesc);
 
@@ -519,6 +598,8 @@ export function createPhysicsWorldSystem() {
                 colliderDesc = RAPIER.ColliderDesc.ball(0.1);
             }
             colliderDesc.setCollisionGroups((CollisionGroups.Projectiles << 16) | collisionMasks.Projectile);
+            colliderDesc.setActiveHooks(RAPIER.ActiveHooks.FILTER_CONTACT_PAIRS);
+            colliderDesc.setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS);
             const collider = world.createCollider(colliderDesc, body);
             entityBodies.set(projectileId, body);
             entityColliders.set(projectileId, [collider]);
@@ -583,6 +664,13 @@ export function createPhysicsWorldSystem() {
             const maxVelocity = 20; // maximum velocity change
             const minVelocity = 5; // minimum velocity change
 
+            // Get projectile velocity direction if available
+            let projectileDir = undefined;
+            if (entity.transform?.velocity && entity.transform.velocity.length() > 0) {
+                projectileDir = entity.transform.velocity.normalize();
+            }
+            const blendFactor = 0.5; // Blend between radial and projectile direction
+
             // Find all vehicle entities
             const vehicles = ecsWorld.with("vehicle", "physics", "transform");
             
@@ -596,8 +684,12 @@ export function createPhysicsWorldSystem() {
                 if (distance > explosionRadius) continue;
 
                 // Calculate direction from impact to vehicle
-                const direction = vehicle.transform.position.subtract(impactPosition).normalize();
-                
+                let radialDir = vehicle.transform.position.subtract(impactPosition).normalize();
+                // Blend with projectile direction if available
+                let finalDir = radialDir;
+                if (projectileDir) {
+                    finalDir = radialDir.scale(1 - blendFactor).add(projectileDir.scale(blendFactor)).normalize();
+                }
                 // Calculate velocity change based on distance (inverse square falloff)
                 const distanceRatio = 1 - (distance / explosionRadius);
                 const velocityChange = minVelocity + (maxVelocity - minVelocity) * (distanceRatio * distanceRatio);
@@ -605,9 +697,9 @@ export function createPhysicsWorldSystem() {
                 // Apply velocity change directly
                 const linvel = vehicle.physics.body.linvel();
                 vehicle.physics.body.setLinvel({
-                    x: linvel.x + direction.x * velocityChange,
-                    y: linvel.y + direction.y * velocityChange,
-                    z: linvel.z + direction.z * velocityChange
+                    x: linvel.x + finalDir.x * velocityChange,
+                    y: linvel.y + finalDir.y * velocityChange,
+                    z: linvel.z + finalDir.z * velocityChange
                 }, true);
 
                 // Dampen angular velocity to prevent spinning

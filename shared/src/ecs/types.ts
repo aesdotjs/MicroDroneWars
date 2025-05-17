@@ -297,7 +297,12 @@ export enum CollisionType {
     VehicleVehicle = 'vehicle-vehicle',
     VehicleEnvironment = 'vehicle-environment',
     VehicleProjectile = 'vehicle-projectile',
-    VehicleFlag = 'vehicle-flag'
+    VehicleFlag = 'vehicle-flag',
+    ProjectileVehicle = 'projectile-vehicle',
+    ProjectileEnvironment = 'projectile-environment',
+    ProjectileFlag = 'projectile-flag',
+    ProjectileOther = 'projectile-other',
+    Unknown = 'unknown'
 }
 
 /**

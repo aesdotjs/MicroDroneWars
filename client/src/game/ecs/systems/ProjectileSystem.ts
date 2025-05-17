@@ -23,7 +23,6 @@ export function createProjectileSystem(
                         physicsWorldSystem.applyMissileImpact(entity);
                     }
                     ecsWorld.remove(entity);
-                    continue;
                 }
             }
         }

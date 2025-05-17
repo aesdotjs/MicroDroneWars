@@ -388,6 +388,7 @@ export function createNetworkSystem(
                 gameEntity.projectile!.sourceId = projectile!.sourceId;
                 gameEntity.projectile!.speed = projectile!.speed;
                 if (projectile?.impact) {
+                    console.log('projectile impact', projectile.impact);
                     gameEntity.projectile!.impact = {
                         position: new Vector3(projectile.impact.positionX, projectile.impact.positionY, projectile.impact.positionZ),
                         normal: new Vector3(projectile.impact.normalX, projectile.impact.normalY, projectile.impact.normalZ),

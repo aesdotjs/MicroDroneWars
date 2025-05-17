@@ -143,7 +143,6 @@ export function createGameSystems(
                 if (isDebugMode) {
                     rapierDebugger.update();
                 }
-                projectileSystem.update(FIXED_TIME_STEP);
                 flagSystem.update(FIXED_TIME_STEP);
                 cameraSystem.update(FIXED_TIME_STEP);
                 // Run exactly one tick
@@ -164,6 +163,7 @@ export function createGameSystems(
     scene.registerBeforeRender(() => {
         const dt = engine.getDeltaTime() / 1000;
         networkSystem.networkPredictionSystem.update(dt);
+        projectileSystem.update(FIXED_TIME_STEP);
         sceneSystem.update(dt);
         update(dt);
     });
