@@ -75,7 +75,7 @@ export class MicroDroneRoom extends Room<State> {
         }
 
         // Initialize physics world system
-        this.physicsWorldSystem = createPhysicsWorldSystem();
+        this.physicsWorldSystem = createPhysicsWorldSystem(true);
         
         // Initialize weapon system
         this.weaponSystem = createWeaponSystem(this.physicsWorldSystem, true);

@@ -13,6 +13,9 @@ import { createWeaponSystem } from '@shared/ecs/systems/WeaponSystem';
 import { world as ecsWorld } from '@shared/ecs/world';
 import { createProjectileSystem } from "./ProjectileSystem";
 import { RapierDebugger } from "./RapierDebugger";
+import { useGameDebug } from '@/composables/useGameDebug';
+
+const { log } = useGameDebug();
 
 export function createGameSystems(
     engine: Engine,
@@ -30,7 +33,7 @@ export function createGameSystems(
 
     // Initialize physics world system
     console.log('Initializing physics world system...');
-    const physicsWorldSystem = createPhysicsWorldSystem();
+    const physicsWorldSystem = createPhysicsWorldSystem(false);
     physicsWorldSystem.setCurrentTick(room.state.serverTick);
     console.log('Physics world system initialized');
 
@@ -134,21 +137,19 @@ export function createGameSystems(
              accumulator += deltaTime;
  
              // Update systems in the correct order with fixed time step
-             while (accumulator >= FIXED_TIME_STEP) {
+             while (accumulator >= FIXED_TIME_STEP * 1000) {
                 inputSystem.beginFrame();
                 assetSystem.update(FIXED_TIME_STEP);
                 physicsSystem.update(FIXED_TIME_STEP);
                 weaponSystem.update(FIXED_TIME_STEP);
                 networkSystem.update(FIXED_TIME_STEP);
-                if (isDebugMode) {
-                    rapierDebugger.update();
-                }
                 flagSystem.update(FIXED_TIME_STEP);
-                cameraSystem.update(FIXED_TIME_STEP);
                 // Run exactly one tick
                 physicsWorldSystem.update(FIXED_TIME_STEP);
+                log('Tick', physicsWorldSystem.getCurrentTick());
+                cameraSystem.update(FIXED_TIME_STEP);
 
-                accumulator -= FIXED_TIME_STEP;
+                accumulator -= FIXED_TIME_STEP * 1000;
             }
         } catch (error) {
             console.error('Error in game systems update:', error);
@@ -162,10 +163,13 @@ export function createGameSystems(
     console.log('Starting physics loop...');
     scene.registerBeforeRender(() => {
         const dt = engine.getDeltaTime() / 1000;
-        networkSystem.networkPredictionSystem.update(dt);
+        update(engine.getDeltaTime());
+        networkSystem.networkPredictionSystem.updateRemotes(dt);
         projectileSystem.update(FIXED_TIME_STEP);
+        if (isDebugMode) {
+            rapierDebugger.update();
+        }
         sceneSystem.update(dt);
-        update(dt);
     });
 
     return {

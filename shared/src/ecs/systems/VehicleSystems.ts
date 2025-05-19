@@ -77,22 +77,6 @@ export function createDroneSystem(
                     y: linvel.y + thrust.y * dt,
                     z: linvel.z + thrust.z * dt
                 }, true);
-
-                // Apply momentum damping
-                const dampedLinvel = body.linvel();
-                body.setLinvel({
-                    x: dampedLinvel.x * momentumDamping,
-                    y: dampedLinvel.y * momentumDamping,
-                    z: dampedLinvel.z * momentumDamping
-                }, true);
-
-                // Apply angular damping
-                const angvel = body.angvel();
-                body.setAngvel({
-                    x: angvel.x * 0.95,
-                    y: angvel.y * 0.95,
-                    z: angvel.z * 0.95
-                }, true);
             }
         },
         applyInput: (dt: number, entity: GameEntity, input: InputComponent) => {
@@ -138,8 +122,13 @@ export function createDroneSystem(
                 targetAltitude.set(entity.id, body.translation().y + linvel.y * dt);
             }
             if (input.down) {
-                linvel.y -= moveSpeed * dt;
+                // Make down movement faster to overcome thrust/gravity
+                linvel.y -= moveSpeed * 2 * dt;
                 targetAltitude.set(entity.id, body.translation().y - linvel.y * dt);
+            }
+            // When up or down is released, save the current Y as the new target altitude
+            if (input.upReleased || input.downReleased) {
+                targetAltitude.set(entity.id, body.translation().y);
             }
             body.setLinvel(linvel, true);
 
@@ -307,13 +296,6 @@ export function createPlaneSystem(
                     y: body.linvel().y + up.y * lift * thrustScale,
                     z: body.linvel().z + up.z * lift * thrustScale
                 }, true);
-
-                // Apply angular damping with flight mode influence
-                body.setAngvel({
-                    x: angvel.x * (1 - 0.02 * flightModeInfluence) * 0.95,
-                    y: angvel.y * (1 - 0.02 * flightModeInfluence) * 0.95,
-                    z: angvel.z * (1 - 0.02 * flightModeInfluence) * 0.95
-                }, true);
             }
         },
         applyInput: (dt: number, entity: GameEntity, input: InputComponent) => {
@@ -470,7 +452,4 @@ function applyStabilization(entity: GameEntity, body: RAPIER.RigidBody, dt: numb
         const newQuat = q.multiply(pitchQuat);
         body.setRotation({ x: newQuat.x, y: newQuat.y, z: newQuat.z, w: newQuat.w }, true);
     }
-    // Apply additional damping to angular velocity
-    const angvel = body.angvel();
-    body.setAngvel({ x: angvel.x * 0.95, y: angvel.y * 0.95, z: angvel.z * 0.95 }, true);
 } 

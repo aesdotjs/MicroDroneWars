@@ -28,6 +28,7 @@ export function createNetworkPredictionSystem(
     };
 
     const effectSystem = sceneSystem.getEffectSystem();
+    const playerEntityQuery = ecsWorld.with("physics", "vehicle", "transform", "owner").where(({owner}) => owner?.isLocal);
 
     // State buffers for each entity
     const TransformBuffers = new Map<string, TransformBuffer[]>();
@@ -78,9 +79,9 @@ export function createNetworkPredictionSystem(
      * Interpolates remote entity states
      */
     function interpolateRemotes() {
+        const playerEntity = playerEntityQuery.entities[0];
         const now = Date.now();
         const targetTime = now - currentInterpolationDelay;
-        const playerEntity = ecsWorld.with("physics", "vehicle", "transform", "owner").where(({owner}) => owner?.isLocal).entities[0];
         TransformBuffers.forEach((buffer, id) => {
             if (buffer.length < 2 || id === playerEntity?.id) return;
             const entity = ecsWorld.entities.find(e => e.id === id);
@@ -211,92 +212,15 @@ export function createNetworkPredictionSystem(
         addEntityState: (id: string, state: TransformBuffer) => {
             const entity = ecsWorld.entities.find(e => e.id === id);
             if (!entity || !entity.transform) return;
-            const isLocalPlayer = entity.owner?.isLocal;
-            if (isLocalPlayer) {
-                log('Server State Tick', state.tick.tick);
-                log('Last Processed Input Tick', state.tick.lastProcessedInputTick ?? state.tick.tick);
-                log('Pending Inputs', pendingInputs.length);
-            }
-
-            // Initialize buffers if needed
+            // Always save to buffer for all entity types
             if (!TransformBuffers.has(id)) {
                 TransformBuffers.set(id, []);
             }
-
             const buffers = TransformBuffers.get(id)!;
-
-            // if (isLocalPlayer && entity.type === EntityType.Vehicle) {
-            //     return;
-            // }
-            
-            if (isLocalPlayer && (entity.type === EntityType.Vehicle)) {
-                // physicsWorldSystem.setCurrentTick(state.tick.tick);
-                entity.transform.position.copyFrom(state.transform.position);
-                entity.transform.rotation.copyFrom(state.transform.rotation);
-                entity.transform.velocity.copyFrom(state.transform.velocity);
-                entity.transform.angularVelocity.copyFrom(state.transform.angularVelocity);
-                
-                // Update physics body state
-                if (entity.physics?.body) {
-                    // Set translation (position)
-                    entity.physics.body.setTranslation(
-                        {
-                            x: state.transform.position.x,
-                            y: state.transform.position.y,
-                            z: state.transform.position.z
-                        },
-                        true // wake up the body
-                    );
-                    // Set rotation (quaternion)
-                    entity.physics.body.setRotation(
-                        {
-                            x: state.transform.rotation.x,
-                            y: state.transform.rotation.y,
-                            z: state.transform.rotation.z,
-                            w: state.transform.rotation.w
-                        },
-                        true
-                    );
-                    // Set linear velocity
-                    entity.physics.body.setLinvel(
-                        {
-                            x: state.transform.velocity.x,
-                            y: state.transform.velocity.y,
-                            z: state.transform.velocity.z
-                        },
-                        true
-                    );
-                    // Set angular velocity
-                    entity.physics.body.setAngvel(
-                        {
-                            x: state.transform.angularVelocity.x,
-                            y: state.transform.angularVelocity.y,
-                            z: state.transform.angularVelocity.z
-                        },
-                        true
-                    );
-                }
-                // Replay unprocessed inputs
-                const lastProcessedInputTick = state.tick.lastProcessedInputTick ?? state.tick.tick;
-                const unprocessedInputs = pendingInputs.filter((input: InputComponent) => input.tick > lastProcessedInputTick);
-
-                log('Replaying Inputs', {
-                    count: unprocessedInputs.length,
-                    from: lastProcessedInputTick,
-                    to: unprocessedInputs.length > 0 ? Math.max(...unprocessedInputs.map(i => i.tick)) : lastProcessedInputTick
-                });
-                for (const input of unprocessedInputs) {
-                    physicsSystem.applyInput(1/60, entity, input);
-                }
-                physicsWorldSystem.applyBodyTransform(entity);
-                pendingInputs = unprocessedInputs;
-            } else {
-                // Buffer remote states for interpolation
-                buffers.push(state);
-                // Keep buffer size reasonable
-                if (buffers.length > interpolationConfig.maxBufferSize) {
-                    buffers.shift();
-                }
+            buffers.push(state);
+            // Keep buffer size reasonable
+            if (buffers.length > interpolationConfig.maxBufferSize) {
+                buffers.shift();
             }
         },
 
@@ -305,7 +229,7 @@ export function createNetworkPredictionSystem(
          */
         addInput: (dt: number, input: InputComponent, isIdle: boolean, currentTick: number) => {
             // const currentTick = physicsWorldSystem.getCurrentTick();
-            const playerEntity = ecsWorld.with("physics", "vehicle", "transform", "owner").where(({owner}) => owner?.isLocal).entities[0];
+            const playerEntity = playerEntityQuery.entities[0];
             // Create final input
             const finalInput: InputComponent = {
                 ...input,
@@ -332,6 +256,10 @@ export function createNetworkPredictionSystem(
                 if (playerEntity.vehicle?.weapons) {
                     projectileId = weaponSystem.applyInput(dt, playerEntity, finalInput);
                     if (projectileId) {
+                        const projectileEntity = ecsWorld.entities.find(e => e.id === `${playerEntity.id}_${projectileId}`);
+                        if (projectileEntity) {
+                            projectileEntity.render = { mesh: effectSystem.createProjectileMesh(projectileEntity) }
+                        }
                         effectSystem.createMuzzleFlash(playerEntity, projectileId);
                     }
                 }
@@ -355,10 +283,77 @@ export function createNetworkPredictionSystem(
             room.send("command", input);
         },
 
+        update: (dt: number) => {
+            const playerEntity = playerEntityQuery.entities[0];
+                // Reconciliation for local player
+            if (playerEntity && TransformBuffers.has(playerEntity.id)) {
+                const buffer = TransformBuffers.get(playerEntity.id)!;
+                if (buffer.length > 0) {
+                    // Use the latest server state in the buffer
+                    const state = buffer[buffer.length - 1];
+                    physicsWorldSystem.setCurrentTick(state.tick.tick);
+                    playerEntity.transform.position.copyFrom(state.transform.position);
+                    playerEntity.transform.rotation.copyFrom(state.transform.rotation);
+                    playerEntity.transform.velocity.copyFrom(state.transform.velocity);
+                    playerEntity.transform.angularVelocity.copyFrom(state.transform.angularVelocity);
+                    // Update physics body state
+                    if (playerEntity.physics?.body) {
+                        playerEntity.physics.body.setTranslation(
+                            {
+                                x: state.transform.position.x,
+                                y: state.transform.position.y,
+                                z: state.transform.position.z
+                            },
+                            true
+                        );
+                        playerEntity.physics.body.setRotation(
+                            {
+                                x: state.transform.rotation.x,
+                                y: state.transform.rotation.y,
+                                z: state.transform.rotation.z,
+                                w: state.transform.rotation.w
+                            },
+                            true
+                        );
+                        playerEntity.physics.body.setLinvel(
+                            {
+                                x: state.transform.velocity.x,
+                                y: state.transform.velocity.y,
+                                z: state.transform.velocity.z
+                            },
+                            true
+                        );
+                        playerEntity.physics.body.setAngvel(
+                            {
+                                x: state.transform.angularVelocity.x,
+                                y: state.transform.angularVelocity.y,
+                                z: state.transform.angularVelocity.z
+                            },
+                            true
+                        );
+                    }
+                    // Replay unprocessed inputs
+                    const lastProcessedInputTick = state.tick.lastProcessedInputTick ?? state.tick.tick;
+                    const unprocessedInputs = pendingInputs.filter((input: InputComponent) => input.tick > lastProcessedInputTick);
+                    log('Replaying Inputs', {
+                        count: unprocessedInputs.length,
+                        from: lastProcessedInputTick,
+                        to: unprocessedInputs.length > 0 ? Math.max(...unprocessedInputs.map(i => i.tick)) : lastProcessedInputTick
+                    });
+                    for (const input of unprocessedInputs) {
+                        physicsSystem.applyInput(1/60, playerEntity, input);
+                    }
+                    pendingInputs = unprocessedInputs;
+                    // empty player buffer
+                    buffer.length = 0;
+                }
+            }
+        },
+
         /**
          * Updates the system
          */
-        update: (dt: number) => {
+        updateRemotes: (dt: number) => {
             // Update interpolation delay based on network quality
             updateInterpolationDelay();
 

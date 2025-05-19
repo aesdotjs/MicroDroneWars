@@ -12,6 +12,7 @@ export function createInputProcessorSystem(
 ) {
     const lastProcessedInputTicks = new Map<string, number>();
     const lastProcessedInputTimestamps = new Map<string, number>();
+    const pendingProjectileIds = new Map<string, number>();
 
     return {
         /**
@@ -20,17 +21,6 @@ export function createInputProcessorSystem(
         processInputs: (entity: GameEntity, inputBuffer: InputComponent[], dt: number) => {
             // Get last processed tick
             let lastProcessedTick = lastProcessedInputTicks.get(entity.id) ?? 0;
-            // if (!inputBuffer || inputBuffer.length === 0) {
-            //     // Apply idle input if no inputs available
-            //     const idleInput = createIdleInput(lastProcessedTick + 1);
-            //     physicsSystem.applyInput(dt, entity, idleInput);
-            //     if (entity.vehicle?.weapons) {
-            //         weaponSystem.applyInput(dt, entity, idleInput, lastProcessedTick + 1);
-            //     }
-            //     lastProcessedInputTicks.set(entity.id, lastProcessedTick + 1);
-            //     return [];
-            // }
-            
             // Sort inputs by tick
             const sortedInputs = inputBuffer.sort((a, b) => a.tick - b.tick);
             
@@ -46,17 +36,17 @@ export function createInputProcessorSystem(
             for (const input of sortedInputs) {
                 if (input.tick > lastProcessedTick) {
                     physicsSystem.applyInput(dt, entity, input);
-                    // Set fire to true on the next processed input if the current input is a fire and the weapon is on cooldown
-                    // if (input.fire && input.projectileId && weaponSystem.isOnCooldown(entity)) {
-                    //     const nextInput = sortedInputs[processedCount];
-                    //     if (nextInput) {
-                    //         nextInput.fire = true;
-                    //         nextInput.projectileId = input.projectileId;
-                    //     }
-                    // }
                     // Always update weapon system if entity has weapons
                     if (entity.vehicle?.weapons) {
-                        weaponSystem.applyInput(dt, entity, input);
+                        if (input.fire && input.projectileId) {
+                            pendingProjectileIds.set(entity.id, input.projectileId);
+                        }
+                        input.projectileId = pendingProjectileIds.get(entity.id) ?? input.projectileId;
+                        const projectileId = weaponSystem.applyInput(dt, entity, input);
+                        if (projectileId) {
+                            // projectile created, remove from pending projectile ids
+                            pendingProjectileIds.delete(entity.id);
+                        }
                     }
                     lastProcessedTick = input.tick;
                     processedCount++;

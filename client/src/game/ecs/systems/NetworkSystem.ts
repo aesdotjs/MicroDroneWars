@@ -173,7 +173,8 @@ export function createNetworkSystem(
                         speed: entity.projectile.speed
                     };
                     // muzzle flash is spawned in applyInput for client prediction and here for network
-                    if (entity.projectile?.sourceId !== room.sessionId) {
+                    if (entity.owner?.id !== room.sessionId) {
+                        console.log('projectile sourceId', entity.projectile?.sourceId);
                         const vehicle = ecsWorld.entities.find(e => e.id === entity.projectile?.sourceId);
                         if (vehicle) {
                             sceneSystem.getEffectSystem().createMuzzleFlash(vehicle, parseInt(entity.id.split('_').pop() || '0'));
@@ -199,6 +200,10 @@ export function createNetworkSystem(
         } else { // Entity already exists in ECS world (most likely a projectile)
             const gameEntity = ecsWorld.entities.find(e => e.id === id);
             if (gameEntity) {
+                // // already impacted in simulation, just ignore the rest and wait for removal
+                // if (gameEntity.projectile?.impact) {
+                //     return;
+                // }
                 if (newEntity.vehicle) {
                     gameEntity.vehicle!.weapons = newEntity.vehicle!.weapons;
                     gameEntity.vehicle!.activeWeaponIndex = newEntity.vehicle!.activeWeaponIndex;
@@ -245,13 +250,15 @@ export function createNetworkSystem(
                     physicsWorldSystem.removeBody(gameEntity.id);
                     delete gameEntity.physics;
                 }
-                ecsWorld.reindex(gameEntity);
+                // ecsWorld.reindex(gameEntity);
+                console.log('projectile resolved from the server', gameEntity.id);
             }
         }
         const gameEntity = ecsWorld.entities.find(e => e.id === id);
 
         $(entity).listen("transform", (transform: TransformSchema | undefined) => {
             if(!gameEntity || !transform) return;
+            const needReindex = !gameEntity.transform;
             $(transform).onChange(() => {
                 const transformBuffer: TransformBuffer = {
                     transform: {
@@ -282,11 +289,14 @@ export function createNetworkSystem(
                 }
                 networkPredictionSystem.addEntityState(id, transformBuffer);    
             });
-            ecsWorld.reindex(gameEntity);
+            if (needReindex) {
+                ecsWorld.reindex(gameEntity);
+            }
         });
 
         $(entity).listen("gameState", (gameState: GameStateSchema | undefined) => {
             if(!gameEntity || !gameState) return;
+            const needReindex = !gameEntity.gameState;
             $(gameState).onChange(() => {
                 gameEntity.gameState!.health = gameState!.health;
                 gameEntity.gameState!.maxHealth = gameState!.maxHealth;
@@ -296,44 +306,56 @@ export function createNetworkSystem(
                 gameEntity.gameState!.atBase = gameState!.atBase;
                 gameEntity.gameState!.team = gameState!.team;
             });
-            ecsWorld.reindex(gameEntity);
+            if (needReindex) {
+                ecsWorld.reindex(gameEntity);
+            }
         });
 
         $(entity).listen("tick", (tick: TickSchema | undefined) => {
             if(!gameEntity || !tick) return;
+            const needReindex = !gameEntity.tick;
             $(tick).onChange(() => {
                 gameEntity.tick!.tick = tick!.tick;
                 gameEntity.tick!.timestamp = tick!.timestamp;
                 gameEntity.tick!.lastProcessedInputTimestamp = tick!.lastProcessedInputTimestamp;
                 gameEntity.tick!.lastProcessedInputTick = tick!.lastProcessedInputTick;
             });
-            ecsWorld.reindex(gameEntity);
+            if (needReindex) {
+                ecsWorld.reindex(gameEntity);
+            }
         });
         
 
         $(entity).listen("owner", (owner: OwnerSchema | undefined) => {
             if(!gameEntity || !owner) return;
+            const needReindex = !gameEntity.owner;
             $(owner).onChange(() => {
                 gameEntity.owner!.id = owner!.id;
                 gameEntity.owner!.isLocal = room.sessionId === owner!.id;
             });
-            ecsWorld.reindex(gameEntity);
+            if (needReindex) {
+                ecsWorld.reindex(gameEntity);
+            }
         });
 
         // Asset changes
         $(entity).listen("asset", (asset: AssetSchema | undefined) => {
             if(!gameEntity || !asset) return;
+            const needReindex = !gameEntity.asset;
             $(asset).onChange(() => {
                 gameEntity.asset!.assetPath = asset!.assetPath;
                 gameEntity.asset!.assetType = asset!.assetType;
                 gameEntity.asset!.scale = asset!.scale;
             });
-            ecsWorld.reindex(gameEntity);
+            if (needReindex) {
+                ecsWorld.reindex(gameEntity);
+            }
         });
 
         // Vehicle changes
         $(entity).listen("vehicle", (vehicle: VehicleSchema | undefined) => {
             if(!gameEntity || !vehicle) return;
+            const needReindex = !gameEntity.vehicle;
             $(vehicle).onChange(() => {
                 gameEntity.vehicle!.vehicleType = vehicle!.vehicleType as VehicleType;
                 gameEntity.vehicle!.activeWeaponIndex = vehicle!.activeWeaponIndex;
@@ -350,12 +372,14 @@ export function createNetworkSystem(
                             heatPerShot: weapon.heatPerShot,
                             heatDissipationRate: weapon.heatDissipationRate,
                             projectileSpeed: weapon.projectileSpeed,
-                            range: weapon.range,
+                            range: weapon.range
                         }
                     });
                 }
             });
-            ecsWorld.reindex(gameEntity);
+            if (needReindex) {
+                ecsWorld.reindex(gameEntity);
+            }
         });
 
         // Projectile changes
@@ -381,6 +405,7 @@ export function createNetworkSystem(
         // }
         $(entity).listen("projectile", (projectile: ProjectileSchema | undefined) => {
             if(!gameEntity || !projectile) return;
+            const needReindex = !gameEntity.projectile;
             $(projectile).onChange(() => {
                 gameEntity.projectile!.damage = projectile!.damage;
                 gameEntity.projectile!.range = projectile!.range;
@@ -388,7 +413,6 @@ export function createNetworkSystem(
                 gameEntity.projectile!.sourceId = projectile!.sourceId;
                 gameEntity.projectile!.speed = projectile!.speed;
                 if (projectile?.impact) {
-                    console.log('projectile impact', projectile.impact);
                     gameEntity.projectile!.impact = {
                         position: new Vector3(projectile.impact.positionX, projectile.impact.positionY, projectile.impact.positionZ),
                         normal: new Vector3(projectile.impact.normalX, projectile.impact.normalY, projectile.impact.normalZ),
@@ -398,7 +422,9 @@ export function createNetworkSystem(
                     }
                 }
             });
-            ecsWorld.reindex(gameEntity);
+            if (needReindex) {
+                ecsWorld.reindex(gameEntity);
+            }
         });
         log('entities count', ecsWorld.entities.length);
     });
@@ -407,6 +433,7 @@ export function createNetworkSystem(
     $(room.state).entities.onRemove((_entity: EntitySchema, id: string) => {
         const entity = ecsWorld.entities.find(e => e.id === id);
         if (entity) {
+            console.log('remove entity', entity.id);
             ecsWorld.remove(entity);
         }
     });
@@ -428,6 +455,7 @@ export function createNetworkSystem(
             room.send("ping", Date.now());
         },
         update: (dt: number) => {
+            networkPredictionSystem.update(dt);
             const isIdle = inputSystem.isIdle();
             const input = inputSystem.getInput();
             networkPredictionSystem.addInput(dt, input, isIdle, physicsWorldSystem.getCurrentTick());

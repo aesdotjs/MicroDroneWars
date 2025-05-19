@@ -18,7 +18,6 @@ export function createProjectileSystem(
                     if (entity.projectile.projectileType === ProjectileType.Missile) {
                         physicsWorldSystem.applyMissileImpact(entity);
                     }
-                    console.log('remove projectile', entity.id);
                     ecsWorld.remove(entity);
                     continue;
                 }
