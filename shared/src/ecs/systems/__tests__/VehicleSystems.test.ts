@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import * as CANNON from 'cannon-es'
 import { Vector3, Quaternion } from '@babylonjs/core'
 import { world as ecsWorld } from '../../world'
-import { createDroneSystem, createPlaneSystem } from '../VehicleSystems'
+import { createDroneSystem, createPlaneSystem } from '../DroneSystems'
 import { GameEntity } from '../../types'
 import { CollisionGroups } from '../../CollisionGroups'
 

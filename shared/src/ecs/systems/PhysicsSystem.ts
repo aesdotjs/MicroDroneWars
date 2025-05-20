@@ -1,5 +1,5 @@
-import { createDroneSystem } from '@shared/ecs/systems/VehicleSystems';
-import { createPlaneSystem } from '@shared/ecs/systems/VehicleSystems';
+import { createDroneSystem } from '@shared/ecs/systems/DroneSystems';
+import { createPlaneSystem } from '@shared/ecs/systems/PlaneSystem';
 import { createPhysicsWorldSystem } from './PhysicsWorldSystem';
 import { GameEntity, InputComponent, VehicleType } from '@shared/ecs/types';
 export function createPhysicsSystem(

@@ -39,20 +39,9 @@ export function createNetworkPredictionSystem(
     let networkQuality = 1.0;
     let networkJitter = 0;
     let currentInterpolationDelay = 100;
-    let targetInterpolationDelay = 100;
 
     // Constants
-    const INTERPOLATION_DELAY_SMOOTHING = 0.1;
-    const MIN_INTERPOLATION_DELAY = 50;
-    const MAX_INTERPOLATION_DELAY = 200;
-    const QUALITY_TO_DELAY_FACTOR = 0.5;
-    const RECONCILIATION_POSITION_THRESHOLD = 2.0;
-    const RECONCILIATION_ROTATION_THRESHOLD = Math.PI * (10/180);
-    const RECONCILIATION_POSITION_SMOOTHING = 0.2;
-    const RECONCILIATION_ROTATION_SMOOTHING = 0.3;
     const MAX_PENDING_INPUTS = 60;
-    const HEARTBEAT_INTERVAL = 60; // Send heartbeat every 60 ticks
-    let lastHeartbeatTick = 0;
 
     /**
      * Updates the interpolation delay based on network quality
