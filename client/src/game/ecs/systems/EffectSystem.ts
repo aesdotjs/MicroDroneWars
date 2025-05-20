@@ -216,14 +216,13 @@ export function createEffectSystem(scene: Scene) {
     // Create trail effect
     function createTrailEffect(projectile: GameEntity, sourceMesh: Mesh): void {
         removeTrailEffect(projectile.id);
-
         sourceMesh.computeWorldMatrix();
         const trail = new TrailMesh(
             `trail_${projectile.id}`,
             sourceMesh,
             scene,
             0.1,
-            5,
+            4,
             true
         );
 

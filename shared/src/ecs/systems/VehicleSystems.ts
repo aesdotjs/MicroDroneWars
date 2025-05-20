@@ -162,26 +162,32 @@ export function createDroneSystem(
             // Apply mouse control with quaternion-based rotation
             if (input.mouseDelta) {
                 const rot = body.rotation();
-                let combinedQuat = new Quaternion(rot.x, rot.y, rot.z, rot.w);
-                // Yaw (horizontal mouse movement) - using world up axis
-                if (input.mouseDelta.x !== 0) {
-                    const yawAmount = -input.mouseDelta.x * mouseSensitivity;
-                    const yawQuat = Quaternion.RotationAxis(new Vector3(0, 1, 0), yawAmount);
-                    combinedQuat = yawQuat.multiply(combinedQuat);
-                }
-                // Pitch (vertical mouse movement) with angle limiting
-                if (input.mouseDelta.y !== 0) {
-                    const pitchAmount = input.mouseDelta.y * mouseSensitivity;
-                    const currentPitch = Math.asin(2 * (
-                        combinedQuat.w * combinedQuat.x -
-                        combinedQuat.y * combinedQuat.z
-                    ));
-                    if (Math.abs(currentPitch + pitchAmount) < maxPitchAngle) {
-                        const pitchQuat = Quaternion.RotationAxis(new Vector3(right.x, right.y, right.z), pitchAmount);
-                        combinedQuat = pitchQuat.multiply(combinedQuat);
-                    }
-                }
-                body.setRotation({ x: combinedQuat.x, y: combinedQuat.y, z: combinedQuat.z, w: combinedQuat.w }, true);
+                let currentQuat = new Quaternion(rot.x, rot.y, rot.z, rot.w);
+
+                // Convert quaternion to Euler angles
+                let euler = currentQuat.toEulerAngles();
+
+                // Zero out roll
+                euler.z = 0;
+
+                // Apply mouse delta to yaw and pitch
+                euler.y -= input.mouseDelta.x * mouseSensitivity; // Yaw (around world up)
+                euler.x += input.mouseDelta.y * mouseSensitivity; // Pitch (around local right)
+
+                // Clamp pitch to avoid flipping
+                if (euler.x > maxPitchAngle) euler.x = maxPitchAngle;
+                if (euler.x < -maxPitchAngle) euler.x = -maxPitchAngle;
+
+                // Rebuild quaternion from yaw and pitch (no roll)
+                currentQuat = Quaternion.FromEulerAngles(euler.x, euler.y, 0);
+
+                // Set the new rotation
+                body.setRotation({
+                    x: currentQuat.x,
+                    y: currentQuat.y,
+                    z: currentQuat.z,
+                    w: currentQuat.w
+                }, true);
             }
         }
     };
@@ -196,6 +202,10 @@ export function createPlaneSystem(
     const planes = ecsWorld.with("vehicle", "physics", "transform").where(({vehicle}) => vehicle.vehicleType === VehicleType.Plane);
     const enginePower = new Map<string, number>();
     const lastDrag = new Map<string, number>();
+
+    // Constants for plane control
+    const PLANE_MOUSE_SENSITIVITY = 0.02;
+    const PLANE_MAX_PITCH = Math.PI / 2.5;
 
     return {
         update: (dt: number) => {
@@ -375,18 +385,35 @@ export function createPlaneSystem(
                 angvel.z -= forward.z * 0.055 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
             }
 
-            // Apply mouse control
+            // Apply mouse control with quaternion-based rotation
             if (input.mouseDelta) {
-                const yawAmount = -input.mouseDelta.x * 0.02 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
-                const pitchAmount = -input.mouseDelta.y * 0.02 * flightModeInfluence * enginePower.get(entity.id)! * controlScale;
-                // Apply yaw (horizontal mouse movement)
-                angvel.x += up.x * yawAmount;
-                angvel.y += up.y * yawAmount;
-                angvel.z += up.z * yawAmount;
-                // Apply pitch (vertical mouse movement)
-                angvel.x += right.x * pitchAmount;
-                angvel.y += right.y * pitchAmount;
-                angvel.z += right.z * pitchAmount;
+                const rot = body.rotation();
+                let currentQuat = new Quaternion(rot.x, rot.y, rot.z, rot.w);
+
+                // Convert quaternion to Euler angles
+                let euler = currentQuat.toEulerAngles();
+
+                // Zero out roll
+                euler.z = 0;
+
+                // Apply mouse delta to yaw and pitch
+                euler.y -= input.mouseDelta.x * PLANE_MOUSE_SENSITIVITY * flightModeInfluence * enginePower.get(entity.id)! * controlScale; // Yaw (around world up)
+                euler.x += input.mouseDelta.y * PLANE_MOUSE_SENSITIVITY * flightModeInfluence * enginePower.get(entity.id)! * controlScale; // Pitch (around local right)
+
+                // Clamp pitch to avoid flipping
+                if (euler.x > PLANE_MAX_PITCH) euler.x = PLANE_MAX_PITCH;
+                if (euler.x < -PLANE_MAX_PITCH) euler.x = -PLANE_MAX_PITCH;
+
+                // Rebuild quaternion from yaw and pitch (no roll)
+                currentQuat = Quaternion.FromEulerAngles(euler.x, euler.y, 0);
+
+                // Set the new rotation
+                body.setRotation({
+                    x: currentQuat.x,
+                    y: currentQuat.y,
+                    z: currentQuat.z,
+                    w: currentQuat.w
+                }, true);
             }
             body.setAngvel(angvel, true);
         }
@@ -419,37 +446,28 @@ function getOrientationVectors(body: RAPIER.RigidBody): { right: Vector3; up: Ve
 }
 
 /**
- * Applies stabilization forces to keep the drone level
+ * Applies gentle stabilization forces to prevent flipping while allowing intentional movement
  */
 function applyStabilization(entity: GameEntity, body: RAPIER.RigidBody, dt: number) {
     const { right, up, forward } = getOrientationVectors(body);
+
     // Get current orientation
     const currentUp = new Vector3(up.x, up.y, up.z);
     const targetUp = new Vector3(0, 1, 0);
+
     // Calculate roll angle (around forward axis)
     const rightDotUp = Vector3.Dot(new Vector3(right.x, right.y, right.z), targetUp);
     const rollAngle = Math.asin(rightDotUp);
-    // Calculate pitch angle (around right axis)
-    const forwardFlat = new Vector3(forward.x, 0, forward.z).normalize();
-    const pitchAngle = Math.acos(Vector3.Dot(new Vector3(forward.x, forward.y, forward.z), forwardFlat));
-    // Apply roll stabilization
-    if (Math.abs(rollAngle) > 0.01) {
-        const rollCorrection = -rollAngle * 5.0 * dt;
+
+    // Only correct roll, do not touch pitch or yaw
+    const ROLL_STABILIZATION_STRENGTH = 3; // Gentle, tweak as needed
+    if (Math.abs(rollAngle) > 0.001) { // Only correct if not already flat
+        const rollCorrection = -rollAngle * ROLL_STABILIZATION_STRENGTH * dt;
         const rollAxis = new Vector3(forward.x, forward.y, forward.z);
         const rot = body.rotation();
         const q = new Quaternion(rot.x, rot.y, rot.z, rot.w);
         const rollQuat = Quaternion.RotationAxis(rollAxis, rollCorrection);
         const newQuat = q.multiply(rollQuat);
-        body.setRotation({ x: newQuat.x, y: newQuat.y, z: newQuat.z, w: newQuat.w }, true);
-    }
-    // Limit maximum pitch angle
-    if (Math.abs(pitchAngle) > Math.PI / 2.5) {
-        const correction = (Math.abs(pitchAngle) - Math.PI / 2.5) * Math.sign(pitchAngle);
-        const pitchCorrection = -correction * dt * 2.0;
-        const rot = body.rotation();
-        const q = new Quaternion(rot.x, rot.y, rot.z, rot.w);
-        const pitchQuat = Quaternion.RotationAxis(new Vector3(right.x, right.y, right.z), pitchCorrection);
-        const newQuat = q.multiply(pitchQuat);
         body.setRotation({ x: newQuat.x, y: newQuat.y, z: newQuat.z, w: newQuat.w }, true);
     }
 } 
