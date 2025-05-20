@@ -250,8 +250,6 @@ export function createNetworkSystem(
                     physicsWorldSystem.removeBody(gameEntity.id);
                     delete gameEntity.physics;
                 }
-                // ecsWorld.reindex(gameEntity);
-                console.log('projectile resolved from the server', gameEntity.id);
             }
         }
         const gameEntity = ecsWorld.entities.find(e => e.id === id);

@@ -230,7 +230,6 @@ export function createEffectSystem(scene: Scene) {
         trail.material = projectile.projectile?.projectileType === ProjectileType.Missile 
             ? missileTrailMaterial 
             : bulletTrailMaterial;
-            
         activeTrails.set(projectile.id, trail);
     }
 
@@ -461,6 +460,13 @@ export function createEffectSystem(scene: Scene) {
         }
     }
 
+    const setTrailVisible = (projectileId: string, visible: boolean) => {
+        const trail = activeTrails.get(projectileId);
+        if (trail) {
+            trail.isVisible = visible;
+        }
+    }
+
     // Cleanup function
     function cleanup(): void {
         activeMuzzleFlashes.forEach(muzzleFlash => muzzleFlash.dispose());
@@ -494,6 +500,7 @@ export function createEffectSystem(scene: Scene) {
         createProjectileMesh,
         createImpactEffects,
         removeProjectileMesh,
+        setTrailVisible,
         cleanup,
         update: () => {
             // // Update projectile positions
