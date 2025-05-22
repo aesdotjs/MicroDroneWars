@@ -1,7 +1,7 @@
 // import * as CANNON from 'cannon-es';
 import RAPIER from '@dimforge/rapier3d-deterministic-compat';
 import { world as ecsWorld } from '../world';
-import { GameEntity, VehicleType, DroneSettings, PlaneSettings, CollisionGroups, collisionMasks, EntityType, PhysicsComponent, WeaponComponent, ProjectileType, CollisionType, CollisionSeverity } from '../types';
+import { GameEntity, VehicleType, DroneSettings, PlaneSettings, CollisionGroups, collisionMasks, EntityType, PhysicsComponent, WeaponComponent, ProjectileType, CollisionType, CollisionSeverity, TransformBuffer, TransformComponent } from '../types';
 import { Vector3, Quaternion, Mesh } from '@babylonjs/core';
 /**
  * Creates a system that manages the physics world for both client and server using Rapier
@@ -356,6 +356,7 @@ export function createPhysicsWorldSystem(
                 if (entity.type === EntityType.Vehicle) {
                     rbDesc.setLinearDamping(0.2);
                     rbDesc.setAngularDamping(0.95);
+                    rbDesc.lockRotations();
                 } 
             }
             const body = world.createRigidBody(rbDesc);
@@ -509,7 +510,9 @@ export function createPhysicsWorldSystem(
             shooter: GameEntity, 
             weapon: WeaponComponent,
             projectileId: string,
-            aimPoint: Vector3
+            aimPoint: Vector3,
+            timeDelta: number = 0,
+            transformBuffer?: TransformBuffer
         ): GameEntity {
             // Get all weapon triggers
             const weaponTriggers = shooter?.asset?.triggerMeshes?.filter(mesh => 
@@ -526,9 +529,11 @@ export function createPhysicsWorldSystem(
                 weaponTrigger = weaponTriggers.find(mesh => mesh.metadata?.gltf?.extras?.type === `bullet_${bulletIndex}`);
             }
 
+            // Use transform buffer if available, otherwise use current transform
+            const shooterTransform = transformBuffer?.transform || shooter.transform!;
+            
             let spawnPointPosition: Vector3;
             let spawnPointRotation: Quaternion;
-            
             if (weaponTrigger) {
                 // Get the local position and rotation of the trigger mesh
                 const localPosition = weaponTrigger.position.clone();
@@ -537,18 +542,23 @@ export function createPhysicsWorldSystem(
                 // Transform the local position by the vehicle's world transform
                 spawnPointPosition = localPosition.clone();
                 spawnPointPosition.rotateByQuaternionAroundPointToRef(
-                    shooter.transform!.rotation,
+                    shooterTransform.rotation,
                     Vector3.Zero(),
                     spawnPointPosition
                 );
-                spawnPointPosition.addInPlace(shooter.transform!.position);
+                spawnPointPosition.addInPlace(shooterTransform.position);
                 
                 // Combine rotations
-                spawnPointRotation = shooter.transform!.rotation.multiply(localRotation);
+                spawnPointRotation = shooterTransform.rotation.multiply(localRotation);
             } else {
                 // Fallback to vehicle position/rotation if no trigger mesh found
-                spawnPointPosition = shooter.transform!.position.clone();
-                spawnPointRotation = shooter.transform!.rotation;
+                spawnPointPosition = shooterTransform.position.clone();
+                spawnPointRotation = shooterTransform.rotation.clone();
+            }
+
+            if (timeDelta > 0) {
+                // Project position forward using velocity
+                spawnPointPosition.addInPlace(shooterTransform.velocity.scale(timeDelta));
             }
 
             // Calculate direction from spawn point to aim point
@@ -556,13 +566,19 @@ export function createPhysicsWorldSystem(
 
             // Calculate projectile velocity by combining shooter velocity and projectile speed
             const projectileVelocity = direction.scale(weapon.projectileSpeed);
+
             
             // For missiles, only inherit 75% of the vehicle's velocity
             if (weapon.projectileType === ProjectileType.Missile) {
-                projectileVelocity.addInPlace(shooter.transform!.velocity.scale(0.75));
+                projectileVelocity.addInPlace(shooterTransform.velocity.scale(0.75));
             } else {
-                projectileVelocity.addInPlace(shooter.transform!.velocity);
+                projectileVelocity.addInPlace(shooterTransform.velocity);
             }
+            // // If we have a time delta, project forward
+            // if (timeDelta > 0) {
+            //     // Project position forward using velocity
+            //     spawnPointPosition.addInPlace(projectileVelocity.scale(timeDelta));
+            // }
 
             // Create projectile body
             const rbDesc = RAPIER.RigidBodyDesc.dynamic()

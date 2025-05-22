@@ -1,6 +1,6 @@
 import { Vector3, Quaternion } from '@babylonjs/core';
 import { world as ecsWorld } from '../world';
-import { GameEntity, WeaponComponent, InputComponent, ProjectileType, EntityType, CollisionGroups, collisionMasks } from '../types';
+import { GameEntity, InputComponent, TransformBuffer } from '../types';
 import { createPhysicsWorldSystem } from './PhysicsWorldSystem';
 
 const TICKS_PER_SECOND = 60; // Assuming 60 ticks per second
@@ -42,7 +42,7 @@ export function createWeaponSystem(
                 });
             }
         },
-        applyInput: (dt: number, entity: GameEntity, input: InputComponent) => {
+        applyInput: (dt: number, entity: GameEntity, input: InputComponent, timeDelta: number, transformBuffer?: TransformBuffer) => {
             const vehicle = entity.vehicle!;
             const activeWeapon = vehicle.weapons[vehicle.activeWeaponIndex];
             const currentTick = physicsWorldSystem.getCurrentTick();
@@ -57,6 +57,7 @@ export function createWeaponSystem(
             if (input.weapon1) vehicle.activeWeaponIndex = 0;
             if (input.weapon2) vehicle.activeWeaponIndex = 1;
             if (input.weapon3) vehicle.activeWeaponIndex = 2;
+
             // Handle firing
             if (input.fire && (!isServer || input.projectileId) && activeWeapon && !activeWeapon.isOnCooldown) {
                 // Calculate current fire rate and cooldown
@@ -74,7 +75,14 @@ export function createWeaponSystem(
                         projectileId = count;
                     }
                     const aimPoint = new Vector3(input.aimPointX, input.aimPointY, input.aimPointZ);
-                    const projectile = physicsWorldSystem.createProjectile(entity, activeWeapon, `${entity.id}_${projectileId}`, aimPoint);
+                    const projectile = physicsWorldSystem.createProjectile(
+                        entity,
+                        activeWeapon,
+                        `${entity.id}_${projectileId}`,
+                        aimPoint,
+                        timeDelta,
+                        transformBuffer
+                    );
                     // Add to ECS world
                     ecsWorld.add(projectile);
                     

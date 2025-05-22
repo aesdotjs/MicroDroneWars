@@ -1,5 +1,5 @@
 import { world as ecsWorld } from '@shared/ecs/world';
-import { GameEntity, InputComponent } from '@shared/ecs/types';
+import { GameEntity, InputComponent, TransformBuffer } from '@shared/ecs/types';
 import { createPhysicsSystem } from '@shared/ecs/systems/PhysicsSystem';
 // import { createPhysicsWorldSystem } from '@shared/ecs/systems/PhysicsWorldSystem';
 import { createWeaponSystem } from '@shared/ecs/systems/WeaponSystem';
@@ -18,9 +18,10 @@ export function createInputProcessorSystem(
         /**
          * Processes inputs for an entity and applies them to vehicle and weapon systems
          */
-        processInputs: (entity: GameEntity, inputBuffer: InputComponent[], dt: number) => {
+        processInputs: (entity: GameEntity, inputBuffer: InputComponent[], transformBuffers: TransformBuffer[], dt: number) => {
             // Get last processed tick
             let lastProcessedTick = lastProcessedInputTicks.get(entity.id) ?? 0;
+            let lastProcessedTimestamp = lastProcessedInputTimestamps.get(entity.id) ?? Date.now();
             // Sort inputs by tick
             const sortedInputs = inputBuffer.sort((a, b) => a.tick - b.tick);
             
@@ -40,15 +41,27 @@ export function createInputProcessorSystem(
                     if (entity.vehicle?.weapons) {
                         if (input.fire && input.projectileId) {
                             pendingProjectileIds.set(entity.id, input.projectileId);
-                        }
-                        input.projectileId = pendingProjectileIds.get(entity.id) ?? input.projectileId;
-                        const projectileId = weaponSystem.applyInput(dt, entity, input);
-                        if (projectileId) {
-                            // projectile created, remove from pending projectile ids
-                            pendingProjectileIds.delete(entity.id);
+                            
+                            // Find the transform state at the time of firing
+                            const inputTime = input.timestamp;
+                            const sortedTransforms = transformBuffers.sort((a, b) => 
+                                Math.abs(a.tick.timestamp - inputTime) - Math.abs(b.tick.timestamp - inputTime)
+                            );
+                            
+                            // Get the closest transform state to the input time
+                            const closestTransform = sortedTransforms[0];
+                            const timeDelta = (Date.now() - inputTime) / 1000; // Convert to seconds
+
+                            input.projectileId = pendingProjectileIds.get(entity.id) ?? input.projectileId;
+                            const projectileId = weaponSystem.applyInput(dt, entity, input, timeDelta, closestTransform);
+                            if (projectileId) {
+                                // projectile created, remove from pending projectile ids
+                                pendingProjectileIds.delete(entity.id);
+                            }
                         }
                     }
                     lastProcessedTick = input.tick;
+                    lastProcessedTimestamp = input.timestamp;
                     processedCount++;
                 }
             }
@@ -57,7 +70,7 @@ export function createInputProcessorSystem(
             if (processedCount > 0) {
                 // console.log(`[InputProcessor] Processed ${processedCount} inputs for entity ${entity.id}. New lastProcessedTick: ${lastProcessedTick}`);
                 lastProcessedInputTicks.set(entity.id, lastProcessedTick);
-                lastProcessedInputTimestamps.set(entity.id, Date.now());
+                lastProcessedInputTimestamps.set(entity.id, lastProcessedTimestamp);
             } 
             // const nextInput = inputBuffer.shift();
             // if (nextInput) {

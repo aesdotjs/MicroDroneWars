@@ -21,11 +21,13 @@ export function createNetworkPredictionSystem(
     room: Room<State>
 ) {
     // Configuration
-    const interpolationConfig: InterpolationConfig = {
-        delay: 150,
-        maxBufferSize: 20,
-        interpolationFactor: 0.2
-    };
+    // const interpolationConfig: InterpolationConfig = {
+    //     delay: 150,
+    //     maxBufferSize: 20,
+    //     interpolationFactor: 0.2
+    // };
+
+    const MAX_BUFFER_SIZE = 20;
 
     const effectSystem = sceneSystem.getEffectSystem();
     const playerEntityQuery = ecsWorld.with("physics", "vehicle", "transform", "owner").where(({owner}) => owner?.isLocal);
@@ -63,10 +65,9 @@ export function createNetworkPredictionSystem(
         const MIN_DELAY = serverUpdateInterval * 2; // at least 2 server ticks
         const MAX_DELAY = 250; // or whatever is tolerable
 
-        recommendedDelay = Math.max(MIN_DELAY, Math.min(MAX_DELAY, recommendedDelay));
-
-        // Smoothly adjust current delay
-        currentInterpolationDelay += (recommendedDelay - currentInterpolationDelay) * 0.1;
+        // Directly set the delay without smoothing
+        currentInterpolationDelay = Math.max(MIN_DELAY, Math.min(MAX_DELAY, recommendedDelay));
+        log('Interpolation Delay', currentInterpolationDelay);
     }
 
     /**
@@ -76,10 +77,10 @@ export function createNetworkPredictionSystem(
         const playerEntity = playerEntityQuery.entities[0];
         const now = Date.now();
         const targetTime = now - currentInterpolationDelay;
-    
+
         TransformBuffers.forEach((buffer, id) => {
             if (buffer.length < 2 || id === playerEntity?.id) return;
-    
+
             const entity = ecsWorld.entities.find(e => e.id === id);
             if (!entity || !entity.transform) return;
     
@@ -116,37 +117,37 @@ export function createNetworkPredictionSystem(
                 i++;
             }
     
-            // // If we're at the end, extrapolate
-            // if (i >= buffer.length - 1) {
-            //     const lastState = buffer[buffer.length - 1];
-            //     const secondLastState = buffer[buffer.length - 2];
-            //     const timeSinceLastUpdate = targetTime - lastState.tick.timestamp;
+            // If we're at the end, extrapolate
+            if (i >= buffer.length - 1) {
+                const lastState = buffer[buffer.length - 1];
+                const secondLastState = buffer[buffer.length - 2];
+                const timeSinceLastUpdate = targetTime - lastState.tick.timestamp;
     
-            //     if (timeSinceLastUpdate < 1000) {
-            //         const dt = lastState.tick.timestamp - secondLastState.tick.timestamp;
-            //         if (dt > 0) {
-            //             const velocity = new Vector3(
-            //                 (lastState.transform.position.x - secondLastState.transform.position.x) / dt,
-            //                 (lastState.transform.position.y - secondLastState.transform.position.y) / dt,
-            //                 (lastState.transform.position.z - secondLastState.transform.position.z) / dt
-            //             );
+                if (timeSinceLastUpdate < 1000) {
+                    const dt = lastState.tick.timestamp - secondLastState.tick.timestamp;
+                    if (dt > 0) {
+                        const velocity = new Vector3(
+                            (lastState.transform.position.x - secondLastState.transform.position.x) / dt,
+                            (lastState.transform.position.y - secondLastState.transform.position.y) / dt,
+                            (lastState.transform.position.z - secondLastState.transform.position.z) / dt
+                        );
     
-            //             entity.transform.position.x = lastState.transform.position.x + velocity.x * timeSinceLastUpdate;
-            //             entity.transform.position.y = lastState.transform.position.y + velocity.y * timeSinceLastUpdate;
-            //             entity.transform.position.z = lastState.transform.position.z + velocity.z * timeSinceLastUpdate;
+                        entity.transform.position.x = lastState.transform.position.x + velocity.x * timeSinceLastUpdate;
+                        entity.transform.position.y = lastState.transform.position.y + velocity.y * timeSinceLastUpdate;
+                        entity.transform.position.z = lastState.transform.position.z + velocity.z * timeSinceLastUpdate;
     
-            //             entity.transform.rotation.copyFrom(lastState.transform.rotation);
-            //             entity.transform.velocity.copyFrom(lastState.transform.velocity);
-            //             entity.transform.angularVelocity.copyFrom(lastState.transform.angularVelocity);
-            //         }
-            //     } else {
-            //         entity.transform.position.copyFrom(lastState.transform.position);
-            //         entity.transform.rotation.copyFrom(lastState.transform.rotation);
-            //         entity.transform.velocity.copyFrom(lastState.transform.velocity);
-            //         entity.transform.angularVelocity.copyFrom(lastState.transform.angularVelocity);
-            //     }
-            //     return;
-            // }
+                        entity.transform.rotation.copyFrom(lastState.transform.rotation);
+                        entity.transform.velocity.copyFrom(lastState.transform.velocity);
+                        entity.transform.angularVelocity.copyFrom(lastState.transform.angularVelocity);
+                    }
+                } else {
+                    entity.transform.position.copyFrom(lastState.transform.position);
+                    entity.transform.rotation.copyFrom(lastState.transform.rotation);
+                    entity.transform.velocity.copyFrom(lastState.transform.velocity);
+                    entity.transform.angularVelocity.copyFrom(lastState.transform.angularVelocity);
+                }
+                return;
+            }
     
             const a = buffer[i];
             const b = buffer[i + 1];
@@ -182,7 +183,7 @@ export function createNetworkPredictionSystem(
             entity.transform.velocity.x = a.transform.velocity.x + (b.transform.velocity.x - a.transform.velocity.x) * clampedT;
             entity.transform.velocity.y = a.transform.velocity.y + (b.transform.velocity.y - a.transform.velocity.y) * clampedT;
             entity.transform.velocity.z = a.transform.velocity.z + (b.transform.velocity.z - a.transform.velocity.z) * clampedT;
-    
+
             entity.transform.angularVelocity.x = a.transform.angularVelocity.x + (b.transform.angularVelocity.x - a.transform.angularVelocity.x) * clampedT;
             entity.transform.angularVelocity.y = a.transform.angularVelocity.y + (b.transform.angularVelocity.y - a.transform.angularVelocity.y) * clampedT;
             entity.transform.angularVelocity.z = a.transform.angularVelocity.z + (b.transform.angularVelocity.z - a.transform.angularVelocity.z) * clampedT;
@@ -214,7 +215,7 @@ export function createNetworkPredictionSystem(
             const buffers = TransformBuffers.get(id)!;
             buffers.push(state);
             // Keep buffer size reasonable
-            if (buffers.length > interpolationConfig.maxBufferSize) {
+            if (buffers.length > MAX_BUFFER_SIZE) {
                 buffers.shift();
             }
         },
@@ -249,7 +250,7 @@ export function createNetworkPredictionSystem(
                 physicsSystem.applyInput(dt, playerEntity, finalInput);
                 // Always update weapon system if entity has weapons
                 if (playerEntity.vehicle?.weapons) {
-                    projectileId = weaponSystem.applyInput(dt, playerEntity, finalInput);
+                    projectileId = weaponSystem.applyInput(dt, playerEntity, finalInput, 0);
                     if (projectileId) {
                         const projectileEntity = ecsWorld.entities.find(e => e.id === `${playerEntity.id}_${projectileId}`);
                         if (projectileEntity) {

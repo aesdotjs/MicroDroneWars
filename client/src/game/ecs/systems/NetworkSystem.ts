@@ -250,6 +250,24 @@ export function createNetworkSystem(
                     physicsWorldSystem.removeBody(gameEntity.id);
                     delete gameEntity.physics;
                 }
+                if (gameEntity.transform && gameEntity.tick) {
+                    const transformBuffer: TransformBuffer = {
+                        transform: {
+                            position: gameEntity.transform.position,
+                            rotation: gameEntity.transform.rotation,
+                            velocity: gameEntity.transform.velocity,
+                            angularVelocity: gameEntity.transform.angularVelocity
+                        },
+                        tick: {
+                            tick: gameEntity.tick.tick,
+                            timestamp: gameEntity.tick.timestamp,
+                            lastProcessedInputTimestamp: gameEntity.tick.lastProcessedInputTimestamp,
+                            lastProcessedInputTick: gameEntity.tick.lastProcessedInputTick
+                        }
+                    };
+                    // add the last predicted transform to the network prediction system
+                    // networkPredictionSystem.addEntityState(id, transformBuffer);
+                }
             }
         }
         const gameEntity = ecsWorld.entities.find(e => e.id === id);
