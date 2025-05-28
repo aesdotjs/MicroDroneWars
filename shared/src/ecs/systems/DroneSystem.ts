@@ -1,7 +1,6 @@
 import { Vector3, Quaternion, Matrix } from '@babylonjs/core';
 import { world as ecsWorld } from '../world';
 import { GameEntity, InputComponent, VehicleType } from '../types';
-import { DroneSettings } from '../types';
 import { createPhysicsWorldSystem } from './PhysicsWorldSystem';
 import * as RAPIER from '@dimforge/rapier3d-deterministic-compat';
 
@@ -79,7 +78,6 @@ export function createDroneSystem(
                 return;
             }
             const body = entity.physics.body;
-            const settings = DroneSettings;
 
             // Get orientation vectors
             const { right, up, forward } = getOrientationVectors(body);

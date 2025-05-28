@@ -463,7 +463,17 @@ export function createEffectSystem(scene: Scene) {
     const setTrailVisible = (projectileId: string, visible: boolean) => {
         const trail = activeTrails.get(projectileId);
         if (trail) {
-            trail.reset();
+            if (visible) {
+                // trail.reset();
+                trail.start();
+            } else {
+                trail.stop();
+                trail.reset();
+            }
+            // trail.reset();
+            // if (visible) {
+            //     trail.start();
+            // }
             trail.isVisible = visible;
         }
     }

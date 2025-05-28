@@ -1,4 +1,4 @@
-import { GameEntity, TransformBuffer } from '@shared/ecs/types';
+import { EntityType, GameEntity, TransformBuffer } from '@shared/ecs/types';
 import { State, EntitySchema, WeaponSchema, ImpactSchema, TransformSchema, GameStateSchema, VehicleSchema, ProjectileSchema, OwnerSchema, AssetSchema, TickSchema } from '@shared/schemas';
 import { world as ecsWorld } from "@shared/ecs/world";
 import { createPhysicsWorldSystem } from '@shared/ecs/systems/PhysicsWorldSystem';
@@ -152,7 +152,6 @@ export function createStateSyncSystem(
             entity.tick.lastProcessedInputTimestamp = entityState.tick.lastProcessedInputTimestamp;
             entity.tick.lastProcessedInputTick = entityState.tick.lastProcessedInputTick;
         }
-        // 
         if (entity.transform && entity.tick && entity.owner && entity.vehicle) {
             const transformBuffer: TransformBuffer = {
                 transform: {
@@ -172,6 +171,7 @@ export function createStateSyncSystem(
     };
 
     return {
+        syncEntityToState,
         addEntity: (entity: GameEntity) => {
             syncEntityToState(entity);
         },

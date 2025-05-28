@@ -3,19 +3,22 @@ import { GameEntity, InputComponent, TransformBuffer } from '@shared/ecs/types';
 import { createInputProcessorSystem } from './InputProcessorSystem';
 import { createPhysicsSystem } from '@shared/ecs/systems/PhysicsSystem';
 import { createPhysicsWorldSystem } from '@shared/ecs/systems/PhysicsWorldSystem';
-const MAX_INPUT_BUFFER_SIZE = 60; // 1 second worth of inputs at 60fps
 import { createWeaponSystem } from '@shared/ecs/systems/WeaponSystem';
 import { createStateSyncSystem } from './StateSyncSystem';
+import { createProjectileSystem } from './ProjectileSystem';
 
 export function createInputSystem(
     physicsSystem: ReturnType<typeof createPhysicsSystem>,
     physicsWorldSystem: ReturnType<typeof createPhysicsWorldSystem>,
     weaponSystem: ReturnType<typeof createWeaponSystem>,
+    projectileSystem: ReturnType<typeof createProjectileSystem>,
+    clientLatencies: Map<string, number>
 ) {
     const MAX_TRANSFORM_BUFFERS = 60;
+    const MAX_INPUT_BUFFER_SIZE = 60; // 1 second worth of inputs at 60fps
     const inputBuffers = new Map<string, InputComponent[]>();
     const transformBuffers = new Map<string, TransformBuffer[]>();
-    const inputProcessor = createInputProcessorSystem(physicsSystem, weaponSystem);
+    const inputProcessor = createInputProcessorSystem(physicsSystem, weaponSystem, projectileSystem);
 
     return {
         inputProcessor,
@@ -45,7 +48,7 @@ export function createInputSystem(
 
                 const inputBuffer = inputBuffers.get(entity.owner!.id)!;
                 const entityTransformBuffers = transformBuffers.get(entity.owner!.id)!;
-                const updatedBuffer = inputProcessor.processInputs(entity, inputBuffer, entityTransformBuffers, dt);
+                const updatedBuffer = inputProcessor.processInputs(entity, inputBuffer, entityTransformBuffers, dt, clientLatencies.get(entity.owner!.id) ?? 0);
                 if (updatedBuffer) {
                     inputBuffers.set(entity.owner!.id, updatedBuffer);
                 }

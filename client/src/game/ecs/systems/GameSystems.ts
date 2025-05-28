@@ -56,10 +56,11 @@ export function createGameSystems(
     console.log('Initializing remaining systems...');
     const cameraSystem = createCameraSystem(scene, camera);
     const inputSystem = createClientInputSystem(canvas);
-    const networkSystem = createNetworkSystem(room, physicsWorldSystem, physicsSystem, inputSystem, weaponSystem, sceneSystem);
     // Initialize projectile system
     console.log('Initializing projectile system...');
     const projectileSystem = createProjectileSystem(physicsWorldSystem, sceneSystem);
+    const networkSystem = createNetworkSystem(room, physicsWorldSystem, physicsSystem, inputSystem, weaponSystem, projectileSystem, sceneSystem);
+
     console.log('Projectile system initialized');
     const flagSystem = createFlagSystem();
     const assetSystem = createAssetSystem(engine, scene, physicsWorldSystem, false);
@@ -143,6 +144,7 @@ export function createGameSystems(
                 physicsSystem.update(FIXED_TIME_STEP);
                 weaponSystem.update(FIXED_TIME_STEP);
                 networkSystem.update(FIXED_TIME_STEP);
+                projectileSystem.update(FIXED_TIME_STEP);
                 flagSystem.update(FIXED_TIME_STEP);
                 // Run exactly one tick
                 physicsWorldSystem.update(FIXED_TIME_STEP);
@@ -165,7 +167,6 @@ export function createGameSystems(
         const dt = engine.getDeltaTime() / 1000;
         update(engine.getDeltaTime());
         networkSystem.networkPredictionSystem.updateRemotes(dt);
-        projectileSystem.update(FIXED_TIME_STEP);
         if (isDebugMode) {
             rapierDebugger.update();
         }

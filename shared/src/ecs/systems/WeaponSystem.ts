@@ -42,7 +42,7 @@ export function createWeaponSystem(
                 });
             }
         },
-        applyInput: (dt: number, entity: GameEntity, input: InputComponent, timeDelta: number, transformBuffer?: TransformBuffer) => {
+        applyInput: (dt: number, entity: GameEntity, input: InputComponent, transform?: TransformBuffer) => {
             const vehicle = entity.vehicle!;
             const activeWeapon = vehicle.weapons[vehicle.activeWeaponIndex];
             const currentTick = physicsWorldSystem.getCurrentTick();
@@ -57,7 +57,6 @@ export function createWeaponSystem(
             if (input.weapon1) vehicle.activeWeaponIndex = 0;
             if (input.weapon2) vehicle.activeWeaponIndex = 1;
             if (input.weapon3) vehicle.activeWeaponIndex = 2;
-
             // Handle firing
             if (input.fire && (!isServer || input.projectileId) && activeWeapon && !activeWeapon.isOnCooldown) {
                 // Calculate current fire rate and cooldown
@@ -80,9 +79,9 @@ export function createWeaponSystem(
                         activeWeapon,
                         `${entity.id}_${projectileId}`,
                         aimPoint,
-                        timeDelta,
-                        transformBuffer
+                        transform
                     );
+                    projectile.projectile!.isFake = !isServer;
                     // Add to ECS world
                     ecsWorld.add(projectile);
                     
@@ -92,7 +91,7 @@ export function createWeaponSystem(
                     
                     // Update heat accumulator
                     activeWeapon.heatAccumulator = Math.min(1, heatAccumulator + activeWeapon.heatPerShot);
-                    return projectileId;
+                    return projectile;
                 }
             }
             return undefined;

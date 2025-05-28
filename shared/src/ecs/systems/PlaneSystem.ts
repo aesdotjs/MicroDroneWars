@@ -1,7 +1,6 @@
 import { Vector3, Quaternion, Matrix } from '@babylonjs/core';
 import { world as ecsWorld } from '../world';
 import { GameEntity, InputComponent, VehicleType } from '../types';
-import { PlaneSettings } from '../types';
 import { createPhysicsWorldSystem } from './PhysicsWorldSystem';
 import * as RAPIER from '@dimforge/rapier3d-deterministic-compat';
 
@@ -24,7 +23,6 @@ export function createPlaneSystem(
             for (const entity of planes) {
                 if (!entity.physics || !entity.physics.body) continue;
                 const body = entity.physics.body;
-                const settings = PlaneSettings;
 
                 // Initialize engine power if needed
                 if (!enginePower.has(entity.id)) {
@@ -126,7 +124,6 @@ export function createPlaneSystem(
                 return;
             }
             const body = entity.physics.body;
-            const settings = PlaneSettings;
 
             // Initialize engine power if needed
             if (!enginePower.has(entity.id)) {

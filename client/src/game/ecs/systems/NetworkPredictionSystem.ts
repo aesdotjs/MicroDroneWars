@@ -1,5 +1,5 @@
 import { world as ecsWorld } from '@shared/ecs/world';
-import { InputComponent, TransformBuffer, InterpolationConfig, EntityType } from '@shared/ecs/types';
+import { InputComponent, TransformBuffer, InterpolationConfig, EntityType, GameEntity } from '@shared/ecs/types';
 import { Vector3, Quaternion } from '@babylonjs/core';
 import { createPhysicsSystem } from '@shared/ecs/systems/PhysicsSystem';
 import { createPhysicsWorldSystem } from '@shared/ecs/systems/PhysicsWorldSystem';
@@ -31,7 +31,7 @@ export function createNetworkPredictionSystem(
 
     const effectSystem = sceneSystem.getEffectSystem();
     const playerEntityQuery = ecsWorld.with("physics", "vehicle", "transform", "owner").where(({owner}) => owner?.isLocal);
-
+    const projectileEntityQuery = ecsWorld.with("transform", "projectile");
     // State buffers for each entity
     const TransformBuffers = new Map<string, TransformBuffer[]>();
     let pendingInputs: InputComponent[] = [];
@@ -44,6 +44,10 @@ export function createNetworkPredictionSystem(
 
     // Constants
     const MAX_PENDING_INPUTS = 60;
+    const MAX_SMOOTH_UPDATE_DIST = 10.0; // 5 meters max smooth distance
+    const NO_SMOOTH_UPDATE_DIST = 30.0; // 10 meters - beyond this, snap without smoothing
+    const SMOOTH_LOCATION_TIME = 0.1; // 100ms to smooth location
+    const SMOOTH_ROTATION_TIME = 0.1; // 100ms to smooth rotation
 
     /**
      * Updates the interpolation delay based on network quality
@@ -70,6 +74,59 @@ export function createNetworkPredictionSystem(
         log('Interpolation Delay', currentInterpolationDelay);
     }
 
+    function smoothProjectile(entity: GameEntity, deltaTime: number) {
+        if (!entity.transform || !entity.projectile) return;
+
+        // Only handle correction if we have an offset
+        if (entity.projectile.correctionOffset) {
+            const distSq = entity.projectile.correctionOffset.lengthSquared();
+            
+            // If distance is beyond NO_SMOOTH_UPDATE_DIST, snap directly
+            if (distSq > NO_SMOOTH_UPDATE_DIST * NO_SMOOTH_UPDATE_DIST) {
+                entity.transform.position.addInPlace(entity.projectile.correctionOffset);
+                entity.projectile.correctionOffset.scaleInPlace(0);
+            }
+            // If distance is beyond MAX_SMOOTH_UPDATE_DIST, limit the correction
+            // if (distSq > MAX_SMOOTH_UPDATE_DIST * MAX_SMOOTH_UPDATE_DIST) {
+            //     const direction = entity.projectile.correctionOffset.normalize();
+            //     entity.projectile.correctionOffset = direction.scale(MAX_SMOOTH_UPDATE_DIST);
+            // }
+
+            // Apply smoothing based on time
+            if (deltaTime < SMOOTH_LOCATION_TIME && entity.projectile.correctionOffset.length() > 0) {
+                // Calculate smooth factor
+                const alpha = deltaTime / SMOOTH_LOCATION_TIME;
+                // Apply correction
+                const correction = entity.projectile.correctionOffset.scale(alpha);
+                entity.transform.position.addInPlace(correction);
+                // Update remaining correction
+                entity.projectile.correctionOffset.scaleInPlace(1.0 - alpha);
+            } else {
+                // Apply remaining correction and clear
+                entity.transform.position.addInPlace(entity.projectile.correctionOffset);
+                entity.projectile.correctionOffset.scaleInPlace(0);
+            }
+        }
+
+        // Handle rotation correction if we have it
+        if (entity.projectile.rotationCorrectionOffset) {
+            if (deltaTime < SMOOTH_ROTATION_TIME) {
+                const alpha = deltaTime / SMOOTH_ROTATION_TIME;
+                // Slerp towards identity (no correction)
+                entity.projectile.rotationCorrectionOffset = Quaternion.Slerp(
+                    entity.projectile.rotationCorrectionOffset,
+                    Quaternion.Identity(),
+                    alpha
+                );
+                entity.transform.rotation.multiplyInPlace(entity.projectile.rotationCorrectionOffset);
+            } else {
+                // Apply final rotation and clear
+                entity.transform.rotation.multiplyInPlace(entity.projectile.rotationCorrectionOffset);
+                entity.projectile.rotationCorrectionOffset = Quaternion.Identity();
+            }
+        }
+    }
+
     /**
      * Interpolates remote entity states
      */
@@ -87,29 +144,29 @@ export function createNetworkPredictionSystem(
             // Sort buffer by timestamp
             buffer.sort((a, b) => a.tick.timestamp - b.tick.timestamp);
     
-            const firstTs = buffer[0].tick.timestamp;
-            const lastTs = buffer[buffer.length - 1].tick.timestamp;
-            const bufferWindow = lastTs - firstTs;
+            // const firstTs = buffer[0].tick.timestamp;
+            // const lastTs = buffer[buffer.length - 1].tick.timestamp;
+            // const bufferWindow = lastTs - firstTs;
     
             // ⛔️ If we don't have enough buffer to interpolate, hold or hide
-            if (bufferWindow < currentInterpolationDelay) {
-                const lastState = buffer[buffer.length - 1];
-                if (entity.type === EntityType.Projectile && entity.render?.mesh) {
-                    entity.render.mesh.isVisible = false; // Optional: fade in when ready
-                    effectSystem.setTrailVisible(entity.id, false);
-                } else {
-                    entity.transform.position.copyFrom(lastState.transform.position);
-                    entity.transform.rotation.copyFrom(lastState.transform.rotation);
-                    entity.transform.velocity.copyFrom(lastState.transform.velocity);
-                    entity.transform.angularVelocity.copyFrom(lastState.transform.angularVelocity);
-                }
-                return;
-            } else {
-                if (entity.type === EntityType.Projectile && entity.render?.mesh) {
-                    entity.render.mesh.isVisible = true;
-                    effectSystem.setTrailVisible(entity.id, true);
-                }
-            }
+            // if (bufferWindow < currentInterpolationDelay) {
+            //     const lastState = buffer[buffer.length - 1];
+            //     if (entity.type === EntityType.Projectile && entity.render?.mesh) {
+            //         entity.render.mesh.isVisible = false; // Optional: fade in when ready
+            //         effectSystem.setTrailVisible(entity.id, false);
+            //     } else {
+            //         entity.transform.position.copyFrom(lastState.transform.position);
+            //         entity.transform.rotation.copyFrom(lastState.transform.rotation);
+            //         entity.transform.velocity.copyFrom(lastState.transform.velocity);
+            //         entity.transform.angularVelocity.copyFrom(lastState.transform.angularVelocity);
+            //     }
+            //     return;
+            // } else {
+            //     if (entity.type === EntityType.Projectile && entity.render?.mesh) {
+            //         entity.render.mesh.isVisible = true;
+            //         effectSystem.setTrailVisible(entity.id, true);
+            //     }
+            // }
     
             // Find states surrounding target time
             let i = 0;
@@ -118,36 +175,36 @@ export function createNetworkPredictionSystem(
             }
     
             // If we're at the end, extrapolate
-            if (i >= buffer.length - 1) {
-                const lastState = buffer[buffer.length - 1];
-                const secondLastState = buffer[buffer.length - 2];
-                const timeSinceLastUpdate = targetTime - lastState.tick.timestamp;
+            // if (i >= buffer.length - 1) {
+            //     const lastState = buffer[buffer.length - 1];
+            //     const secondLastState = buffer[buffer.length - 2];
+            //     const timeSinceLastUpdate = targetTime - lastState.tick.timestamp;
     
-                if (timeSinceLastUpdate < 1000) {
-                    const dt = lastState.tick.timestamp - secondLastState.tick.timestamp;
-                    if (dt > 0) {
-                        const velocity = new Vector3(
-                            (lastState.transform.position.x - secondLastState.transform.position.x) / dt,
-                            (lastState.transform.position.y - secondLastState.transform.position.y) / dt,
-                            (lastState.transform.position.z - secondLastState.transform.position.z) / dt
-                        );
+            //     if (timeSinceLastUpdate < 1000) {
+            //         const dt = lastState.tick.timestamp - secondLastState.tick.timestamp;
+            //         if (dt > 0) {
+            //             const velocity = new Vector3(
+            //                 (lastState.transform.position.x - secondLastState.transform.position.x) / dt,
+            //                 (lastState.transform.position.y - secondLastState.transform.position.y) / dt,
+            //                 (lastState.transform.position.z - secondLastState.transform.position.z) / dt
+            //             );
     
-                        entity.transform.position.x = lastState.transform.position.x + velocity.x * timeSinceLastUpdate;
-                        entity.transform.position.y = lastState.transform.position.y + velocity.y * timeSinceLastUpdate;
-                        entity.transform.position.z = lastState.transform.position.z + velocity.z * timeSinceLastUpdate;
+            //             entity.transform.position.x = lastState.transform.position.x + velocity.x * timeSinceLastUpdate;
+            //             entity.transform.position.y = lastState.transform.position.y + velocity.y * timeSinceLastUpdate;
+            //             entity.transform.position.z = lastState.transform.position.z + velocity.z * timeSinceLastUpdate;
     
-                        entity.transform.rotation.copyFrom(lastState.transform.rotation);
-                        entity.transform.velocity.copyFrom(lastState.transform.velocity);
-                        entity.transform.angularVelocity.copyFrom(lastState.transform.angularVelocity);
-                    }
-                } else {
-                    entity.transform.position.copyFrom(lastState.transform.position);
-                    entity.transform.rotation.copyFrom(lastState.transform.rotation);
-                    entity.transform.velocity.copyFrom(lastState.transform.velocity);
-                    entity.transform.angularVelocity.copyFrom(lastState.transform.angularVelocity);
-                }
-                return;
-            }
+            //             entity.transform.rotation.copyFrom(lastState.transform.rotation);
+            //             entity.transform.velocity.copyFrom(lastState.transform.velocity);
+            //             entity.transform.angularVelocity.copyFrom(lastState.transform.angularVelocity);
+            //         }
+            //     } else {
+            //         entity.transform.position.copyFrom(lastState.transform.position);
+            //         entity.transform.rotation.copyFrom(lastState.transform.rotation);
+            //         entity.transform.velocity.copyFrom(lastState.transform.velocity);
+            //         entity.transform.angularVelocity.copyFrom(lastState.transform.angularVelocity);
+            //     }
+            //     return;
+            // }
     
             const a = buffer[i];
             const b = buffer[i + 1];
@@ -178,7 +235,6 @@ export function createNetworkPredictionSystem(
             entity.transform.rotation.y = q.y;
             entity.transform.rotation.z = q.z;
             entity.transform.rotation.w = q.w;
-    
             // Interpolate velocities
             entity.transform.velocity.x = a.transform.velocity.x + (b.transform.velocity.x - a.transform.velocity.x) * clampedT;
             entity.transform.velocity.y = a.transform.velocity.y + (b.transform.velocity.y - a.transform.velocity.y) * clampedT;
@@ -191,6 +247,7 @@ export function createNetworkPredictionSystem(
     }
 
     return {
+        getCurrentInterpolationDelay: () => currentInterpolationDelay,
         /**
          * Updates network quality metrics
          */
@@ -208,6 +265,7 @@ export function createNetworkPredictionSystem(
         addEntityState: (id: string, state: TransformBuffer) => {
             const entity = ecsWorld.entities.find(e => e.id === id);
             if (!entity || !entity.transform) return;
+
             // Always save to buffer for all entity types
             if (!TransformBuffers.has(id)) {
                 TransformBuffers.set(id, []);
@@ -250,12 +308,14 @@ export function createNetworkPredictionSystem(
                 physicsSystem.applyInput(dt, playerEntity, finalInput);
                 // Always update weapon system if entity has weapons
                 if (playerEntity.vehicle?.weapons) {
-                    projectileId = weaponSystem.applyInput(dt, playerEntity, finalInput, 0);
-                    if (projectileId) {
-                        const projectileEntity = ecsWorld.entities.find(e => e.id === `${playerEntity.id}_${projectileId}`);
-                        if (projectileEntity) {
-                            projectileEntity.render = { mesh: effectSystem.createProjectileMesh(projectileEntity) }
-                        }
+                    const projectile = weaponSystem.applyInput(dt, playerEntity, finalInput);
+                    if (projectile?.id) {
+                        // const projectileEntity = ecsWorld.entities.find(e => e.id === `${playerEntity.id}_${projectileId}`);
+                        // if (projectileEntity) {
+                        //     projectileEntity.render = { mesh: effectSystem.createProjectileMesh(projectileEntity) }
+                        // }
+                        const projectileIdString = projectile.id.split('_').pop();
+                        projectileId = projectileIdString ? parseInt(projectileIdString) : 0;
                         effectSystem.createMuzzleFlash(playerEntity, projectileId);
                     }
                 }
@@ -355,6 +415,9 @@ export function createNetworkPredictionSystem(
 
             // Interpolate remote entities
             interpolateRemotes();
+            projectileEntityQuery.entities.forEach(entity => {
+                smoothProjectile(entity, dt);
+            });
         },
 
         /**

@@ -3,22 +3,24 @@ import { GameEntity, InputComponent, TransformBuffer } from '@shared/ecs/types';
 import { createPhysicsSystem } from '@shared/ecs/systems/PhysicsSystem';
 // import { createPhysicsWorldSystem } from '@shared/ecs/systems/PhysicsWorldSystem';
 import { createWeaponSystem } from '@shared/ecs/systems/WeaponSystem';
+import { createProjectileSystem } from './ProjectileSystem';
 /**
  * Creates a system that processes inputs and applies them to vehicle and weapon systems
  */
 export function createInputProcessorSystem(
     physicsSystem: ReturnType<typeof createPhysicsSystem>,
-    weaponSystem: ReturnType<typeof createWeaponSystem>
+    weaponSystem: ReturnType<typeof createWeaponSystem>,
+    projectileSystem: ReturnType<typeof createProjectileSystem>,
 ) {
     const lastProcessedInputTicks = new Map<string, number>();
     const lastProcessedInputTimestamps = new Map<string, number>();
     const pendingProjectileIds = new Map<string, number>();
-
+    const MAX_PREDICTION_TIME = 400;
     return {
         /**
          * Processes inputs for an entity and applies them to vehicle and weapon systems
          */
-        processInputs: (entity: GameEntity, inputBuffer: InputComponent[], transformBuffers: TransformBuffer[], dt: number) => {
+        processInputs: (entity: GameEntity, inputBuffer: InputComponent[], transformBuffers: TransformBuffer[], dt: number, clientLatency: number) => {
             // Get last processed tick
             let lastProcessedTick = lastProcessedInputTicks.get(entity.id) ?? 0;
             let lastProcessedTimestamp = lastProcessedInputTimestamps.get(entity.id) ?? Date.now();
@@ -41,23 +43,24 @@ export function createInputProcessorSystem(
                     if (entity.vehicle?.weapons) {
                         if (input.fire && input.projectileId) {
                             pendingProjectileIds.set(entity.id, input.projectileId);
-                            
-                            // Find the transform state at the time of firing
-                            const inputTime = input.timestamp;
-                            const sortedTransforms = transformBuffers.sort((a, b) => 
-                                Math.abs(a.tick.timestamp - inputTime) - Math.abs(b.tick.timestamp - inputTime)
-                            );
-                            
-                            // Get the closest transform state to the input time
-                            const closestTransform = sortedTransforms[0];
-                            const timeDelta = (Date.now() - inputTime) / 1000; // Convert to seconds
-
-                            input.projectileId = pendingProjectileIds.get(entity.id) ?? input.projectileId;
-                            const projectileId = weaponSystem.applyInput(dt, entity, input, timeDelta, closestTransform);
-                            if (projectileId) {
-                                // projectile created, remove from pending projectile ids
-                                pendingProjectileIds.delete(entity.id);
-                            }
+                        }
+                        // Find the transform state at the time of firing
+                        const timeDeltaMs = Date.now() - input.timestamp;
+                        const timeDelta = timeDeltaMs / 1000; // Convert to seconds
+                        const inputTime = input.timestamp - timeDeltaMs;
+                        const sortedTransforms = transformBuffers.sort((a, b) => 
+                            Math.abs(a.tick.timestamp - inputTime) - Math.abs(b.tick.timestamp - inputTime)
+                        );
+                        // Get the closest transform state to the input time
+                        const closestTransform = sortedTransforms[0];
+                        // const timeDelta = (clientLatency) / 1000;
+                        input.projectileId = pendingProjectileIds.get(entity.id) ?? input.projectileId;
+                        const projectile = weaponSystem.applyInput(dt, entity, input, closestTransform);
+                        if (projectile?.id) {
+                            // projectile created, remove from pending projectile ids
+                            pendingProjectileIds.delete(entity.id);
+                            // project forward in time
+                            projectileSystem.tickProjectile(projectile, timeDelta);
                         }
                     }
                     lastProcessedTick = input.tick;

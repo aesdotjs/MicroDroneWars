@@ -1,7 +1,7 @@
 // import * as CANNON from 'cannon-es';
 import RAPIER from '@dimforge/rapier3d-deterministic-compat';
 import { world as ecsWorld } from '../world';
-import { GameEntity, VehicleType, DroneSettings, PlaneSettings, CollisionGroups, collisionMasks, EntityType, PhysicsComponent, WeaponComponent, ProjectileType, CollisionType, CollisionSeverity, TransformBuffer, TransformComponent } from '../types';
+import { GameEntity, VehicleType, CollisionGroups, collisionMasks, EntityType, PhysicsComponent, WeaponComponent, ProjectileType, CollisionType, CollisionSeverity, TransformBuffer, TransformComponent, ImpactComponent } from '../types';
 import { Vector3, Quaternion, Mesh } from '@babylonjs/core';
 /**
  * Creates a system that manages the physics world for both client and server using Rapier
@@ -23,8 +23,8 @@ export function createPhysicsWorldSystem(
 
     // Helper to apply Rapier body transform to ECS entity
     const applyBodyTransform = (entity: GameEntity) => {
-            const body = entity.physics?.body;
-            if (!body) return;
+        const body = entity.physics?.body;
+        if (!body) return;
         const translation = body.translation();
         const rotation = body.rotation();
         const linvel = body.linvel();
@@ -36,9 +36,12 @@ export function createPhysicsWorldSystem(
         entity.transform!.rotation.y = rotation.y;
         entity.transform!.rotation.z = rotation.z;
         entity.transform!.rotation.w = rotation.w;
-        entity.transform!.velocity.x = linvel.x;
-        entity.transform!.velocity.y = linvel.y;
-        entity.transform!.velocity.z = linvel.z;
+        // for kinematic bodies, we don't want to set the velocity
+        if (entity.type !== EntityType.Projectile) {
+            entity.transform!.velocity.x = linvel.x;
+            entity.transform!.velocity.y = linvel.y;
+            entity.transform!.velocity.z = linvel.z;
+        }
         entity.transform!.angularVelocity.x = angvel.x;
         entity.transform!.angularVelocity.y = angvel.y;
         entity.transform!.angularVelocity.z = angvel.z;
@@ -141,6 +144,7 @@ export function createPhysicsWorldSystem(
         }
         // Restore impact logic if contact info is available
         if (event.contactPoint && event.normal && other.id && isServer) {
+            console.log('Projectile collision:', projectile.id, other.id, event.contactPoint, event.normal, event.impactVelocity);
             projectile.projectile.impact = {
                 position: event.contactPoint,
                 normal: event.normal,
@@ -158,17 +162,18 @@ export function createPhysicsWorldSystem(
     }
 
     // --- Physics hooks for custom contact filtering ---
-    const physicsHooks = {
+    const physicsHooks: RAPIER.PhysicsHooks = {
         filterContactPair: (collider1: number, collider2: number, body1: number, body2: number) => {
             const colliderA = world.getCollider(collider1);
             const colliderB = world.getCollider(collider2);
             // Find ECS entities by collider
             const entityA = ecsWorld.entities.find(e => e.physics?.colliders?.includes(colliderA));
             const entityB = ecsWorld.entities.find(e => e.physics?.colliders?.includes(colliderB));
-            // Ignore collision if one is a projectile and the other's id matches sourceId
+            // Ignore collision if one is a projectile and the other's id matches sourceId or if it's a fake projectile
             if (
                 entityA?.type === EntityType.Projectile && entityA.projectile?.sourceId === entityB?.id ||
-                entityB?.type === EntityType.Projectile && entityB.projectile?.sourceId === entityA?.id
+                entityB?.type === EntityType.Projectile && entityB.projectile?.sourceId === entityA?.id ||
+                (!isServer && (entityA?.type === EntityType.Projectile || entityB?.type === EntityType.Projectile))
             ) {
                 return null; // Ignore this contact pair
             }
@@ -177,6 +182,7 @@ export function createPhysicsWorldSystem(
         },
         filterIntersectionPair: () => true // Dummy, required by PhysicsHooks interface
     };
+    
 
     return {
         getWorld: () => world,
@@ -302,32 +308,15 @@ export function createPhysicsWorldSystem(
             entityBodies.clear();
             entityColliders.clear();
         },
-        getVehiclePhysicsConfig(vehicleType: VehicleType) {
-            return vehicleType === VehicleType.Drone ? DroneSettings : PlaneSettings;
-        },
         createMeshPhysics(entity: GameEntity) {
             // Determine collision group and mask based on entity type
-            let physicsComponent = {
-                mass: 0,
-                drag: 0.0,
-                angularDrag: 0.0,
-                maxSpeed: 0.0,
-                maxAngularSpeed: 0.0,
-                maxAngularAcceleration: 0.0,
-                angularDamping: 0.0,
-                forceMultiplier: 1.0,
-                thrust: 0.0,
-                lift: 0.0,
-                torque: 0.0
-            };
             let collisionGroup = CollisionGroups.Environment;
             let collisionMask = collisionMasks.Environment;
             let mass = 0;
             if (entity.type === EntityType.Vehicle) {
-                physicsComponent = this.getVehiclePhysicsConfig(entity.vehicle!.vehicleType);
                 collisionGroup = entity.vehicle!.vehicleType === VehicleType.Drone ? CollisionGroups.Drones : CollisionGroups.Planes;
                 collisionMask = entity.vehicle!.vehicleType === VehicleType.Drone ? collisionMasks.Drone : collisionMasks.Plane;
-                mass = physicsComponent.mass;
+                mass = 0.5;
             } else if (entity.type === EntityType.Projectile) {
                 collisionGroup = CollisionGroups.Projectiles;
                 collisionMask = collisionMasks.Projectile;
@@ -466,7 +455,6 @@ export function createPhysicsWorldSystem(
             entity.physics = {
                 body: body,
                 colliders: colliders,
-                ...physicsComponent
             };
             this.addBody(entity);
         },
@@ -511,8 +499,7 @@ export function createPhysicsWorldSystem(
             weapon: WeaponComponent,
             projectileId: string,
             aimPoint: Vector3,
-            timeDelta: number = 0,
-            transformBuffer?: TransformBuffer
+            transform?: TransformBuffer
         ): GameEntity {
             // Get all weapon triggers
             const weaponTriggers = shooter?.asset?.triggerMeshes?.filter(mesh => 
@@ -528,9 +515,8 @@ export function createPhysicsWorldSystem(
                 const bulletIndex = parseInt(projectileId.split('_').pop() || '0') % 2;
                 weaponTrigger = weaponTriggers.find(mesh => mesh.metadata?.gltf?.extras?.type === `bullet_${bulletIndex}`);
             }
-
             // Use transform buffer if available, otherwise use current transform
-            const shooterTransform = transformBuffer?.transform || shooter.transform!;
+            const shooterTransform = transform?.transform || shooter.transform!;
             
             let spawnPointPosition: Vector3;
             let spawnPointRotation: Quaternion;
@@ -556,34 +542,24 @@ export function createPhysicsWorldSystem(
                 spawnPointRotation = shooterTransform.rotation.clone();
             }
 
-            if (timeDelta > 0) {
-                // Project position forward using velocity
-                spawnPointPosition.addInPlace(shooterTransform.velocity.scale(timeDelta));
-            }
-
             // Calculate direction from spawn point to aim point
             const direction = aimPoint.subtract(spawnPointPosition).normalize();
-
             // Calculate projectile velocity by combining shooter velocity and projectile speed
             const projectileVelocity = direction.scale(weapon.projectileSpeed);
-
-            
+            let inheritedVelocity: Vector3 = Vector3.Zero();
             // For missiles, only inherit 75% of the vehicle's velocity
             if (weapon.projectileType === ProjectileType.Missile) {
-                projectileVelocity.addInPlace(shooterTransform.velocity.scale(0.75));
+                inheritedVelocity = shooterTransform.velocity.scale(0.75);
             } else {
-                projectileVelocity.addInPlace(shooterTransform.velocity);
+                inheritedVelocity = shooterTransform.velocity;
             }
-            // // If we have a time delta, project forward
-            // if (timeDelta > 0) {
-            //     // Project position forward using velocity
-            //     spawnPointPosition.addInPlace(projectileVelocity.scale(timeDelta));
-            // }
+
+            const projectileVelocityWithInheritance = projectileVelocity.add(inheritedVelocity);
 
             // Create projectile body
-            const rbDesc = RAPIER.RigidBodyDesc.dynamic()
+            const rbDesc = RAPIER.RigidBodyDesc.kinematicPositionBased()
                 .setTranslation(spawnPointPosition.x, spawnPointPosition.y, spawnPointPosition.z)
-                .setLinvel(projectileVelocity.x, projectileVelocity.y, projectileVelocity.z)
+                // .setLinvel(projectileVelocityWithInheritance.x, projectileVelocityWithInheritance.y, projectileVelocityWithInheritance.z)
                 .setGravityScale(0.0)
                 .setCcdEnabled(true);
             const body = world.createRigidBody(rbDesc);
@@ -600,11 +576,9 @@ export function createPhysicsWorldSystem(
             colliderDesc.setCollisionGroups((CollisionGroups.Projectiles << 16) | collisionMasks.Projectile);
             colliderDesc.setActiveHooks(RAPIER.ActiveHooks.FILTER_CONTACT_PAIRS);
             colliderDesc.setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS);
-            colliderDesc.setSensor(!isServer);
             const collider = world.createCollider(colliderDesc, body);
             entityBodies.set(projectileId, body);
             entityColliders.set(projectileId, [collider]);
-
             // Create and return projectile entity
             return {
                 id: projectileId,
@@ -612,23 +586,12 @@ export function createPhysicsWorldSystem(
                 transform: {
                     position: spawnPointPosition.clone(),
                     rotation: spawnPointRotation.clone(),
-                    velocity: projectileVelocity,
+                    velocity: projectileVelocityWithInheritance,
                     angularVelocity: Vector3.Zero()
                 },
                 physics: {
                     body,
                     colliders: [collider],
-                    mass: 0.1,
-                    drag: 0.1,
-                    angularDrag: 0.1,
-                    maxSpeed: weapon.projectileSpeed,
-                    maxAngularSpeed: 0,
-                    maxAngularAcceleration: 0,
-                    angularDamping: 1,
-                    forceMultiplier: 1,
-                    thrust: 0,
-                    lift: 0,
-                    torque: 0,
                 },
                 projectile: {
                     projectileType: weapon.projectileType as ProjectileType,
@@ -653,7 +616,7 @@ export function createPhysicsWorldSystem(
                 tick: {
                     tick: 0,
                     timestamp: Date.now()
-                }
+                },
             };
         },
         applyBodyTransform,
@@ -711,6 +674,49 @@ export function createPhysicsWorldSystem(
                     z: angvel.z * 0.5
                 }, true);
             }
+        },
+        checkCollision: (entity: GameEntity, dt: number): ImpactComponent | undefined => {
+            if (!entity.transform || !entity.physics?.body) return undefined;
+
+            const currentPos = entity.transform.position;
+            const velocity = entity.transform.velocity;
+
+            // Create ray for collision testing
+            const ray = new RAPIER.Ray(
+                currentPos,
+                velocity
+            );
+
+            const shooterEntity = ecsWorld.entities.find(e => e.id === entity.projectile?.sourceId);
+            const excludedBody = shooterEntity?.physics?.body;
+            // Cast ray and check for collision, excluding the projectile's own body
+            const hitWithNormal = world.castRayAndGetNormal(
+                ray, 
+                dt * 2,  // Ray length = velocity * dt
+                true,
+                undefined,
+                undefined,
+                entity.physics?.colliders[0],
+                excludedBody
+            );
+
+            if (hitWithNormal) {
+                const hitPoint = ray.pointAt(hitWithNormal.timeOfImpact);
+                const targetCollider = hitWithNormal.collider;
+                const targetEntity = ecsWorld.entities.find(e => e.physics?.colliders?.includes(targetCollider));
+
+                if (targetEntity) {
+                    return {
+                        position: new Vector3(hitPoint.x, hitPoint.y, hitPoint.z),
+                        normal: new Vector3(hitWithNormal.normal.x, hitWithNormal.normal.y, hitWithNormal.normal.z),
+                        impactVelocity: velocity.length(),
+                        targetId: targetEntity.id,
+                        targetType: targetEntity.type ?? EntityType.Environment
+                    };
+                }
+            }
+
+            return undefined;
         }
     };  
 }
