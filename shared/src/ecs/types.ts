@@ -1,5 +1,5 @@
 import { Vector3, Quaternion, Mesh, TransformNode, AnimationGroup } from '@babylonjs/core';
-import type { Body as CannonBody, Vec3 } from 'cannon-es';
+import type { RigidBody, Collider, Vector3 as RapierVector3, Quaternion as RapierQuaternion } from '@dimforge/rapier3d-deterministic-compat';
 
 export enum VehicleType {
     Drone = 'drone',
@@ -111,18 +111,10 @@ export type TransformComponent = {
 };
 
 export type PhysicsComponent = {
-    body: CannonBody;
-    mass: number;
-    drag: number;
-    angularDrag: number;
-    maxSpeed: number;
-    maxAngularSpeed: number;
-    maxAngularAcceleration: number;
-    angularDamping: number;
-    forceMultiplier: number;
-    thrust: number;
-    lift: number;
-    torque: number;
+    body: RigidBody;
+    colliders: Collider[];
+    // todo aerosurfaces
+    // aeroSurfaces: AeroSurface[];
 };
 
 /**
@@ -152,6 +144,9 @@ export type ProjectileComponent = {
     distanceTraveled: number;
     sourceId: string;
     speed: number;
+    isFake?: boolean;
+    correctionOffset?: Vector3;
+    rotationCorrectionOffset?: Quaternion;
     impact?: ImpactComponent;
 };
 
@@ -229,7 +224,7 @@ export interface InputComponent {
     /** Fire weapon edge‐trigger only */
     firePressed: boolean;
     fireReleased: boolean;
-    /** “Held” flag if you still want it client‐side */
+    /** "Held" flag if you still want it client‐side */
     fire: boolean;
 
     /** Zoom edge‐trigger only */
@@ -264,26 +259,26 @@ export interface InputComponent {
  */
 export interface CollisionEvent {
     /** First colliding body */
-    bodyA: CannonBody;
+    bodyA: RigidBody;
     /** Second colliding body */
-    bodyB: CannonBody;
+    bodyB: RigidBody;
     /** Contact information between the bodies */
     target: {
         contacts: {
             /** Gets the impact velocity along the contact normal */
             getImpactVelocityAlongNormal: () => number;
             /** Gets the contact normal vector */
-            getNormal: () => CANNON.Vec3;
+            getNormal: () => RapierVector3;
             /** Contact normal vector */
-            ni: CANNON.Vec3;
+            ni: RapierVector3;
             /** Contact point on body A */
-            ri: CANNON.Vec3;
+            ri: RapierVector3;
             /** Contact point on body B */
-            rj: CANNON.Vec3;
+            rj: RapierVector3;
             /** Body A */
-            bi: CannonBody;
+            bi: RigidBody;
             /** Body B */
-            bj: CannonBody;
+            bj: RigidBody;
         }[];
     };
 }
@@ -296,7 +291,12 @@ export enum CollisionType {
     VehicleVehicle = 'vehicle-vehicle',
     VehicleEnvironment = 'vehicle-environment',
     VehicleProjectile = 'vehicle-projectile',
-    VehicleFlag = 'vehicle-flag'
+    VehicleFlag = 'vehicle-flag',
+    ProjectileVehicle = 'projectile-vehicle',
+    ProjectileEnvironment = 'projectile-environment',
+    ProjectileFlag = 'projectile-flag',
+    ProjectileOther = 'projectile-other',
+    Unknown = 'unknown'
 }
 
 /**
@@ -314,7 +314,7 @@ export enum CollisionSeverity {
  */
 export interface VehicleCollisionEvent {
     /** The vehicle body involved in the collision */
-    body: CannonBody;
+    body: RigidBody;
     /** Contact information */
     // contacts is inside a target object
     target: {
@@ -322,11 +322,11 @@ export interface VehicleCollisionEvent {
             /** Gets the impact velocity along the contact normal */
             getImpactVelocityAlongNormal: () => number;
             /** Gets the contact normal vector */
-            getNormal: () => CANNON.Vec3;
+            getNormal: () => RapierVector3;
             /** Contact point on body A */
-            ri: CANNON.Vec3;
+            ri: RapierVector3;
             /** Contact point on body B */
-            rj: CANNON.Vec3;
+            rj: RapierVector3;
         }[];
     };    
 }
@@ -340,36 +340,6 @@ export interface TransformBuffer {
     tick: TickComponent;
 }
 
-/**
- * Configuration for vehicle physics properties.
- * Defines the physical characteristics and behavior of vehicles.
- */
-export interface VehiclePhysicsConfig {
-    /** Mass of the vehicle in kg */
-    mass: number;
-    /** Linear drag coefficient */
-    drag: number;
-    /** Angular drag coefficient */
-    angularDrag: number;
-    /** Maximum speed in m/s */
-    maxSpeed: number;
-    /** Maximum angular speed in rad/s */
-    maxAngularSpeed: number;
-    /** Maximum angular acceleration in rad/s² */
-    maxAngularAcceleration: number;
-    /** Angular damping factor */
-    angularDamping: number;
-    /** Force multiplier for movement */
-    forceMultiplier: number;
-    /** Type of vehicle (drone or plane) */
-    vehicleType: VehicleType;
-    /** Thrust force in N */
-    thrust: number;
-    /** Lift force in N */
-    lift: number;
-    /** Torque force in N·m */
-    torque: number;
-}
 
 /**
  * Configuration for state interpolation.
@@ -384,67 +354,6 @@ export interface InterpolationConfig {
     interpolationFactor: number;
 }
 
-/**
- * Default physics settings for drone vehicles.
- * Defines the physical properties and behavior characteristics of drones.
- */
-export const DroneSettings: VehiclePhysicsConfig = {
-    /** Type of vehicle - drone */
-    vehicleType: VehicleType.Drone,
-    /** Mass of the drone in kg */
-    mass: 10,
-    /** Linear drag coefficient */
-    drag: 0.8,
-    /** Angular drag coefficient */
-    angularDrag: 0.8,
-    /** Maximum speed in m/s */
-    maxSpeed: 20,
-    /** Maximum angular speed in rad/s */
-    maxAngularSpeed: 0.2,
-    /** Maximum angular acceleration in rad/s² */
-    maxAngularAcceleration: 0.05,
-    /** Angular damping factor */
-    angularDamping: 0.9,
-    /** Force multiplier for movement */
-    forceMultiplier: 0.005,
-    /** Thrust force in N */
-    thrust: 20,
-    /** Lift force in N */
-    lift: 15,
-    /** Torque force in N·m */
-    torque: 1,
-};
-
-/**
- * Default physics settings for plane vehicles.
- * Defines the physical properties and behavior characteristics of planes.
- */
-export const PlaneSettings: VehiclePhysicsConfig = {
-    /** Type of vehicle - plane */
-    vehicleType: VehicleType.Plane,
-    /** Mass of the plane in kg */
-    mass: 50,
-    /** Linear drag coefficient */
-    drag: 0.8,
-    /** Angular drag coefficient */
-    angularDrag: 0.8,
-    /** Maximum speed in m/s */
-    maxSpeed: 20,
-    /** Maximum angular speed in rad/s */
-    maxAngularSpeed: 0.2,
-    /** Maximum angular acceleration in rad/s² */
-    maxAngularAcceleration: 0.05,
-    /** Angular damping factor */
-    angularDamping: 0.9,
-    /** Force multiplier for movement */
-    forceMultiplier: 0.005,
-    /** Thrust force in N */
-    thrust: 30,
-    /** Lift force in N */
-    lift: 12,
-    /** Torque force in N·m */
-    torque: 2,
-};
 
 /**
  * Represents a weapon that can be equipped on vehicles

@@ -1,5 +1,5 @@
 import { world as ecsWorld } from '@shared/ecs/world';
-import { InputComponent, TransformBuffer, InterpolationConfig, EntityType } from '@shared/ecs/types';
+import { InputComponent, TransformBuffer, InterpolationConfig, EntityType, GameEntity } from '@shared/ecs/types';
 import { Vector3, Quaternion } from '@babylonjs/core';
 import { createPhysicsSystem } from '@shared/ecs/systems/PhysicsSystem';
 import { createPhysicsWorldSystem } from '@shared/ecs/systems/PhysicsWorldSystem';
@@ -21,14 +21,17 @@ export function createNetworkPredictionSystem(
     room: Room<State>
 ) {
     // Configuration
-    const interpolationConfig: InterpolationConfig = {
-        delay: 150,
-        maxBufferSize: 20,
-        interpolationFactor: 0.2
-    };
+    // const interpolationConfig: InterpolationConfig = {
+    //     delay: 150,
+    //     maxBufferSize: 20,
+    //     interpolationFactor: 0.2
+    // };
+
+    const MAX_BUFFER_SIZE = 20;
 
     const effectSystem = sceneSystem.getEffectSystem();
-
+    const playerEntityQuery = ecsWorld.with("physics", "vehicle", "transform", "owner").where(({owner}) => owner?.isLocal);
+    const projectileEntityQuery = ecsWorld.with("transform", "projectile");
     // State buffers for each entity
     const TransformBuffers = new Map<string, TransformBuffer[]>();
     let pendingInputs: InputComponent[] = [];
@@ -36,153 +39,202 @@ export function createNetworkPredictionSystem(
     // Network quality tracking
     let networkLatency = 0;
     let networkQuality = 1.0;
+    let networkJitter = 0;
     let currentInterpolationDelay = 100;
-    let targetInterpolationDelay = 100;
 
     // Constants
-    const INTERPOLATION_DELAY_SMOOTHING = 0.1;
-    const MIN_INTERPOLATION_DELAY = 50;
-    const MAX_INTERPOLATION_DELAY = 200;
-    const QUALITY_TO_DELAY_FACTOR = 0.5;
-    const RECONCILIATION_POSITION_THRESHOLD = 2.0;
-    const RECONCILIATION_ROTATION_THRESHOLD = Math.PI * (10/180);
-    const RECONCILIATION_POSITION_SMOOTHING = 0.2;
-    const RECONCILIATION_ROTATION_SMOOTHING = 0.3;
     const MAX_PENDING_INPUTS = 60;
-    const HEARTBEAT_INTERVAL = 60; // Send heartbeat every 60 ticks
-    let lastHeartbeatTick = 0;
+    const MAX_SMOOTH_UPDATE_DIST = 10.0; // 5 meters max smooth distance
+    const NO_SMOOTH_UPDATE_DIST = 30.0; // 10 meters - beyond this, snap without smoothing
+    const SMOOTH_LOCATION_TIME = 0.1; // 100ms to smooth location
+    const SMOOTH_ROTATION_TIME = 0.1; // 100ms to smooth rotation
 
     /**
      * Updates the interpolation delay based on network quality
      */
     function updateInterpolationDelay() {
-        // Calculate base delay based on latency
-        let baseDelay = networkLatency * 1.5;
-        
-        // Adjust delay based on network quality
-        const qualityFactor = 1.0 - (networkQuality * QUALITY_TO_DELAY_FACTOR);
-        baseDelay *= (1.0 + qualityFactor);
-        
-        // Smoothly update target delay
-        targetInterpolationDelay = Math.max(
-            MIN_INTERPOLATION_DELAY,
-            Math.min(MAX_INTERPOLATION_DELAY, baseDelay)
-        );
-        
-        // Smoothly adjust current delay
-        currentInterpolationDelay += (targetInterpolationDelay - currentInterpolationDelay) * INTERPOLATION_DELAY_SMOOTHING;
-        log('Current Interpolation Delay', currentInterpolationDelay);
+        // Assume you have these values from your network system:
+        // networkLatency: measured RTT in ms
+        // serverTickRate: e.g., 60 for 60Hz
+        // networkJitter: measured jitter in ms
+
+        const oneWayDelay = networkLatency / 2;
+        const serverUpdateInterval = 1000 / 60
+        const jitterBuffer = Math.max(10, networkJitter * 1.5); // 1.5x jitter as buffer
+
+        // Calculate recommended delay
+        let recommendedDelay = oneWayDelay + serverUpdateInterval + jitterBuffer;
+
+        // Clamp to min/max
+        const MIN_DELAY = serverUpdateInterval * 2; // at least 2 server ticks
+        const MAX_DELAY = 250; // or whatever is tolerable
+
+        // Directly set the delay without smoothing
+        currentInterpolationDelay = Math.max(MIN_DELAY, Math.min(MAX_DELAY, recommendedDelay));
+        log('Interpolation Delay', currentInterpolationDelay);
+    }
+
+    function smoothProjectile(entity: GameEntity, deltaTime: number) {
+        if (!entity.transform || !entity.projectile) return;
+
+        // Only handle correction if we have an offset
+        if (entity.projectile.correctionOffset) {
+            const distSq = entity.projectile.correctionOffset.lengthSquared();
+            
+            // If distance is beyond NO_SMOOTH_UPDATE_DIST, snap directly
+            if (distSq > NO_SMOOTH_UPDATE_DIST * NO_SMOOTH_UPDATE_DIST) {
+                entity.transform.position.addInPlace(entity.projectile.correctionOffset);
+                entity.projectile.correctionOffset.scaleInPlace(0);
+            }
+            // If distance is beyond MAX_SMOOTH_UPDATE_DIST, limit the correction
+            // if (distSq > MAX_SMOOTH_UPDATE_DIST * MAX_SMOOTH_UPDATE_DIST) {
+            //     const direction = entity.projectile.correctionOffset.normalize();
+            //     entity.projectile.correctionOffset = direction.scale(MAX_SMOOTH_UPDATE_DIST);
+            // }
+
+            // Apply smoothing based on time
+            if (deltaTime < SMOOTH_LOCATION_TIME && entity.projectile.correctionOffset.length() > 0) {
+                // Calculate smooth factor
+                const alpha = deltaTime / SMOOTH_LOCATION_TIME;
+                // Apply correction
+                const correction = entity.projectile.correctionOffset.scale(alpha);
+                entity.transform.position.addInPlace(correction);
+                // Update remaining correction
+                entity.projectile.correctionOffset.scaleInPlace(1.0 - alpha);
+            } else {
+                // Apply remaining correction and clear
+                entity.transform.position.addInPlace(entity.projectile.correctionOffset);
+                entity.projectile.correctionOffset.scaleInPlace(0);
+            }
+        }
+
+        // Handle rotation correction if we have it
+        if (entity.projectile.rotationCorrectionOffset) {
+            if (deltaTime < SMOOTH_ROTATION_TIME) {
+                const alpha = deltaTime / SMOOTH_ROTATION_TIME;
+                // Slerp towards identity (no correction)
+                entity.projectile.rotationCorrectionOffset = Quaternion.Slerp(
+                    entity.projectile.rotationCorrectionOffset,
+                    Quaternion.Identity(),
+                    alpha
+                );
+                entity.transform.rotation.multiplyInPlace(entity.projectile.rotationCorrectionOffset);
+            } else {
+                // Apply final rotation and clear
+                entity.transform.rotation.multiplyInPlace(entity.projectile.rotationCorrectionOffset);
+                entity.projectile.rotationCorrectionOffset = Quaternion.Identity();
+            }
+        }
     }
 
     /**
      * Interpolates remote entity states
      */
     function interpolateRemotes() {
+        const playerEntity = playerEntityQuery.entities[0];
         const now = Date.now();
         const targetTime = now - currentInterpolationDelay;
-        const playerEntity = ecsWorld.with("physics", "vehicle", "transform", "owner").where(({owner}) => owner?.isLocal).entities[0];
+
         TransformBuffers.forEach((buffer, id) => {
             if (buffer.length < 2 || id === playerEntity?.id) return;
+
             const entity = ecsWorld.entities.find(e => e.id === id);
             if (!entity || !entity.transform) return;
-            // Sort buffer by timestamp to ensure correct order
+    
+            // Sort buffer by timestamp
             buffer.sort((a, b) => a.tick.timestamp - b.tick.timestamp);
-
-            // Find states bracketing target time
+    
+            // const firstTs = buffer[0].tick.timestamp;
+            // const lastTs = buffer[buffer.length - 1].tick.timestamp;
+            // const bufferWindow = lastTs - firstTs;
+    
+            // ⛔️ If we don't have enough buffer to interpolate, hold or hide
+            // if (bufferWindow < currentInterpolationDelay) {
+            //     const lastState = buffer[buffer.length - 1];
+            //     if (entity.type === EntityType.Projectile && entity.render?.mesh) {
+            //         entity.render.mesh.isVisible = false; // Optional: fade in when ready
+            //         effectSystem.setTrailVisible(entity.id, false);
+            //     } else {
+            //         entity.transform.position.copyFrom(lastState.transform.position);
+            //         entity.transform.rotation.copyFrom(lastState.transform.rotation);
+            //         entity.transform.velocity.copyFrom(lastState.transform.velocity);
+            //         entity.transform.angularVelocity.copyFrom(lastState.transform.angularVelocity);
+            //     }
+            //     return;
+            // } else {
+            //     if (entity.type === EntityType.Projectile && entity.render?.mesh) {
+            //         entity.render.mesh.isVisible = true;
+            //         effectSystem.setTrailVisible(entity.id, true);
+            //     }
+            // }
+    
+            // Find states surrounding target time
             let i = 0;
-            while (i < buffer.length - 1 && buffer[i + 1].tick.timestamp <= targetTime) {
+            while (i < buffer.length - 2 && buffer[i + 1].tick.timestamp <= targetTime) {
                 i++;
             }
-
-            // If we're at the end of the buffer, extrapolate
-            if (i >= buffer.length - 1) {
-                const lastState = buffer[buffer.length - 1];
-                const secondLastState = buffer[buffer.length - 2];
-                const timeSinceLastUpdate = targetTime - lastState.tick.timestamp;
-                
-                // Only extrapolate if the time gap is reasonable
-                if (timeSinceLastUpdate < 1000) {
-                    const dt = lastState.tick.timestamp - secondLastState.tick.timestamp;
-                    if (dt > 0) {
-                        // Calculate velocity from last two states
-                        const velocity = new Vector3(
-                            (lastState.transform.position.x - secondLastState.transform.position.x) / dt,
-                            (lastState.transform.position.y - secondLastState.transform.position.y) / dt,
-                            (lastState.transform.position.z - secondLastState.transform.position.z) / dt
-                        );
-                        
-                        // Extrapolate position
-                        entity.transform.position.x = lastState.transform.position.x + velocity.x * timeSinceLastUpdate;
-                        entity.transform.position.y = lastState.transform.position.y + velocity.y * timeSinceLastUpdate;
-                        entity.transform.position.z = lastState.transform.position.z + velocity.z * timeSinceLastUpdate;
-                        
-                        // Keep last known rotation and velocities
-                        entity.transform.rotation.copyFrom(lastState.transform.rotation);
-                        entity.transform.velocity.copyFrom(lastState.transform.velocity);
-                        entity.transform.angularVelocity.copyFrom(lastState.transform.angularVelocity);
-                    }
-                } else {
-                    // If gap is too large, use the last known state
-                    entity.transform.position.copyFrom(lastState.transform.position);
-                    entity.transform.rotation.copyFrom(lastState.transform.rotation);
-                    entity.transform.velocity.copyFrom(lastState.transform.velocity);
-                    entity.transform.angularVelocity.copyFrom(lastState.transform.angularVelocity);
-                }
-                return;
-            }
-
-            // Interpolate between two states
+    
+            // If we're at the end, extrapolate
+            // if (i >= buffer.length - 1) {
+            //     const lastState = buffer[buffer.length - 1];
+            //     const secondLastState = buffer[buffer.length - 2];
+            //     const timeSinceLastUpdate = targetTime - lastState.tick.timestamp;
+    
+            //     if (timeSinceLastUpdate < 1000) {
+            //         const dt = lastState.tick.timestamp - secondLastState.tick.timestamp;
+            //         if (dt > 0) {
+            //             const velocity = new Vector3(
+            //                 (lastState.transform.position.x - secondLastState.transform.position.x) / dt,
+            //                 (lastState.transform.position.y - secondLastState.transform.position.y) / dt,
+            //                 (lastState.transform.position.z - secondLastState.transform.position.z) / dt
+            //             );
+    
+            //             entity.transform.position.x = lastState.transform.position.x + velocity.x * timeSinceLastUpdate;
+            //             entity.transform.position.y = lastState.transform.position.y + velocity.y * timeSinceLastUpdate;
+            //             entity.transform.position.z = lastState.transform.position.z + velocity.z * timeSinceLastUpdate;
+    
+            //             entity.transform.rotation.copyFrom(lastState.transform.rotation);
+            //             entity.transform.velocity.copyFrom(lastState.transform.velocity);
+            //             entity.transform.angularVelocity.copyFrom(lastState.transform.angularVelocity);
+            //         }
+            //     } else {
+            //         entity.transform.position.copyFrom(lastState.transform.position);
+            //         entity.transform.rotation.copyFrom(lastState.transform.rotation);
+            //         entity.transform.velocity.copyFrom(lastState.transform.velocity);
+            //         entity.transform.angularVelocity.copyFrom(lastState.transform.angularVelocity);
+            //     }
+            //     return;
+            // }
+    
             const a = buffer[i];
             const b = buffer[i + 1];
-            
-            // Handle identical timestamps
+    
+            // Identical timestamps
             if (b.tick.timestamp === a.tick.timestamp) {
-                // For projectiles, use the newer state
-                if (entity.type === EntityType.Projectile) {
-                    entity.transform.position.copyFrom(b.transform.position);
-                    entity.transform.rotation.copyFrom(b.transform.rotation);
-                    entity.transform.velocity.copyFrom(b.transform.velocity);
-                    entity.transform.angularVelocity.copyFrom(b.transform.angularVelocity);
-                    return;
-                }
-                // For other entities, use the older state
-                entity.transform.position.copyFrom(a.transform.position);
-                entity.transform.rotation.copyFrom(a.transform.rotation);
-                entity.transform.velocity.copyFrom(a.transform.velocity);
-                entity.transform.angularVelocity.copyFrom(a.transform.angularVelocity);
+                const chosen = (entity.type === EntityType.Projectile) ? b : a;
+                entity.transform.position.copyFrom(chosen.transform.position);
+                entity.transform.rotation.copyFrom(chosen.transform.rotation);
+                entity.transform.velocity.copyFrom(chosen.transform.velocity);
+                entity.transform.angularVelocity.copyFrom(chosen.transform.angularVelocity);
                 return;
             }
-
-
+    
             const t = (targetTime - a.tick.timestamp) / (b.tick.timestamp - a.tick.timestamp);
-            
-            // Clamp interpolation factor
             const clampedT = Math.max(0, Math.min(1, t));
-            
+    
             // Interpolate position
             entity.transform.position.x = a.transform.position.x + (b.transform.position.x - a.transform.position.x) * clampedT;
             entity.transform.position.y = a.transform.position.y + (b.transform.position.y - a.transform.position.y) * clampedT;
             entity.transform.position.z = a.transform.position.z + (b.transform.position.z - a.transform.position.z) * clampedT;
-
+    
             // Interpolate rotation
-            const qa = new Quaternion(
-                a.transform.rotation.x,
-                a.transform.rotation.y,
-                a.transform.rotation.z,
-                a.transform.rotation.w
-            );
-            const qb = new Quaternion(
-                b.transform.rotation.x,
-                b.transform.rotation.y,
-                b.transform.rotation.z,
-                b.transform.rotation.w
-            );
+            const qa = new Quaternion(a.transform.rotation.x, a.transform.rotation.y, a.transform.rotation.z, a.transform.rotation.w);
+            const qb = new Quaternion(b.transform.rotation.x, b.transform.rotation.y, b.transform.rotation.z, b.transform.rotation.w);
             const q = Quaternion.Slerp(qa, qb, clampedT);
             entity.transform.rotation.x = q.x;
             entity.transform.rotation.y = q.y;
             entity.transform.rotation.z = q.z;
             entity.transform.rotation.w = q.w;
-
             // Interpolate velocities
             entity.transform.velocity.x = a.transform.velocity.x + (b.transform.velocity.x - a.transform.velocity.x) * clampedT;
             entity.transform.velocity.y = a.transform.velocity.y + (b.transform.velocity.y - a.transform.velocity.y) * clampedT;
@@ -195,12 +247,14 @@ export function createNetworkPredictionSystem(
     }
 
     return {
+        getCurrentInterpolationDelay: () => currentInterpolationDelay,
         /**
          * Updates network quality metrics
          */
         updateNetworkStats: (latency: number, quality: number, jitter: number) => {
             networkLatency = latency;
             networkQuality = quality;
+            networkJitter = jitter;
             updateInterpolationDelay();
         },
 
@@ -211,76 +265,16 @@ export function createNetworkPredictionSystem(
         addEntityState: (id: string, state: TransformBuffer) => {
             const entity = ecsWorld.entities.find(e => e.id === id);
             if (!entity || !entity.transform) return;
-            const isLocalPlayer = entity.owner?.isLocal;
-            if (isLocalPlayer) {
-                log('Server State Tick', state.tick.tick);
-                log('Last Processed Input Tick', state.tick.lastProcessedInputTick ?? state.tick.tick);
-                log('Pending Inputs', pendingInputs.length);
-            }
 
-            // Initialize buffers if needed
+            // Always save to buffer for all entity types
             if (!TransformBuffers.has(id)) {
                 TransformBuffers.set(id, []);
             }
-
             const buffers = TransformBuffers.get(id)!;
-
-            // if (isLocalPlayer && entity.type === EntityType.Vehicle) {
-            //     return;
-            // }
-            
-            if (isLocalPlayer && (entity.type === EntityType.Vehicle)) {
-                // physicsWorldSystem.setCurrentTick(state.tick.tick);
-                entity.transform.position.copyFrom(state.transform.position);
-                entity.transform.rotation.copyFrom(state.transform.rotation);
-                entity.transform.velocity.copyFrom(state.transform.velocity);
-                entity.transform.angularVelocity.copyFrom(state.transform.angularVelocity);
-                
-                // Update physics body state
-                if (entity.physics?.body) {
-                    entity.physics.body.position.set(
-                        state.transform.position.x,
-                        state.transform.position.y,
-                        state.transform.position.z
-                    );
-                    entity.physics.body.quaternion.set(
-                        state.transform.rotation.x,
-                        state.transform.rotation.y,
-                        state.transform.rotation.z,
-                        state.transform.rotation.w
-                    );
-                    entity.physics.body.velocity.set(
-                        state.transform.velocity.x,
-                        state.transform.velocity.y,
-                        state.transform.velocity.z
-                    );
-                    entity.physics.body.angularVelocity.set(
-                        state.transform.angularVelocity.x,
-                        state.transform.angularVelocity.y,
-                        state.transform.angularVelocity.z
-                    );
-                }
-                // Replay unprocessed inputs
-                const lastProcessedInputTick = state.tick.lastProcessedInputTick ?? state.tick.tick;
-                const unprocessedInputs = pendingInputs.filter((input: InputComponent) => input.tick > lastProcessedInputTick);
-
-                log('Replaying Inputs', {
-                    count: unprocessedInputs.length,
-                    from: lastProcessedInputTick,
-                    to: unprocessedInputs.length > 0 ? Math.max(...unprocessedInputs.map(i => i.tick)) : lastProcessedInputTick
-                });
-                for (const input of unprocessedInputs) {
-                    physicsSystem.applyInput(1/60, entity, input);
-                }
-                physicsWorldSystem.applyBodyTransform(entity);
-                pendingInputs = unprocessedInputs;
-            } else {
-                // Buffer remote states for interpolation
-                buffers.push(state);
-                // Keep buffer size reasonable
-                if (buffers.length > interpolationConfig.maxBufferSize) {
-                    buffers.shift();
-                }
+            buffers.push(state);
+            // Keep buffer size reasonable
+            if (buffers.length > MAX_BUFFER_SIZE) {
+                buffers.shift();
             }
         },
 
@@ -289,7 +283,7 @@ export function createNetworkPredictionSystem(
          */
         addInput: (dt: number, input: InputComponent, isIdle: boolean, currentTick: number) => {
             // const currentTick = physicsWorldSystem.getCurrentTick();
-            const playerEntity = ecsWorld.with("physics", "vehicle", "transform", "owner").where(({owner}) => owner?.isLocal).entities[0];
+            const playerEntity = playerEntityQuery.entities[0];
             // Create final input
             const finalInput: InputComponent = {
                 ...input,
@@ -314,8 +308,14 @@ export function createNetworkPredictionSystem(
                 physicsSystem.applyInput(dt, playerEntity, finalInput);
                 // Always update weapon system if entity has weapons
                 if (playerEntity.vehicle?.weapons) {
-                    projectileId = weaponSystem.applyInput(dt, playerEntity, finalInput);
-                    if (projectileId) {
+                    const projectile = weaponSystem.applyInput(dt, playerEntity, finalInput);
+                    if (projectile?.id) {
+                        // const projectileEntity = ecsWorld.entities.find(e => e.id === `${playerEntity.id}_${projectileId}`);
+                        // if (projectileEntity) {
+                        //     projectileEntity.render = { mesh: effectSystem.createProjectileMesh(projectileEntity) }
+                        // }
+                        const projectileIdString = projectile.id.split('_').pop();
+                        projectileId = projectileIdString ? parseInt(projectileIdString) : 0;
                         effectSystem.createMuzzleFlash(playerEntity, projectileId);
                     }
                 }
@@ -339,15 +339,85 @@ export function createNetworkPredictionSystem(
             room.send("command", input);
         },
 
+        update: (dt: number) => {
+            const playerEntity = playerEntityQuery.entities[0];
+                // Reconciliation for local player
+            if (playerEntity && TransformBuffers.has(playerEntity.id)) {
+                const buffer = TransformBuffers.get(playerEntity.id)!;
+                if (buffer.length > 0) {
+                    // Use the latest server state in the buffer
+                    const state = buffer[buffer.length - 1];
+                    physicsWorldSystem.setCurrentTick(state.tick.tick);
+                    playerEntity.transform.position.copyFrom(state.transform.position);
+                    playerEntity.transform.rotation.copyFrom(state.transform.rotation);
+                    playerEntity.transform.velocity.copyFrom(state.transform.velocity);
+                    playerEntity.transform.angularVelocity.copyFrom(state.transform.angularVelocity);
+                    // Update physics body state
+                    if (playerEntity.physics?.body) {
+                        playerEntity.physics.body.setTranslation(
+                            {
+                                x: state.transform.position.x,
+                                y: state.transform.position.y,
+                                z: state.transform.position.z
+                            },
+                            true
+                        );
+                        playerEntity.physics.body.setRotation(
+                            {
+                                x: state.transform.rotation.x,
+                                y: state.transform.rotation.y,
+                                z: state.transform.rotation.z,
+                                w: state.transform.rotation.w
+                            },
+                            true
+                        );
+                        playerEntity.physics.body.setLinvel(
+                            {
+                                x: state.transform.velocity.x,
+                                y: state.transform.velocity.y,
+                                z: state.transform.velocity.z
+                            },
+                            true
+                        );
+                        playerEntity.physics.body.setAngvel(
+                            {
+                                x: state.transform.angularVelocity.x,
+                                y: state.transform.angularVelocity.y,
+                                z: state.transform.angularVelocity.z
+                            },
+                            true
+                        );
+                    }
+                    // Replay unprocessed inputs
+                    const lastProcessedInputTick = state.tick.lastProcessedInputTick ?? state.tick.tick;
+                    const unprocessedInputs = pendingInputs.filter((input: InputComponent) => input.tick > lastProcessedInputTick);
+                    log('Replaying Inputs', {
+                        count: unprocessedInputs.length,
+                        from: lastProcessedInputTick,
+                        to: unprocessedInputs.length > 0 ? Math.max(...unprocessedInputs.map(i => i.tick)) : lastProcessedInputTick
+                    });
+                    for (const input of unprocessedInputs) {
+                        physicsSystem.applyInput(1/60, playerEntity, input);
+                    }
+                    pendingInputs = unprocessedInputs;
+                    // empty player buffer
+                    buffer.length = 0;
+                }
+            }
+        },
+
         /**
          * Updates the system
          */
-        update: (dt: number) => {
+        updateRemotes: (dt: number) => {
             // Update interpolation delay based on network quality
             updateInterpolationDelay();
 
             // Interpolate remote entities
             interpolateRemotes();
+            projectileEntityQuery.entities.forEach(entity => {
+                smoothProjectile(entity, dt);
+            });
         },
 
         /**

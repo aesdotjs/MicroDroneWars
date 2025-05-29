@@ -1,18 +1,24 @@
 import { world as ecsWorld } from '@shared/ecs/world';
-import { GameEntity, InputComponent } from '@shared/ecs/types';
+import { GameEntity, InputComponent, TransformBuffer } from '@shared/ecs/types';
 import { createInputProcessorSystem } from './InputProcessorSystem';
 import { createPhysicsSystem } from '@shared/ecs/systems/PhysicsSystem';
 import { createPhysicsWorldSystem } from '@shared/ecs/systems/PhysicsWorldSystem';
-const MAX_INPUT_BUFFER_SIZE = 60; // 1 second worth of inputs at 60fps
 import { createWeaponSystem } from '@shared/ecs/systems/WeaponSystem';
+import { createStateSyncSystem } from './StateSyncSystem';
+import { createProjectileSystem } from './ProjectileSystem';
 
 export function createInputSystem(
     physicsSystem: ReturnType<typeof createPhysicsSystem>,
     physicsWorldSystem: ReturnType<typeof createPhysicsWorldSystem>,
-    weaponSystem: ReturnType<typeof createWeaponSystem>
+    weaponSystem: ReturnType<typeof createWeaponSystem>,
+    projectileSystem: ReturnType<typeof createProjectileSystem>,
+    clientLatencies: Map<string, number>
 ) {
+    const MAX_TRANSFORM_BUFFERS = 60;
+    const MAX_INPUT_BUFFER_SIZE = 60; // 1 second worth of inputs at 60fps
     const inputBuffers = new Map<string, InputComponent[]>();
-    const inputProcessor = createInputProcessorSystem(physicsSystem, weaponSystem);
+    const transformBuffers = new Map<string, TransformBuffer[]>();
+    const inputProcessor = createInputProcessorSystem(physicsSystem, weaponSystem, projectileSystem);
 
     return {
         inputProcessor,
@@ -36,12 +42,37 @@ export function createInputSystem(
                 if (!inputBuffers.has(entity.owner!.id)) {
                     inputBuffers.set(entity.owner!.id, []);
                 }
+                if (!transformBuffers.has(entity.owner!.id)) {
+                    transformBuffers.set(entity.owner!.id, []);
+                }
 
-                const buffer = inputBuffers.get(entity.owner!.id)!;
-                const updatedBuffer = inputProcessor.processInputs(entity, buffer, dt);
+                const inputBuffer = inputBuffers.get(entity.owner!.id)!;
+                const entityTransformBuffers = transformBuffers.get(entity.owner!.id)!;
+                const updatedBuffer = inputProcessor.processInputs(entity, inputBuffer, entityTransformBuffers, dt, clientLatencies.get(entity.owner!.id) ?? 0);
                 if (updatedBuffer) {
                     inputBuffers.set(entity.owner!.id, updatedBuffer);
                 }
+            }
+        },
+
+        addTransformBuffer: (id: string, transformBuffer: TransformBuffer) => {
+            if (!transformBuffers.has(id)) {
+                transformBuffers.set(id, []);
+            }
+            const buffer = transformBuffers.get(id)!;
+            // Create a deep copy of the transform buffer to avoid reference issues
+            const transformCopy: TransformBuffer = {
+                transform: {
+                    position: transformBuffer.transform.position.clone(),
+                    rotation: transformBuffer.transform.rotation.clone(),
+                    velocity: transformBuffer.transform.velocity.clone(),
+                    angularVelocity: transformBuffer.transform.angularVelocity.clone()
+                },
+                tick: { ...transformBuffer.tick }
+            };
+            buffer.push(transformCopy);
+            while (buffer.length > MAX_TRANSFORM_BUFFERS) {
+                buffer.shift();
             }
         },
 
@@ -56,6 +87,7 @@ export function createInputSystem(
         cleanup: (id: string) => {
             inputBuffers.delete(id);
             inputProcessor.cleanup(id);
+            transformBuffers.delete(id);
         }
     };
 } 

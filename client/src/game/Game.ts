@@ -4,12 +4,15 @@ import * as Colyseus from 'colyseus.js';
 import { Engine } from '@babylonjs/core';
 import { useGameDebug } from '@/composables/useGameDebug';
 import { createGameSystems } from './ecs/systems/GameSystems';
+import initRapier3D from '@shared/utils/init-rapier3d';
 // import "@babylonjs/loaders/glTF";
 import '@babylonjs/loaders/glTF/2.0/Extensions/ExtrasAsMetadata';
 import '@babylonjs/loaders/glTF/2.0/Extensions/KHR_lights_punctual';
 import '@babylonjs/loaders/glTF/2.0/glTFLoader';
 
 const { log } = useGameDebug();
+
+await initRapier3D();
 
 /**
  * Main game class that manages the game loop, networking, and scene.

@@ -16,7 +16,7 @@ export function createHealthSystem() {
                     if (entity.vehicle) {
                         // TODO: Trigger destruction effects
                         // For now, just remove the entity
-                        ecsWorld.remove(entity);
+                        // ecsWorld.remove(entity);
                     }
                 }
             }

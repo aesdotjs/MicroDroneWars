@@ -1,7 +1,6 @@
-import * as CANNON from 'cannon-es';
 import { Vector3, Quaternion } from '@babylonjs/core';
 import { world as ecsWorld } from '../world';
-import { GameEntity, WeaponComponent, InputComponent, ProjectileType, EntityType, CollisionGroups, collisionMasks } from '../types';
+import { GameEntity, InputComponent, TransformBuffer } from '../types';
 import { createPhysicsWorldSystem } from './PhysicsWorldSystem';
 
 const TICKS_PER_SECOND = 60; // Assuming 60 ticks per second
@@ -43,7 +42,7 @@ export function createWeaponSystem(
                 });
             }
         },
-        applyInput: (dt: number, entity: GameEntity, input: InputComponent) => {
+        applyInput: (dt: number, entity: GameEntity, input: InputComponent, transform?: TransformBuffer) => {
             const vehicle = entity.vehicle!;
             const activeWeapon = vehicle.weapons[vehicle.activeWeaponIndex];
             const currentTick = physicsWorldSystem.getCurrentTick();
@@ -75,7 +74,14 @@ export function createWeaponSystem(
                         projectileId = count;
                     }
                     const aimPoint = new Vector3(input.aimPointX, input.aimPointY, input.aimPointZ);
-                    const projectile = physicsWorldSystem.createProjectile(entity, activeWeapon, `${entity.id}_${projectileId}`, aimPoint);
+                    const projectile = physicsWorldSystem.createProjectile(
+                        entity,
+                        activeWeapon,
+                        `${entity.id}_${projectileId}`,
+                        aimPoint,
+                        transform
+                    );
+                    projectile.projectile!.isFake = !isServer;
                     // Add to ECS world
                     ecsWorld.add(projectile);
                     
@@ -85,7 +91,7 @@ export function createWeaponSystem(
                     
                     // Update heat accumulator
                     activeWeapon.heatAccumulator = Math.min(1, heatAccumulator + activeWeapon.heatPerShot);
-                    return projectileId;
+                    return projectile;
                 }
             }
             return undefined;

@@ -86,18 +86,15 @@ export function createSceneSystem(engine: Engine) {
     Inspector.Show(scene, {
         embedMode: true
     });
-
-    console.log('Setting up environment...');
-    console.log('Environment setup complete');
-
-    // Find entities that need rendering (either with assets or with direct mesh creation)
     const renderables = ecsWorld.with("transform").where(entity => 
         Boolean(
             (entity.asset && !entity.render) || // Entities with assets that need mesh creation
-            (entity.render && entity.render.mesh) || // Entities with existing meshes
-            (entity.projectile && !entity.render) // Entities with projectiles that need mesh creation
+            (entity.render && entity.render.mesh) // Entities with projectiles that need mesh creation
         )
     );
+
+    console.log('Setting up environment...');
+    console.log('Environment setup complete');
 
     return {
         getScene: () => scene,
@@ -115,6 +112,7 @@ export function createSceneSystem(engine: Engine) {
         },
         update: (dt: number) => {
             effectSystem.update();
+            // consider moving it out of the update function it cost a lot of performance
             // Update entity positions and rotations
             for (const entity of renderables) {
                 if (!entity.transform) continue;
@@ -138,10 +136,6 @@ export function createSceneSystem(engine: Engine) {
                     mainMesh.position = entity.transform.position;
                     entity.render = { mesh: mainMesh };
                     ecsWorld.reindex(entity);
-                }
-
-                if (entity.type === EntityType.Projectile && !entity.render?.mesh) {
-                    entity.render = { mesh: effectSystem.createProjectileMesh(entity) };
                 }
 
                 // Update position and rotation for all entities with meshes

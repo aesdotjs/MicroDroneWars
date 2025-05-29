@@ -11,12 +11,12 @@ import { createStateSyncSystem } from "src/ecs/systems/StateSyncSystem";
 import { createHealthSystem } from "@shared/ecs/systems/HealthSystems";
 import { createFlagSystem } from "@shared/ecs/systems/FlagSystems";
 import { createInputSystem } from "../ecs/systems/InputSystems";
-import { createCollisionSystem } from "@shared/ecs/systems/CollisionSystems";
 import { createGameModeSystem, GameMode, GameModeConfig } from "../ecs/systems/GameModeSystem";
 import { createAssetSystem } from "@shared/ecs/systems/AssetSystem";
 import { createEntitySystem } from "@shared/ecs/systems/EntitySystem";
 import { createWeaponSystem } from "@shared/ecs/systems/WeaponSystem";
-import { createProjectileSystem } from "src/ecs/systems/ProjectileSystem";
+import { createProjectileSystem } from "../ecs/systems/ProjectileSystem";
+import initRapier3D from '@shared/utils/init-rapier3d';
 // import * as xhr2 from "xhr2";
 import '@babylonjs/loaders/glTF/2.0/Extensions/ExtrasAsMetadata';
 import '@babylonjs/loaders/glTF/2.0/Extensions/KHR_lights_punctual';
@@ -32,12 +32,12 @@ export class MicroDroneRoom extends Room<State> {
     private physicsSystem!: ReturnType<typeof createPhysicsSystem>;
     private readonly TICK_RATE = 60;
     private readonly MAX_LATENCY = 1000; // 1 second max latency
+    private readonly LATENCY_SMOOTHING = 0.9;
     private clientLatencies: Map<string, number> = new Map();
     private stateSyncSystem!: ReturnType<typeof createStateSyncSystem>;
     private healthSystem!: ReturnType<typeof createHealthSystem>;
     private flagSystem!: ReturnType<typeof createFlagSystem>;
     private inputSystem!: ReturnType<typeof createInputSystem>;
-    private collisionSystem!: ReturnType<typeof createCollisionSystem>;
     private gameModeSystem!: ReturnType<typeof createGameModeSystem>;
     private assetSystem!: ReturnType<typeof createAssetSystem>;
     private entitySystem!: ReturnType<typeof createEntitySystem>;
@@ -55,6 +55,7 @@ export class MicroDroneRoom extends Room<State> {
      * @param options - Room creation options
      */
     async onCreate(options: Record<string, any>) {
+        await initRapier3D();
         this.state = new State();
         console.log("MicroDrone room created");
 
@@ -75,7 +76,7 @@ export class MicroDroneRoom extends Room<State> {
         }
 
         // Initialize physics world system
-        this.physicsWorldSystem = createPhysicsWorldSystem();
+        this.physicsWorldSystem = createPhysicsWorldSystem(true);
         
         // Initialize weapon system
         this.weaponSystem = createWeaponSystem(this.physicsWorldSystem, true);
@@ -86,8 +87,11 @@ export class MicroDroneRoom extends Room<State> {
         // Initialize entity system
         this.entitySystem = createEntitySystem();
 
+        // Initialize projectile system
+        this.projectileSystem = createProjectileSystem(this.physicsWorldSystem);
+
         // Initialize input system
-        this.inputSystem = createInputSystem(this.physicsSystem, this.physicsWorldSystem, this.weaponSystem);
+        this.inputSystem = createInputSystem(this.physicsSystem, this.physicsWorldSystem, this.weaponSystem, this.projectileSystem, this.clientLatencies);
 
         // Initialize state sync system
         this.stateSyncSystem = createStateSyncSystem(this.state, this.inputSystem, this.physicsWorldSystem);
@@ -95,11 +99,9 @@ export class MicroDroneRoom extends Room<State> {
 
         // Initialize ECS systems
         this.healthSystem = createHealthSystem();
-        this.projectileSystem = createProjectileSystem(this.physicsWorldSystem);
         this.flagSystem = createFlagSystem();
-        this.collisionSystem = createCollisionSystem(this.physicsWorldSystem.getWorld());
         this.assetSystem = createAssetSystem(this.serverEngine, this.serverScene, this.physicsWorldSystem, true);
-        // this.assetSystem.preloadAssets();
+        await this.assetSystem.preloadAssets();
 
         // Initialize game mode system
         const gameModeConfig: GameModeConfig = {
@@ -144,11 +146,10 @@ export class MicroDroneRoom extends Room<State> {
             this.assetSystem.update(1 / this.TICK_RATE);
             this.physicsSystem.update(1 / this.TICK_RATE);
             this.weaponSystem.update(1 / this.TICK_RATE);
+            this.projectileSystem.update(1 / this.TICK_RATE);
             this.inputSystem.update(1 / this.TICK_RATE);
-            this.collisionSystem.update(1 / this.TICK_RATE);
             this.healthSystem.update(1 / this.TICK_RATE);
             this.flagSystem.update(1 / this.TICK_RATE);
-            this.projectileSystem.update(1 / this.TICK_RATE);
             this.gameModeSystem.update(1 / this.TICK_RATE);
             // Step physics world system
             this.physicsWorldSystem.update(1 / this.TICK_RATE);
@@ -193,16 +194,20 @@ export class MicroDroneRoom extends Room<State> {
             }
 
             this.inputSystem.addInput(client.sessionId, input);
+            const smoothedLatency = this.LATENCY_SMOOTHING * (now - inputTime) + (1 - this.LATENCY_SMOOTHING) * latency;
+            this.clientLatencies.set(client.sessionId, smoothedLatency);
         });
 
         // Add ping/pong handlers for latency measurement
         this.onMessage("ping", (client, timestamp) => {
-            const latency = (Date.now() - timestamp) / 2;
-            this.clientLatencies.set(client.sessionId, latency);
+            const oneWayLatency = Math.max(5, Date.now() - timestamp); // Minimum 5ms latency, same as client
+            const clientLatency = this.clientLatencies.get(client.sessionId) ?? 0;
+            const smoothedLatency = this.LATENCY_SMOOTHING * oneWayLatency + (1 - this.LATENCY_SMOOTHING) * clientLatency;
+            this.clientLatencies.set(client.sessionId, smoothedLatency);
             client.send("pong", {
                 clientTime: timestamp,
                 serverTime: Date.now(),
-                latency
+                latency: oneWayLatency
             });
         });
 

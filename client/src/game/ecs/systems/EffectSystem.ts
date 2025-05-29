@@ -216,14 +216,13 @@ export function createEffectSystem(scene: Scene) {
     // Create trail effect
     function createTrailEffect(projectile: GameEntity, sourceMesh: Mesh): void {
         removeTrailEffect(projectile.id);
-
         sourceMesh.computeWorldMatrix();
         const trail = new TrailMesh(
             `trail_${projectile.id}`,
             sourceMesh,
             scene,
             0.1,
-            5,
+            4,
             true
         );
 
@@ -231,7 +230,6 @@ export function createEffectSystem(scene: Scene) {
         trail.material = projectile.projectile?.projectileType === ProjectileType.Missile 
             ? missileTrailMaterial 
             : bulletTrailMaterial;
-            
         activeTrails.set(projectile.id, trail);
     }
 
@@ -240,7 +238,8 @@ export function createEffectSystem(scene: Scene) {
         position: Vector3,
         normal: Vector3,
         impactId: string,
-        type: ProjectileType
+        type: ProjectileType,
+        velocity?: Vector3
     ): void {
         const particleCount = type === ProjectileType.Missile ? 20 : 10;
         const impact = new ParticleSystem('impact', particleCount, scene);
@@ -251,12 +250,18 @@ export function createEffectSystem(scene: Scene) {
         // Ensure we're using the exact position passed in
         impact.emitter = offsetPosition;
         
-        // Calculate emission direction based on normal
+        // Calculate emission direction based on flipped normal and projectile velocity
         const normalDir = normal.normalize();
-        const tangent = Vector3.Cross(normalDir, Vector3.Up()).normalize();
-        const bitangent = Vector3.Cross(normalDir, tangent).normalize();
-        
-        // Create emission box aligned with normal
+        let velocityDir = new Vector3(0, 0, 0);
+        if (velocity && velocity.length() > 0) {
+            velocityDir = velocity.normalize();
+        }
+        // Blend normal and velocity direction
+        const blendFactor = 0.5;
+        const emissionDir = normalDir.scale(1 - blendFactor).add(velocityDir.scale(blendFactor)).normalize();
+        const tangent = Vector3.Cross(emissionDir, Vector3.Up()).normalize();
+        const bitangent = Vector3.Cross(emissionDir, tangent).normalize();
+        // Create emission box aligned with emissionDir
         const emissionSize = type === ProjectileType.Missile ? 0.5 : 0.2;
         impact.minEmitBox = new Vector3(-emissionSize, -emissionSize, -emissionSize);
         impact.maxEmitBox = new Vector3(emissionSize, emissionSize, emissionSize);
@@ -296,9 +301,9 @@ export function createEffectSystem(scene: Scene) {
             impact.minEmitPower = 3;
             impact.maxEmitPower = 6;
             
-            // Create a more spherical explosion pattern
-            impact.direction1 = normalDir.scale(-1).add(tangent.scale(0.5)).add(bitangent.scale(0.5));
-            impact.direction2 = normalDir.scale(-1).add(tangent.scale(-0.5)).add(bitangent.scale(-0.5));
+            // Create a more directional explosion pattern
+            impact.direction1 = emissionDir.add(tangent.scale(0.5)).add(bitangent.scale(0.5)).normalize();
+            impact.direction2 = emissionDir.add(tangent.scale(-0.5)).add(bitangent.scale(-0.5)).normalize();
 
             // Store explosion sprite for cleanup
             activeImpactParticles.set(impactId, impact);
@@ -347,8 +352,8 @@ export function createEffectSystem(scene: Scene) {
             impact.gravity = new Vector3(0, -9.81, 0); // Add some gravity for more realistic effect
             
             // Create a more focused sparkle pattern
-            impact.direction1 = normalDir.scale(-1).add(tangent.scale(0.2)).add(bitangent.scale(0.2));
-            impact.direction2 = normalDir.scale(-1).add(tangent.scale(-0.2)).add(bitangent.scale(-0.2));
+            impact.direction1 = emissionDir.add(tangent.scale(0.2)).add(bitangent.scale(0.2)).normalize();
+            impact.direction2 = emissionDir.add(tangent.scale(-0.2)).add(bitangent.scale(-0.2)).normalize();
 
             activeImpactParticles.set(impactId, impact);
             activeImpactSprites.set(impactId, bulletExplosionSprite);
@@ -401,12 +406,13 @@ export function createEffectSystem(scene: Scene) {
         const impactId = `impact_${entity.id}`;
         const impact = entity.projectile!.impact!;
         
-        // Create particle effects
+        // Pass velocity to createImpactParticle if available
         createImpactParticle(
             impact.position,
             impact.normal,
             impactId,
-            entity.projectile!.projectileType
+            entity.projectile!.projectileType,
+            entity.transform?.velocity
         );
         // Create decal if we have a valid target mesh (decal map not working, hard to get the correct mesh)
         // const targetEntity = ecsWorld.entities.find(entity => entity.id === impact.targetId);
@@ -454,6 +460,24 @@ export function createEffectSystem(scene: Scene) {
         }
     }
 
+    const setTrailVisible = (projectileId: string, visible: boolean) => {
+        const trail = activeTrails.get(projectileId);
+        if (trail) {
+            if (visible) {
+                // trail.reset();
+                trail.start();
+            } else {
+                trail.stop();
+                trail.reset();
+            }
+            // trail.reset();
+            // if (visible) {
+            //     trail.start();
+            // }
+            trail.isVisible = visible;
+        }
+    }
+
     // Cleanup function
     function cleanup(): void {
         activeMuzzleFlashes.forEach(muzzleFlash => muzzleFlash.dispose());
@@ -487,6 +511,7 @@ export function createEffectSystem(scene: Scene) {
         createProjectileMesh,
         createImpactEffects,
         removeProjectileMesh,
+        setTrailVisible,
         cleanup,
         update: () => {
             // // Update projectile positions

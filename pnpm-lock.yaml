@@ -47,9 +47,9 @@ importers:
       '@colyseus/ws-transport':
         specifier: ^0.16.4
         version: 0.16.5(@colyseus/core@0.16.17(@colyseus/schema@3.0.35))
-      cannon-es:
-        specifier: ^0.20.0
-        version: 0.20.0
+      '@dimforge/rapier3d-deterministic-compat':
+        specifier: ^0.16.2
+        version: 0.16.2
       colyseus:
         specifier: ^0.16.0
         version: 0.16.4(@colyseus/auth@0.16.6(@colyseus/core@0.16.17(@colyseus/schema@3.0.35))(express@4.21.2))(@colyseus/core@0.16.17(@colyseus/schema@3.0.35))(@colyseus/redis-driver@0.16.1(@colyseus/schema@3.0.35))(@colyseus/redis-presence@0.16.2(@colyseus/schema@3.0.35))(@colyseus/schema@3.0.35)(@colyseus/uwebsockets-transport@0.16.8(@colyseus/core@0.16.17(@colyseus/schema@3.0.35)))(@colyseus/ws-transport@0.16.5(@colyseus/core@0.16.17(@colyseus/schema@3.0.35)))
@@ -117,9 +117,6 @@ importers:
       '@colyseus/schema':
         specifier: ^3.0.0
         version: 3.0.35
-      cannon-es:
-        specifier: ^0.20.0
-        version: 0.20.0
       cannon-es-debugger-babylonjs:
         specifier: ^1.1.0
         version: 1.1.0(@babylonjs/core@8.4.1)(cannon-es@0.20.0)
@@ -190,9 +187,6 @@ importers:
       '@colyseus/ws-transport':
         specifier: ^0.16.4
         version: 0.16.5(@colyseus/core@0.16.17(@colyseus/schema@3.0.35))
-      cannon-es:
-        specifier: ^0.20.0
-        version: 0.20.0
       colyseus:
         specifier: ^0.16.0
         version: 0.16.4(@colyseus/auth@0.16.6(@colyseus/core@0.16.17(@colyseus/schema@3.0.35))(express@4.21.2))(@colyseus/core@0.16.17(@colyseus/schema@3.0.35))(@colyseus/redis-driver@0.16.1(@colyseus/schema@3.0.35))(@colyseus/redis-presence@0.16.2(@colyseus/schema@3.0.35))(@colyseus/schema@3.0.35)(@colyseus/uwebsockets-transport@0.16.8(@colyseus/core@0.16.17(@colyseus/schema@3.0.35)))(@colyseus/ws-transport@0.16.5(@colyseus/core@0.16.17(@colyseus/schema@3.0.35)))
@@ -233,9 +227,6 @@ importers:
       '@colyseus/schema':
         specifier: ^3.0.0
         version: 3.0.35
-      cannon-es:
-        specifier: ^0.20.0
-        version: 0.20.0
       colyseus:
         specifier: ^0.16.0
         version: 0.16.4(@colyseus/auth@0.16.6(@colyseus/core@0.16.17(@colyseus/schema@3.0.35))(express@4.21.2))(@colyseus/core@0.16.17(@colyseus/schema@3.0.35))(@colyseus/redis-driver@0.16.1(@colyseus/schema@3.0.35))(@colyseus/redis-presence@0.16.2(@colyseus/schema@3.0.35))(@colyseus/schema@3.0.35)(@colyseus/uwebsockets-transport@0.16.8(@colyseus/core@0.16.17(@colyseus/schema@3.0.35)))(@colyseus/ws-transport@0.16.5(@colyseus/core@0.16.17(@colyseus/schema@3.0.35)))
@@ -401,6 +392,9 @@ packages:
   '@cspotcode/source-map-support@0.8.1':
     resolution: {integrity: sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw==}
     engines: {node: '>=12'}
+
+  '@dimforge/rapier3d-deterministic-compat@0.16.2':
+    resolution: {integrity: sha512-llsdXu3Z7TA4XpO/fLjHp9S/kdwyw4fkt/l+6cUgZQJ+CSdtqFXcO1jOgEzMsj9OJ9xEgY++XAlsyZAMZnzYtQ==}
 
   '@esbuild/aix-ppc64@0.21.5':
     resolution: {integrity: sha512-1SDgH6ZSPTlggy1yI6+Dbkiz8xzpHJEVAlF/AM1tHPLsf5STom9rwtjE4hKAF20FfXXNTFqEYXyJNWh1GiZedQ==}
@@ -2187,6 +2181,8 @@ snapshots:
   '@cspotcode/source-map-support@0.8.1':
     dependencies:
       '@jridgewell/trace-mapping': 0.3.9
+
+  '@dimforge/rapier3d-deterministic-compat@0.16.2': {}
 
   '@esbuild/aix-ppc64@0.21.5':
     optional: true

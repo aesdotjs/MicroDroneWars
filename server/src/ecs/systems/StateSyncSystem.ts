@@ -1,4 +1,4 @@
-import { GameEntity } from '@shared/ecs/types';
+import { EntityType, GameEntity, TransformBuffer } from '@shared/ecs/types';
 import { State, EntitySchema, WeaponSchema, ImpactSchema, TransformSchema, GameStateSchema, VehicleSchema, ProjectileSchema, OwnerSchema, AssetSchema, TickSchema } from '@shared/schemas';
 import { world as ecsWorld } from "@shared/ecs/world";
 import { createPhysicsWorldSystem } from '@shared/ecs/systems/PhysicsWorldSystem';
@@ -152,10 +152,26 @@ export function createStateSyncSystem(
             entity.tick.lastProcessedInputTimestamp = entityState.tick.lastProcessedInputTimestamp;
             entity.tick.lastProcessedInputTick = entityState.tick.lastProcessedInputTick;
         }
+        if (entity.transform && entity.tick && entity.owner && entity.vehicle) {
+            const transformBuffer: TransformBuffer = {
+                transform: {
+                    position: entity.transform.position.clone(),
+                    rotation: entity.transform.rotation.clone(),
+                    velocity: entity.transform.velocity.clone(),
+                    angularVelocity: entity.transform.angularVelocity.clone()
+                },
+                tick: {
+                    timestamp: entity.tick.timestamp,
+                    tick: entity.tick.tick
+                }
+            };
+            inputSystem.addTransformBuffer(entity.owner.id, transformBuffer);
+        }
         state.entities.set(entity.id, entityState);
     };
 
     return {
+        syncEntityToState,
         addEntity: (entity: GameEntity) => {
             syncEntityToState(entity);
         },
@@ -172,6 +188,6 @@ export function createStateSyncSystem(
             for (const entity of entities) {
                 syncEntityToState(entity);
             }
-        }
+        },
     };
 } 
